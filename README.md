@@ -4,11 +4,12 @@
 Node.js implementation of [ddunigma](https://github.com/i3l3/ddunigma) (Python original)
 
 ### Credits
-- Original Python Implementation:
+- Original Python Implementation by:
   - [@i3ls](https://github.com/i3l3)
   - [@gunu3371](https://github.com/gunu3371)
 - Original Repository: [ddunigma](https://github.com/i3l3/ddunigma)
 
+### Usage
 ```js
 import { Ddu64 } from 'ddunigma-node'
 
