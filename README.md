@@ -1,6 +1,7 @@
 ## ddunigma-node
 
-### [원작자 레포](https://github.com/i3l3/ddunigma)
+#### Code Author [i3ls](https://github.com/i3l3) [gunu3371](https://github.com/gunu3371)
+#### [Author Repo](https://github.com/i3l3/ddunigma)
 
 ```js
 import { Ddu64 } from 'ddunigma-node'
