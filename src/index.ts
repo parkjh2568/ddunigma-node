@@ -29,28 +29,33 @@ export class Ddu64 {
     return Math.ceil(Math.log2(setLength));
   }
 
+  private createEncoded(
+    input: Buffer,
+    bitLength: number
+  ): { encoded: string[]; padding: number } {
+    let encodedBin = "";
+    for (const byte of input) {
+      const charRaw = byte.toString(2);
+      encodedBin += "0".repeat(8 - charRaw.length) + charRaw;
+    }
+    const encoded: string[] = [];
+    for (const chunk of this.splitString(encodedBin, bitLength)) {
+      encoded.push(chunk);
+    }
+    const padding = bitLength - encoded[encoded.length - 1].length;
+    encoded[encoded.length - 1] =
+      encoded[encoded.length - 1] + "0".repeat(padding);
+
+    return { encoded, padding };
+  }
+
   encode(input: Buffer, option: string = "default"): string {
     const selectedDduSet = option === "KR" ? this.dduCharKr : this.dduChar;
     const selectedPadding =
       option === "KR" ? this.paddingCharKr : this.paddingChar;
     const selectedDduLength = selectedDduSet.length;
     const bitLength = this.getBitLength(selectedDduLength);
-
-    let encodedBin = "";
-    for (const byte of input) {
-      const charRaw = byte.toString(2);
-      encodedBin += "0".repeat(8 - charRaw.length) + charRaw;
-    }
-
-    const encoded: string[] = [];
-    for (const chunk of this.splitString(encodedBin, bitLength)) {
-      encoded.push(chunk);
-    }
-
-    const padding = bitLength - encoded[encoded.length - 1].length;
-    encoded[encoded.length - 1] =
-      encoded[encoded.length - 1] + "0".repeat(padding);
-
+    const { encoded, padding } = this.createEncoded(input, bitLength);
     let result = "";
     for (const char of encoded) {
       const charInt = parseInt(char, 2);
@@ -62,18 +67,33 @@ export class Ddu64 {
     return result;
   }
 
+  encode64(input: Buffer, option = "default") {
+    const selectedDduSet = option === "KR" ? this.dduCharKr : this.dduChar;
+    const selectedPadding =
+      option === "KR" ? this.paddingCharKr : this.paddingChar;
+    const selectedDduLength = selectedDduSet.length;
+    const bitLength = this.getBitLength(selectedDduLength);
+    const { encoded, padding } = this.createEncoded(input, bitLength);
+    let result = "";
+    for (const char of encoded) {
+      const charInt = parseInt(char, 2);
+      result += selectedDduSet[charInt];
+    }
+    result += selectedPadding.repeat(Math.floor(padding / 2));
+    return result;
+  }
+
   decode(input: string, option: string = "default"): Buffer {
     const selectedDduSet = option === "KR" ? this.dduCharKr : this.dduChar;
     const selectedPadding =
       option === "KR" ? this.paddingCharKr : this.paddingChar;
     const selectedDduLength = selectedDduSet.length;
+    const bitLength = this.getBitLength(selectedDduLength);
 
     // 패딩 문자 제거
     const paddingCount = (input.match(new RegExp(selectedPadding, "g")) || [])
       .length;
     input = input.replace(new RegExp(selectedPadding, "g"), "");
-
-    const bitLength = this.getBitLength(selectedDduLength);
 
     let decodedBin = "";
     for (const chunk of this.splitString(input, 2)) {
@@ -103,42 +123,18 @@ export class Ddu64 {
     return Buffer.from(decoded);
   }
 
-  encode64(input: Buffer, option = "default") {
-    const selectedDduSet = option === "KR" ? this.dduCharKr : this.dduChar;
-    const selectedPadding =
-      option === "KR" ? this.paddingCharKr : this.paddingChar;
-    const selectedDduLength = selectedDduSet.length;
-    const bitLength = this.getBitLength(selectedDduLength);
-    let encodedBin = "";
-    for (const byte of input) {
-      const charRaw = byte.toString(2);
-      encodedBin += "0".repeat(8 - charRaw.length) + charRaw;
-    }
-    const encoded = [];
-    for (const chunk of this.splitString(encodedBin, bitLength)) {
-      encoded.push(chunk);
-    }
-    const padding = bitLength - encoded[encoded.length - 1].length;
-    encoded[encoded.length - 1] =
-      encoded[encoded.length - 1] + "0".repeat(padding);
-    let result = "";
-    for (const char of encoded) {
-      const charInt = parseInt(char, 2);
-      result += selectedDduSet[charInt];
-    }
-    result += selectedPadding.repeat(Math.floor(padding / 2));
-    return result;
-  }
   decode64(input: string, option = "default") {
     const selectedDduSet = option === "KR" ? this.dduCharKr : this.dduChar;
     const selectedPadding =
       option === "KR" ? this.paddingCharKr : this.paddingChar;
     const selectedDduLength = selectedDduSet.length;
+    const bitLength = this.getBitLength(selectedDduLength);
+
     // 패딩 문자 제거
     const paddingCount = (input.match(new RegExp(selectedPadding, "g")) || [])
       .length;
     input = input.replace(new RegExp(selectedPadding, "g"), "");
-    const bitLength = this.getBitLength(selectedDduLength);
+
     let decodedBin = "";
     for (const chunk of this.splitString(input, 1)) {
       const firstIndex = selectedDduSet.indexOf(chunk[0]);
