@@ -228,6 +228,11 @@ export class Ddu64 {
     this.paddingRegex.set('KR', new RegExp(this.paddingCharKr, "g"));
   }
 
+  private getLargestPowerOfTwo(n: number): number {
+    let power = Math.floor(Math.log2(n));
+    return 2**power;
+  }
+
   private getBitLength(setLength: number): number {
     let cached = this.bitLengthMap.get(setLength);
     if (cached === undefined) {
@@ -269,6 +274,25 @@ export class Ddu64 {
       bitLength: this.getBitLength(this.dduChar.length),
       lookupTable: this.dduBinaryLookup,
       paddingRegExp: this.paddingRegex.get('default')!
+    };
+  }
+
+  private getSelectedSets64(option: string): {
+    dduSet: string[];
+    padChar: string;
+    dduLength: number;
+    bitLength: number;
+    lookupTable: Map<string, number>;
+    paddingRegExp: RegExp;
+  } {
+    const baseSet = this.getSelectedSets(option);
+    const powerOfTwoLength = this.getLargestPowerOfTwo(baseSet.dduSet.length);
+    
+    return {
+      ...baseSet,
+      dduSet: baseSet.dduSet.slice(0, powerOfTwoLength),
+      dduLength: powerOfTwoLength,
+      bitLength: Math.log2(powerOfTwoLength)
     };
   }
 
@@ -344,7 +368,7 @@ export class Ddu64 {
     encoding: BufferEncoding = this.defaultEncoding
   ): string {
     const bufferInput = typeof input === 'string' ? Buffer.from(input, encoding) : input;
-    const { dduSet, padChar, bitLength } = this.getSelectedSets(option);
+    const { dduSet, padChar, bitLength } = this.getSelectedSets64(option);
     const { dduBinary, padding } = this.bufferToDdduBinary(bufferInput, bitLength);
     
     let resultString = "";
@@ -393,7 +417,7 @@ export class Ddu64 {
     option: string = "default",
     encoding: BufferEncoding = this.defaultEncoding
   ): string {
-    const { dduSet, bitLength, lookupTable, paddingRegExp } = this.getSelectedSets(option);
+    const { dduSet, bitLength, lookupTable, paddingRegExp } = this.getSelectedSets64(option);
     
     const paddingCount = (input.match(paddingRegExp) || []).length;
     input = input.replace(paddingRegExp, '');

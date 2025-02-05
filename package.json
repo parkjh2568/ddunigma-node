@@ -7,7 +7,9 @@
   "type": "module",
   "scripts": {
     "test": "tsx ./src/test/test.ts",
-    "build": "rm -rf dist/* && tsc -p tsconfig.json && tsc -p tsconfig-cjs.json && sh postProcess.sh"
+    "build": "rm -rf dist/* && tsc -p tsconfig.json && tsc -p tsconfig-cjs.json && sh postProcess.sh",
+    "test1": "tsx ./src/test/test1.ts",
+    "test2": "tsx ./src/test/test2.ts"
   },
   "exports": {
     ".": {
