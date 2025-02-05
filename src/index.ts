@@ -93,8 +93,7 @@ export class Ddu64 {
     }
 
     const dduBinary = Array.from(this.splitString(encodedBin, bitLength));
-    const lastChunkLength = dduBinary[dduBinary.length - 1].length;
-    const padding = bitLength - lastChunkLength;
+    const padding = bitLength - dduBinary[dduBinary.length - 1].length;
     
     if (padding > 0) {
       dduBinary[dduBinary.length - 1] += '0'.repeat(padding);
@@ -132,22 +131,20 @@ export class Ddu64 {
     const { dduSet, padChar, dduLength, bitLength } = this.getSelectedSets(option);
     const { dduBinary, padding } = this.bufferToDdduBinary(bufferInput, bitLength);
     
-    const resultArray = new Array(dduBinary.length * 2);
-    let arrayIndex = 0;
+    let resultString = "";
     
     for (const char of dduBinary) {
       const charInt = parseInt(char, 2);
       const quotient = Math.floor(charInt / dduLength);
       const remainder = charInt % dduLength;
-      resultArray[arrayIndex++] = dduSet[quotient];
-      resultArray[arrayIndex++] = dduSet[remainder];
+      resultString += dduSet[quotient] + dduSet[remainder];
     }
     
     if (padding > 0) {
-      return resultArray.join('') + padChar.repeat(Math.floor(padding / 2));
+      return resultString + padChar.repeat(Math.floor(padding / 2));
     }
     
-    return resultArray.join('');
+    return resultString;
   }
 
   encode64(
@@ -159,18 +156,18 @@ export class Ddu64 {
     const { dduSet, padChar, bitLength } = this.getSelectedSets(option);
     const { dduBinary, padding } = this.bufferToDdduBinary(bufferInput, bitLength);
     
-    const resultArray = new Array(dduBinary.length);
+    let resultString = "";
     
     for (let i = 0; i < dduBinary.length; i++) {
       const charInt = parseInt(dduBinary[i], 2);
-      resultArray[i] = dduSet[charInt];
+      resultString += dduSet[charInt];
     }
     
     if (padding > 0) {
-      return resultArray.join('') + padChar.repeat(Math.floor(padding / 2));
+      return resultString + padChar.repeat(Math.floor(padding / 2));
     }
     
-    return resultArray.join('');
+    return resultString;
   }
 
   decode(
@@ -183,8 +180,7 @@ export class Ddu64 {
     const paddingCount = (input.match(paddingRegExp) || []).length;
     input = input.replace(paddingRegExp, '');
     
-    const decodedBinParts = new Array(Math.floor(input.length / 2));
-    let partIndex = 0;
+    let dduBinary = "";
     
     for (let i = 0; i < input.length; i += 2) {
       const firstIndex = lookupTable.get(input[i]);
@@ -193,11 +189,10 @@ export class Ddu64 {
       if (firstIndex === undefined || secondIndex === undefined) continue;
       
       const value = firstIndex * dduLength + secondIndex;
-      decodedBinParts[partIndex++] = value.toString(2).padStart(bitLength, '0');
+      dduBinary += value.toString(2).padStart(bitLength, '0');
     }
     
-    const decodedBin = decodedBinParts.join('');
-    const decoded = this.dduBinaryToBuffer(decodedBin, paddingCount);
+    const decoded = this.dduBinaryToBuffer(dduBinary, paddingCount);
     
     return Buffer.from(decoded).toString(encoding);
   }
@@ -212,18 +207,15 @@ export class Ddu64 {
     const paddingCount = (input.match(paddingRegExp) || []).length;
     input = input.replace(paddingRegExp, '');
     
-    const decodedBinParts = new Array(input.length);
-    let partIndex = 0;
+    let dduBinary = '';
     
     for (let i = 0; i < input.length; i++) {
       const charIndex = lookupTable.get(input[i]);
       if (charIndex === undefined) continue;
-      
-      decodedBinParts[partIndex++] = charIndex.toString(2).padStart(bitLength, '0');
+      dduBinary += charIndex.toString(2).padStart(bitLength, '0');
     }
     
-    const decodedBin = decodedBinParts.join('');
-    const decoded = this.dduBinaryToBuffer(decodedBin, paddingCount);
+    const decoded = this.dduBinaryToBuffer(dduBinary, paddingCount);
     
     return Buffer.from(decoded).toString(encoding);
   }
