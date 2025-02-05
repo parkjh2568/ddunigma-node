@@ -13,7 +13,7 @@ Node.js implementation of [ddunigma](https://github.com/i3l3/ddunigma) (Python o
 ```js
 import { Ddu64 } from 'ddunigma-node'
 
-const ddu64 = new Ddu64();
+const ddu64 = new Ddu64(); //default encode utf-8
 
 const answer = "뜌땨어 고수가 될거야!"
 const encoded = ddu64.encode(answer);
