@@ -1,4 +1,4 @@
-export class Ddu64 {
+export class Ddu64Original {
   private dduChar: string[];
   private paddingChar: string;
   private dduCharKr: string[] = ["뜌", "땨", "이", "우", "야", "!", "?", "."];
@@ -6,14 +6,8 @@ export class Ddu64 {
   private defaultEncoding: BufferEncoding = "utf-8";
 
   constructor(dduChar?: string[], paddingChar?: string) {
-    if (!dduChar) {
-      dduChar = this.dduCharKr;
-    }
-    if (!paddingChar) {
-      paddingChar = this.paddingCharKr;
-    }
-    this.dduChar = dduChar;
-    this.paddingChar = paddingChar;
+    this.dduChar = dduChar || this.dduCharKr;
+    this.paddingChar = paddingChar || this.paddingCharKr;
   }
 
   private getBitLength(setLength: number): number {
@@ -195,8 +189,7 @@ export class Ddu64 {
     return Buffer.from(decoded).toString(encoding ?? this.defaultEncoding);
   }
 }
-
-export class Ddu64UseLookUp {
+export class Ddu64 {
   private readonly dduChar: string[];
   private readonly paddingChar: string;
   private readonly dduCharKr: string[] = ["뜌", "땨", "이", "우", "야", "!", "?", "."];
