@@ -16,8 +16,8 @@ import { Ddu64 } from 'ddunigma-node'
 const ddu64 = new Ddu64();
 
 const answer = "뜌땨어 고수가 될거야!"
-const encoded = ddu64.encode(Buffer.from(answer, 'utf-8'));
+const encoded = ddu64.encode(answer);
 console.log(encoded);
-const decoded = ddu64.decode(encoded).toString('utf-8');
+const decoded = ddu64.decode(encoded);
 console.log(decoded);
 ```

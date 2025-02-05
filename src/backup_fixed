@@ -1,0 +1,128 @@
+export class Ddu64 {
+    private dduChar: string[];
+    private paddingChar: string;
+    private dduCharKr: string[];
+    private paddingCharKr: string;
+  
+    constructor(dduChar?: string[], paddingChar?: string) {
+      const dduCharKr = ["뜌", "땨", "이", "우", "야", "!", "?", "."];
+      const paddingCharKr = "뭐";
+      if (!dduChar) {
+        dduChar = dduCharKr;
+      }
+      if (!paddingChar) {
+        paddingChar = paddingCharKr;
+      }
+      this.dduChar = dduChar;
+      this.dduCharKr = dduCharKr;
+      this.paddingChar = paddingChar;
+      this.paddingCharKr = paddingCharKr;
+    }
+  
+    private getBitLength(setLength: number): number {
+      return Math.ceil(Math.log2(setLength));
+    }
+  
+    private *splitString(s: string, length: number): Generator<string> {
+      for (let i = 0; i < s.length; i += length) {
+        yield s.slice(i, i + length);
+      }
+    }
+  
+    // 중복된 DDU와 padding 선택 로직을 통합
+    private getSelectedSets(option: string): { dduSet: string[]; padChar: string } {
+      if (option === "KR") {
+        return { dduSet: this.dduCharKr, padChar: this.paddingCharKr };
+      }
+      return { dduSet: this.dduChar, padChar: this.paddingChar };
+    }
+  
+    // 중복된 bit 길이 계산 로직을 통합
+    private calculateBitLength(dduSetLength: number): number {
+      return this.getBitLength(dduSetLength);
+    }
+  
+    // encode 공통 로직 추출
+    private encodeData(input: Buffer, option: string = "default"): { encoded: string[]; padding: number } {
+      const selectedSets = this.getSelectedSets(option);
+      const dduSetLength = selectedSets.dduSet.length;
+      const bitLength = this.calculateBitLength(dduSetLength);
+  
+      let encodedBin = "";
+      for (const byte of input) {
+        const charRaw = byte.toString(2).padStart(8, '0');
+        encodedBin += charRaw;
+      }
+  
+      const splitChunks = Array.from(this.splitString(encodedBin, bitLength));
+      const lastChunkPadding = bitLength - splitChunks[splitChunks.length - 1].length;
+      if (lastChunkPadding > 0) {
+        splitChunks[splitChunks.length - 1] += '0'.repeat(lastChunkPadding);
+      }
+  
+      return { encoded: splitChunks, padding: lastChunkPadding };
+    }
+  
+    // decode 공통 로직 추출
+    private decodeData(input: string, option: string = "default"): Buffer {
+      const selectedSets = this.getSelectedSets(option);
+      const dduSetLength = selectedSets.dduSet.length;
+      const bitLength = this.calculateBitLength(dduSetLength);
+  
+      // 패딩 제거
+      const paddingCount = (input.match(new RegExp(selectedSets.padChar, "g")) || []).length;
+      input = input.replace(new RegExp(selectedSets.padChar, "g"), "");
+  
+      return Buffer.from(
+        Array.from(this.splitString(input, dduSetLength === 1 ? bitLength : 2 * bitLength))
+          .map(chunk => {
+            if (chunk.length !== (dduSetLength === 1 ? bitLength : 2 * bitLength)) return 0;
+            
+            const charIndex = selectedSets.dduSet.indexOf(chunk);
+            if (charIndex === -1) return 0;
+  
+            const value = dduSetLength === 1 
+              ? charIndex
+              : Math.floor(charIndex / dduSetLength) * dduSetLength + (charIndex % dduSetLength);
+  
+            return parseInt(value.toString(2).padEnd(bitLength, '0'), 2);
+          })
+          .filter(v => v !== 0)
+          .join(''),
+        'binary'
+      );
+    }
+  
+    encode(input: Buffer, option: string = "default"): string {
+      const { encoded, padding } = this.encodeData(input, option);
+      
+      let result = "";
+      for (const char of encoded) {
+        const firstChar = char.slice(0, Math.ceil(char.length / 2));
+        const secondChar = char.slice(Math.ceil(char.length / 2));
+  
+        const dduSet = this.getSelectedSets(option).dduSet;
+        
+        result += `${dduSet[firstChar]}${dduSet[secondChar]}`;
+      }
+      
+      return result + this.getSelectedSets(option).padChar.repeat(Math.floor(padding / 2));
+    }
+  
+    encode64(input: Buffer, option: string = "default"): string {
+      const { encoded } = this.encodeData(input, option);
+  
+      return Array.from(encoded)
+        .map(char => this.getSelectedSets(option).dduSet[parseInt(char, 2)])
+        .join('') + 
+        this.getSelectedSets(option).padChar.repeat(Math.floor((this.calculateBitLength(this.getSelectedSets(option).dduSet.length) - encoded[encoded.length - 1].length) / 2));
+    }
+  
+    decode(input: string, option: string = "default"): Buffer {
+      return this.decodeData(input, option);
+    }
+  
+    decode64(input: string, option: string = "default"): Buffer {
+      return this.decodeData(input, option);
+    }
+  }
