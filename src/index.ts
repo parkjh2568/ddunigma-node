@@ -1,7 +1,16 @@
 export class Ddu64 {
   private readonly dduChar: string[];
   private readonly paddingChar: string;
-  private readonly dduCharKr: string[] = ["뜌", "땨", "이", "우", "야", "!", "?", "."];
+  private readonly dduCharKr: string[] = [
+    "뜌",
+    "땨",
+    "이",
+    "우",
+    "야",
+    "!",
+    "?",
+    ".",
+  ];
   private readonly paddingCharKr: string = "뭐";
   private readonly defaultEncoding: BufferEncoding = "utf-8";
 
@@ -14,17 +23,17 @@ export class Ddu64 {
   constructor(dduChar?: string[], paddingChar?: string) {
     this.dduChar = dduChar || this.dduCharKr;
     this.paddingChar = paddingChar || this.paddingCharKr;
-    
+
     this.bitLengthMap = new Map();
     this.binaryLookup = new Array(256);
     this.dduBinaryLookup = new Map();
     this.dduBinaryLookupKr = new Map();
     this.paddingRegex = new Map();
-    
+
     for (let i = 0; i < 256; i++) {
-      this.binaryLookup[i] = i.toString(2).padStart(8, '0');
+      this.binaryLookup[i] = i.toString(2).padStart(8, "0");
     }
-    
+
     this.dduChar.forEach((char, index) => {
       this.dduBinaryLookup.set(char, index);
     });
@@ -33,13 +42,13 @@ export class Ddu64 {
       this.dduBinaryLookupKr.set(char, index);
     });
 
-    this.paddingRegex.set('default', new RegExp(this.paddingChar, "g"));
-    this.paddingRegex.set('KR', new RegExp(this.paddingCharKr, "g"));
+    this.paddingRegex.set("default", new RegExp(this.paddingChar, "g"));
+    this.paddingRegex.set("KR", new RegExp(this.paddingCharKr, "g"));
   }
 
   private getLargestPowerOfTwo(n: number): number {
     let power = Math.floor(Math.log2(n));
-    return 2**power;
+    return 2 ** power;
   }
 
   private getBitLength(setLength: number): number {
@@ -58,7 +67,7 @@ export class Ddu64 {
     }
   }
 
-  private getSelectedSets(option: string): {
+  private getSelectedSets(dduSetSymbol: string): {
     dduSet: string[];
     padChar: string;
     dduLength: number;
@@ -66,14 +75,14 @@ export class Ddu64 {
     lookupTable: Map<string, number>;
     paddingRegExp: RegExp;
   } {
-    if (option === "KR") {
+    if (dduSetSymbol === "KR") {
       return {
         dduSet: this.dduCharKr,
         padChar: this.paddingCharKr,
         dduLength: this.dduCharKr.length,
         bitLength: this.getBitLength(this.dduCharKr.length),
         lookupTable: this.dduBinaryLookupKr,
-        paddingRegExp: this.paddingRegex.get('KR')!
+        paddingRegExp: this.paddingRegex.get("KR")!,
       };
     }
     return {
@@ -82,7 +91,7 @@ export class Ddu64 {
       dduLength: this.dduChar.length,
       bitLength: this.getBitLength(this.dduChar.length),
       lookupTable: this.dduBinaryLookup,
-      paddingRegExp: this.paddingRegex.get('default')!
+      paddingRegExp: this.paddingRegex.get("default")!,
     };
   }
 
@@ -96,12 +105,12 @@ export class Ddu64 {
   } {
     const baseSet = this.getSelectedSets(option);
     const powerOfTwoLength = this.getLargestPowerOfTwo(baseSet.dduSet.length);
-    
+
     return {
       ...baseSet,
       dduSet: baseSet.dduSet.slice(0, powerOfTwoLength),
       dduLength: powerOfTwoLength,
-      bitLength: Math.log2(powerOfTwoLength)
+      bitLength: Math.log2(powerOfTwoLength),
     };
   }
 
@@ -110,17 +119,17 @@ export class Ddu64 {
     bitLength: number
   ): { dduBinary: string[]; padding: number } {
     const bufferLength = input.length;
-    let encodedBin = '';
-    
+    let encodedBin = "";
+
     for (let i = 0; i < bufferLength; i++) {
       encodedBin += this.binaryLookup[input[i]];
     }
 
     const dduBinary = Array.from(this.splitString(encodedBin, bitLength));
     const padding = bitLength - dduBinary[dduBinary.length - 1].length;
-    
+
     if (padding > 0) {
-      dduBinary[dduBinary.length - 1] += '0'.repeat(padding);
+      dduBinary[dduBinary.length - 1] += "0".repeat(padding);
     }
 
     return { dduBinary, padding };
@@ -137,110 +146,128 @@ export class Ddu64 {
 
     const chunkCount = Math.floor(decodedBin.length / 8);
     const buffer = new Array(chunkCount);
-    
+
     for (let i = 0; i < chunkCount; i++) {
       const start = i * 8;
       buffer[i] = parseInt(decodedBin.slice(start, start + 8), 2);
     }
-    
+
     return buffer;
   }
 
   encode(
     input: Buffer | string,
-    option: string = "default",
-    encoding: BufferEncoding = this.defaultEncoding
+    options: { dduSetSymbol?: string; encoding?: BufferEncoding }={}
   ): string {
-    const bufferInput = typeof input === 'string' ? Buffer.from(input, encoding) : input;
-    const { dduSet, padChar, dduLength, bitLength } = this.getSelectedSets(option);
-    const { dduBinary, padding } = this.bufferToDduBinary(bufferInput, bitLength);
-    
+    options.dduSetSymbol = options.dduSetSymbol || "default";
+    options.encoding = options.encoding || this.defaultEncoding;
+    const bufferInput =
+      typeof input === "string" ? Buffer.from(input, options.encoding) : input;
+    const { dduSet, padChar, dduLength, bitLength } = this.getSelectedSets(
+      options.dduSetSymbol
+    );
+    const { dduBinary, padding } = this.bufferToDduBinary(
+      bufferInput,
+      bitLength
+    );
+
     let resultString = "";
-    
+
     for (const char of dduBinary) {
       const charInt = parseInt(char, 2);
       const quotient = Math.floor(charInt / dduLength);
       const remainder = charInt % dduLength;
       resultString += dduSet[quotient] + dduSet[remainder];
     }
-    
+
     if (padding > 0) {
       return resultString + padChar.repeat(Math.floor(padding / 2));
     }
-    
+
     return resultString;
   }
 
   encode64(
     input: Buffer | string,
-    option: string = "default",
-    encoding: BufferEncoding = this.defaultEncoding
+    options: { dduSetSymbol?: string; encoding?: BufferEncoding }={}
   ): string {
-    const bufferInput = typeof input === 'string' ? Buffer.from(input, encoding) : input;
-    const { dduSet, padChar, bitLength } = this.getSelectedSets64(option);
-    const { dduBinary, padding } = this.bufferToDduBinary(bufferInput, bitLength);
-    
+    options.dduSetSymbol = options.dduSetSymbol|| "default";
+    options.encoding = options.encoding ||this.defaultEncoding;
+    const bufferInput =
+      typeof input === "string" ? Buffer.from(input, options.encoding) : input;
+    const { dduSet, padChar, bitLength } = this.getSelectedSets64(
+      options.dduSetSymbol
+    );
+    const { dduBinary, padding } = this.bufferToDduBinary(
+      bufferInput,
+      bitLength
+    );
+
     let resultString = "";
-    
+
     for (const char of dduBinary) {
       const charInt = parseInt(char, 2);
       resultString += dduSet[charInt];
     }
-    
+
     if (padding > 0) {
       return resultString + padChar.repeat(Math.floor(padding / 2));
     }
-    
+
     return resultString;
   }
 
   decode(
     input: string,
-    option: string = "default",
-    encoding: BufferEncoding = this.defaultEncoding
+    options: { dduSetSymbol?: string; encoding?: BufferEncoding }={}
   ): string {
-    const { dduSet, dduLength, bitLength, lookupTable, paddingRegExp } = this.getSelectedSets(option);
-    
+    options.dduSetSymbol = options.dduSetSymbol || "default";
+    options.encoding = options.encoding || this.defaultEncoding;
+    const { dduSet, dduLength, bitLength, lookupTable, paddingRegExp } =
+      this.getSelectedSets(options.dduSetSymbol);
+
     const paddingCount = (input.match(paddingRegExp) || []).length;
-    input = input.replace(paddingRegExp, '');
-    
+    input = input.replace(paddingRegExp, "");
+
     let dduBinary = "";
-    
+
     for (let i = 0; i < input.length; i += 2) {
       const firstIndex = lookupTable.get(input[i]);
       const secondIndex = lookupTable.get(input[i + 1]);
-      
+
       if (firstIndex === undefined || secondIndex === undefined) continue;
-      
+
       const value = firstIndex * dduLength + secondIndex;
-      dduBinary += value.toString(2).padStart(bitLength, '0');
+      dduBinary += value.toString(2).padStart(bitLength, "0");
     }
-    
+
     const decoded = this.dduBinaryToBuffer(dduBinary, paddingCount);
-    
-    return Buffer.from(decoded).toString(encoding);
+
+    return Buffer.from(decoded).toString(options.encoding);
   }
 
   decode64(
     input: string,
-    option: string = "default",
-    encoding: BufferEncoding = this.defaultEncoding
+    options: { dduSetSymbol?: string; encoding?: BufferEncoding }={}
   ): string {
-    const { dduSet, bitLength, lookupTable, paddingRegExp } = this.getSelectedSets64(option);
-    
+    options.dduSetSymbol = options.dduSetSymbol || "default";
+    options.encoding = options.encoding || this.defaultEncoding;
+    const { dduSet, bitLength, lookupTable, paddingRegExp } =
+      this.getSelectedSets64(options.dduSetSymbol);
+
     const paddingCount = (input.match(paddingRegExp) || []).length;
-    input = input.replace(paddingRegExp, '');
-    
-    let dduBinary = '';
-    
+    input = input.replace(paddingRegExp, "");
+
+    let dduBinary = "";
+
     for (let i = 0; i < input.length; i++) {
       const charIndex = lookupTable.get(input[i]);
       if (charIndex === undefined) continue;
-      dduBinary += charIndex.toString(2).padStart(bitLength, '0');
+      dduBinary += charIndex.toString(2).padStart(bitLength, "0");
     }
-    
+
     const decoded = this.dduBinaryToBuffer(dduBinary, paddingCount);
-    
-    return Buffer.from(decoded).toString(encoding);
+
+    return Buffer.from(decoded).toString(options.encoding);
   }
 }

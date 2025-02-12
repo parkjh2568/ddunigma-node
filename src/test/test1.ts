@@ -32,10 +32,10 @@ const decoded = ddu64.decode64(encoded);
 console.log(decoded);
 
 console.log("=-==");
-const encoded_eng = ddu64.encode(answer, "KR");
+const encoded_eng = ddu64.encode(answer, {dduSetSymbol : "KR"});
 console.log(encoded_eng);
 
-const decoded_eng = ddu64.decode(encoded_eng, "KR");
+const decoded_eng = ddu64.decode(encoded_eng, {dduSetSymbol : "KR"});
 console.log(decoded_eng);
 
 console.log("=-==");
