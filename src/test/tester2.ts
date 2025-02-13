@@ -1,5 +1,5 @@
 import * as os from 'os';
-import { Ddu64 } from "../index";
+import { Ddu64 } from "../index2";
 
 function measurePerformance(yaho:number = -1) {
     const encoderDecoder = new Ddu64();
