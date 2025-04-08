@@ -25,7 +25,8 @@ export class Ddu64 {
 
   constructor(dduChar?: string[] | string, paddingChar?: string) {
     if (typeof dduChar === "string") {
-      this.dduChar = dduChar.split("");
+      const removeDuplicatesString = [...new Set(dduChar.trim())].join("");
+      this.dduChar = removeDuplicatesString.trim().split("");
     } else {
       this.dduChar = dduChar || this.dduCharKr;
     }
@@ -298,7 +299,8 @@ export class Custom64 {
 
   constructor(dduChar?: string[] | string, paddingChar?: string) {
     if (typeof dduChar === "string") {
-      this.dduChar = dduChar.split("");
+      const removeDuplicatesString = [...new Set(dduChar.trim())].join("");
+      this.dduChar = removeDuplicatesString.trim().split("");
     } else {
       this.dduChar = dduChar || this.dduCharKr;
     }
@@ -406,7 +408,7 @@ export class Custom64 {
     const {
       dduSetSymbol = "default",
       encoding = this.defaultEncoding,
-      usePowerOfTwo = false,
+      usePowerOfTwo = true,
     } = options;
     const bufferInput =
       typeof input === "string" ? Buffer.from(input, encoding) : input;
@@ -449,7 +451,7 @@ export class Custom64 {
     const {
       dduSetSymbol = "default",
       encoding = this.defaultEncoding,
-      usePowerOfTwo = false,
+      usePowerOfTwo = true,
     } = options;
     const { dduSet, dduLength, bitLength, lookupTable, paddingRegExp } =
       this.getSelectedSets(dduSetSymbol, usePowerOfTwo);
