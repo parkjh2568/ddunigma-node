@@ -23,8 +23,12 @@ export class Ddu64 {
   private readonly dduBinaryLookupKr: Map<string, number> = new Map();
   private readonly paddingRegex: Map<string, RegExp> = new Map();
 
-  constructor(dduChar?: string[], paddingChar?: string) {
-    this.dduChar = dduChar || this.dduCharKr;
+  constructor(dduChar?: string[] | string, paddingChar?: string) {
+    if (typeof dduChar === "string") {
+      this.dduChar = dduChar.split("");
+    } else {
+      this.dduChar = dduChar || this.dduCharKr;
+    }
     this.paddingChar = paddingChar || this.paddingCharKr;
 
     this.dduChar.forEach((char, index) =>
@@ -292,8 +296,12 @@ export class Custom64 {
   private readonly dduBinaryLookupKr: Map<string, number> = new Map();
   private readonly paddingRegex: Map<string, RegExp> = new Map();
 
-  constructor(dduChar?: string[], paddingChar?: string) {
-    this.dduChar = dduChar || this.dduCharKr;
+  constructor(dduChar?: string[] | string, paddingChar?: string) {
+    if (typeof dduChar === "string") {
+      this.dduChar = dduChar.split("");
+    } else {
+      this.dduChar = dduChar || this.dduCharKr;
+    }
     this.paddingChar = paddingChar || this.paddingCharKr;
 
     this.dduChar.forEach((char, index) =>
