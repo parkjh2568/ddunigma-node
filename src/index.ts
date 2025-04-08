@@ -134,7 +134,7 @@ export class Ddu64 {
     const {
       dduSetSymbol = "default",
       encoding = this.defaultEncoding,
-      usePowerOfTwo = false,
+      usePowerOfTwo = true,
     } = options;
     const bufferInput =
       typeof input === "string" ? Buffer.from(input, encoding) : input;
@@ -177,7 +177,7 @@ export class Ddu64 {
     const {
       dduSetSymbol = "default",
       encoding = this.defaultEncoding,
-      usePowerOfTwo = false,
+      usePowerOfTwo = true,
     } = options;
     const { dduSet, dduLength, bitLength, lookupTable, paddingRegExp } =
       this.getSelectedSets(dduSetSymbol, usePowerOfTwo);

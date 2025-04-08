@@ -6,13 +6,13 @@ const padding = "=";
 
 function encryptDdu64(content: string) {
   const custom64 = new Custom64();
-  const encoded = custom64.encode(content, { usePowerOfTwo: true });
+  const encoded = custom64.encode(content);
   return encoded;
 }
 
 function decryptDdu64(content: string) {
   const custom64 = new Custom64();
-  const decoded = custom64.decode(content, { usePowerOfTwo: true });
+  const decoded = custom64.decode(content);
   return decoded;
 }
 
