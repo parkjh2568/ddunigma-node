@@ -2,26 +2,26 @@ export class Ddu128 {
   private readonly dduChar: string[];
   private readonly paddingChar: string;
   private readonly charLength: number;
-  // 128개의 2글자 URL-safe 문자열 (A-Z, a-z, 0-9, -, _ 사용)
+  // 128개의 2글자 URL-safe 문자열 (앞글자: E,l,y 제외 / 뒷글자: s,i,a 제외)
   private readonly dduCharDefault: string[] = [
-    "m7", "Bq", "A3", "x9", "pL", "Bf", "Q2", "T8",
-    "c5", "Ag", "Wk", "r1", "H6", "dN", "z0", "BY",
-    "j4", "AM", "vX", "L9", "oP", "Eu", "S3", "i7",
-    "Kb", "nG", "U1", "aq", "Fy", "M5", "hR", "w2",
-    "D8", "Vt", "bO", "k6", "Zj", "eA", "I0", "Nc",
-    "P9", "gW", "Rl", "s4", "Cx", "uH", "Y7", "fM",
-    "a1", "Qv", "Jd", "t5", "Bp", "KE", "lZ", "O3",
-    "Wi", "yU", "G8", "XN", "mT", "Ah", "qF", "R2",
-    "Vc", "n6", "Er", "Lb", "TJ", "iS", "o9", "Dw",
-    "zA", "Pk", "Hu", "C4", "bx", "Ym", "fQ", "gB",
-    "U7", "s0", "Ie", "Mv", "Wj", "ap", "dK", "Nl",
-    "rY", "hC", "F5", "Bt", "k3", "Zi", "Oa", "vG",
-    "Lq", "jR", "Am", "Sx", "e8", "Pu", "D1", "yn",
-    "Jw", "cE", "Tf", "bH", "u6", "NO", "Ik", "gV",
-    "Ba", "z9", "WX", "lM", "q2", "Hs", "Ry", "mZ",
-    "Fc", "oU", "A7", "Kd", "Yn", "vL", "Ep", "Gh",
+    'Z9',   '25',   'Dk',   '86',   'un',   'cb',   'V1',   'Bf',
+    'uc',   '7A',   'FL',   'Wm',   'CL',   'XA',   '3K',   'W3',
+    '0h',   'RV',   'TI',   'Ze',   'dC',   'CG',   'FN',   'PC',
+    'W8',   '5s',   '8L',   'If',   'tz',   'J-',   'WU',   'dk',
+    'tC',   'VS',   'Hi',   'BF',   'W-',   'co',   'pm',   'Hb',
+    'gp',   'TO',   'MY',   'Bs',   'Vj',   '4x',   'Ye',   'dx',
+    'A1',   'tH',   'kv',   'us',   '_Y',   'kU',   '3m',   'a1',
+    'gw',   'rp',   'k6',   'g1',   'Yn',   'IL',   'Yb',   'rI',
+    '_6',   'dK',   'ZL',   'uJ',   'Z6',   'TK',   'xj',   'DI',
+    'XZ',   'tQ',   'zK',   'Be',   'wQ',   'a3',   'd5',   'M9',
+    'TS',   'W1',   '_9',   'Ds',   'Bx',   'Om',   '0v',   'DU',
+    'Hs',   '7K',   'dN',   'Ff',   'kn',   'JL',   'p6',   'MA',
+    'TH',   '3f',   'Fe',   'Te',   'rZ',   'rz',   'Jv',   'X3',
+    't0',   'R5',   'OU',   'Ws',   'Ch',   'zN',   'rU',   'Tx',
+    'VU',   'qq',   'WZ',   'F9',   'ph',   'uC',   'Fh',   'dG',
+    '4w',   'tw',   'Zn',   'M-',   'cK',   '4o',   'wU',   '7n'
   ];
-  private readonly paddingCharDefault: string = "A-";
+  private readonly paddingCharDefault: string = "El";
   private readonly defaultEncoding: BufferEncoding = "utf-8";
 
   private readonly binaryLookup: string[] = Array.from(
@@ -50,11 +50,6 @@ export class Ddu128 {
       if (sourceChar[i].length !== this.charLength) {
         throw new Error(`All characters must have the same length. Expected: ${this.charLength}, but character at index ${i} ("${sourceChar[i]}") has length ${sourceChar[i].length}`);
       }
-    }
-
-    // 패딩 문자 길이 검사
-    if (sourcePadding.length !== this.charLength) {
-      throw new Error(`Padding character length (${sourcePadding.length}) must match character set length (${this.charLength})`);
     }
 
     // 중복 검사
