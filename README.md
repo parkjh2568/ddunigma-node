@@ -86,3 +86,7 @@ const decodedShorter = ddu64.decode(encodedShorter, { usePowerOfTwo: true });
 console.log(decodedShorter);
 //안녕하세요
 ```
+
+Add Ddu128, Ddu512, Ddu1024
+It's UrlSafeEncoding
+
