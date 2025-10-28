@@ -1,5 +1,18 @@
-export { Ddu64 } from "./Ddu64.js";
-export { Custom64 } from "./Custom64.js";
-export { Ddu128 } from "./Ddu128.js";
-export { Ddu512 } from "./Ddu512.js";
-export { Ddu1024 } from "./Ddu1024.js";
+// Export types
+export type {
+  EncodeOptions,
+  DecodeOptions,
+  SelectedSets,
+  BufferToDduBinaryResult,
+  EncoderConstructorOptions,
+  FixedLengthEncoderOptions,
+} from "./types";
+
+// Export enums
+export { DduSetSymbol } from "./types";
+
+// Export base classes
+export { BaseDdu, FixedLengthDdu } from "./base";
+
+// Export encoders
+export { Ddu64, Ddu128, Ddu512, Ddu1024 } from "./encoders";

@@ -1,16 +1,11 @@
-// URL-safe 문자: A-Z, a-z, 0-9, -, _ (. 과 ~ 제외)
-// 첫 글자: E, l, y 제외
-// 둘째 글자: E, l, y 제외
-// 고로 패팅은 무조건 E, l, y 의 조합으로만 사용
-
 function generateCharList(count) {
   // URL-safe 문자 정의 (. 과 ~ 제외)
   const urlSafeChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
   
-  // 첫 글자 후보 (E, l, y 제외)
+  // 첫 글자 후보 
   const firstChars = urlSafeChars.split('').filter(c => c !== 'E' && c !== 'l' && c !== 'y');
   
-  // 둘째 글자 후보 (E, l, y 제외)
+  // 둘째 글자 후보
   const secondChars = urlSafeChars.split('').filter(c => c !== 'E' && c !== 'l' && c !== 'y');
   
   console.log(`첫 글자 가능한 개수: ${firstChars.length}`);

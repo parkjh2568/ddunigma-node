@@ -1,4 +1,4 @@
-import { Ddu64, Custom64, Ddu128, Ddu512, Ddu1024 } from "../index.js";
+import { Ddu64, Ddu128, Ddu512, Ddu1024, DduSetSymbol } from "../index.js";
 
 console.log("╔════════════════════════════════════════════════════════════════════════════╗");
 console.log("║            DDU ENIGMA - 통합 종합 테스트 스위트                           ║");
@@ -40,7 +40,8 @@ const testData = [
 
 const encoders = {
   "Ddu64": new Ddu64(),
-  "Custom64": new Custom64(),
+  "Ddu64 (DEFAULT)": new Ddu64(),
+  "Ddu64 (DDU)": new Ddu64(),
   "Ddu128": new Ddu128(),
   "Ddu512": new Ddu512(),
   "Ddu1024": new Ddu1024(),
@@ -50,10 +51,18 @@ Object.entries(encoders).forEach(([name, encoder]) => {
   console.log(`\n${name}:`);
   let encoderPassed = 0;
   
+  // DduSetSymbol 선택
+  let dduSetSymbol = DduSetSymbol.USED;
+  if (name.includes("DEFAULT")) {
+    dduSetSymbol = DduSetSymbol.DEFAULT;
+  } else if (name.includes("DDU")) {
+    dduSetSymbol = DduSetSymbol.DDU;
+  }
+  
   testData.forEach(test => {
     try {
-      const encoded = encoder.encode(test.data);
-      const decoded = encoder.decode(encoded);
+      const encoded = encoder.encode(test.data, { dduSetSymbol });
+      const decoded = encoder.decode(encoded, { dduSetSymbol });
       const passed = decoded === test.data;
       reportTest(test.name, passed, passed ? undefined : "디코딩 불일치");
       if (passed) encoderPassed++;
@@ -73,11 +82,11 @@ console.log("══════════════════════�
 const urlSafeRegex = /^[A-Za-z0-9_-]*$/;
 const urlTestString = "https://example.com?param=value&other=123";
 
-console.log("참고: Ddu64는 한글 문자셋, Custom64는 모든 URL-safe 문자 사용으로 패딩 문자 제약이 있습니다.\n");
+console.log("참고: Ddu64(DDU)는 한글 문자셋, Ddu64(DEFAULT)는 일부 특수문자로 URL-safe 제약이 있습니다.\n");
 
 Object.entries(encoders).forEach(([name, encoder]) => {
-  // Ddu64와 Custom64는 설계상 URL-safe가 아니거나 제약이 있으므로 스킵
-  if (name === "Ddu64" || name === "Custom64") {
+  // Ddu64 계열은 설계상 URL-safe가 아니거나 제약이 있으므로 스킵
+  if (name.includes("Ddu64")) {
     console.log(`  ⊘ ${name} URL-Safe (설계상 제외)`);
     return;
   }
@@ -283,19 +292,6 @@ try {
   reportTest("128개 커스텀 3글자 키", dec === testStr);
 } catch (err: any) {
   reportTest("128개 커스텀 3글자 키", false, err.message);
-}
-
-// Custom64 커스텀 문자셋
-console.log("\nCustom64 커스텀 문자셋:");
-try {
-  const customChars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
-  const customDdu64 = new Custom64(customChars, "=");
-  const testStr = "Custom64 test!";
-  const enc = customDdu64.encode(testStr);
-  const dec = customDdu64.decode(enc);
-  reportTest("64개 커스텀 1글자 키", dec === testStr);
-} catch (err: any) {
-  reportTest("64개 커스텀 1글자 키", false, err.message);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -709,40 +705,6 @@ if (failedTests === 0) {
   console.log(`❌ ${unexpectedFailures}개 예상치 못한 테스트 실패\n`);
   process.exit(1);
 }
-
-console.log("[ 사용 케이스별 추천 ]");
-console.log("-".repeat(80));
-console.log(`
-1. Ddu64 (8문자 인코딩)
-   - 사용 케이스: 매우 제한된 문자셋 필요 (예: 한글 8자만 사용)
-   - 장점: 특수한 문화적/시각적 요구사항 충족
-   - 단점: 출력 크기가 매우 큼 (Base64 대비 약 2배)
-   
-2. Custom64 (64문자 인코딩) ⭐
-   - 사용 케이스: Base64 대체, 일반적인 데이터 인코딩
-   - 장점: Base64와 동일한 압축률, 빠른 속도, 호환성
-   - 단점: 특별한 장점은 없으나 안정적
-   
-3. Ddu128 (128문자 인코딩)
-   - 사용 케이스: URL-safe하면서 더 나은 압축이 필요한 경우
-   - 장점: Base64 대비 약 70% 증가로 적당한 압축률
-   - 단점: 2글자 문자열 사용으로 길이가 늘어남
-   
-4. Ddu512 (512문자 인코딩) ⭐⭐
-   - 사용 케이스: 균형잡힌 성능과 압축률이 필요한 대부분의 경우
-   - 장점: Base64 대비 약 33% 증가, 빠른 속도, URL-safe
-   - 단점: 2글자 문자열 사용
-   
-5. Ddu1024 (2048문자 인코딩) ⭐⭐⭐
-   - 사용 케이스: 큰 데이터셋에서 최고의 압축률이 필요한 경우
-   - 장점: Base64 대비 약 9-45% 증가로 가장 좋은 압축률
-   - 단점: 2글자 문자열 사용, 약간 느린 속도
-
-추천: 
-- 일반 용도 → Custom64 또는 Ddu512
-- 최고 압축률 → Ddu1024
-- 특수 요구사항 → Ddu64, Ddu128
-`);
 
 console.log("╔════════════════════════════════════════════════════════════════════════════╗");
 console.log("║                       테스트 완료!                                         ║");

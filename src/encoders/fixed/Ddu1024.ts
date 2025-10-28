@@ -1,9 +1,7 @@
-export class Ddu1024 {
-  private readonly dduChar: string[];
-  private readonly paddingChar: string;
-  private readonly charLength: number;
-  // 1024개의 2글자 URL-safe 문자열 (앞글자: E,l,y 제외 / 뒷글자: s,i,a 제외)
-  private readonly dduCharDefault: string[] = [
+import { FixedLengthDdu } from "../../base/FixedLengthDdu";
+
+export class Ddu1024 extends FixedLengthDdu {
+  private static readonly DDU_CHAR_DEFAULT: string[] = [
     'Ok',   '-d',   'b4',   'mF',   'pP',   'vL',   'eA',   '87',
     '2j',   'G8',   'Bj',   'PR',   'eI',   'a6',   'pQ',   'eZ',
     'qv',   '3j',   'h6',   '-2',   '1I',   'tc',   'qa',   'OX',
@@ -133,198 +131,19 @@ export class Ddu1024 {
     'D4',   '3c',   'bX',   '0C',   'Tz',   'Bx',   'HQ',   'pd',
     '2I',   'w4',   '8n',   'hz',   'Yr',   '3i',   'hC',   'dL'
   ];
-  private readonly paddingCharDefault: string = "ly"; // 앞글자=E(제외됨), 뒷글자=s(제외됨)
-  private readonly defaultEncoding: BufferEncoding = "utf-8";
-
-  private readonly binaryLookup: string[] = Array.from(
-    { length: 256 },
-    (_, i) => i.toString(2).padStart(8, "0")
-  );
-  private readonly dduBinaryLookup: Map<string, number> = new Map();
-  private readonly dduBinaryLookupKr: Map<string, number> = new Map();
-  private readonly paddingRegex: Map<string, RegExp> = new Map();
+  private static readonly PADDING_CHAR_DEFAULT: string = "ly";
+  private static readonly REQUIRED_LENGTH: number = 1024;
+  private static readonly BIT_LENGTH: number = 10; // 1024 = 2^10
 
   constructor(dduChar?: string[], paddingChar?: string) {
-    // 기본값 설정
-    const sourceChar = dduChar || this.dduCharDefault;
-    const sourcePadding = paddingChar || this.paddingCharDefault;
-
-    // 유효성 검사: 최소 1024개 이상의 문자 필요
-    if (sourceChar.length < 1024) {
-      throw new Error(`Ddu1024 requires at least 1024 characters in the character set. Provided: ${sourceChar.length}`);
-    }
-
-    // 첫 번째 문자의 길이를 기준으로 설정
-    this.charLength = sourceChar[0].length;
-
-    // 모든 문자의 길이가 동일한지 검사
-    for (let i = 0; i < sourceChar.length; i++) {
-      if (sourceChar[i].length !== this.charLength) {
-        throw new Error(`All characters must have the same length. Expected: ${this.charLength}, but character at index ${i} ("${sourceChar[i]}") has length ${sourceChar[i].length}`);
-      }
-    }
-
-    // 중복 검사
-    const uniqueChars = new Set(sourceChar);
-    if (uniqueChars.size !== sourceChar.length) {
-      throw new Error(`Character set contains duplicate characters. Unique: ${uniqueChars.size}, Total: ${sourceChar.length}`);
-    }
-
-    // 패딩 문자가 문자셋에 포함되어 있는지 검사
-    if (uniqueChars.has(sourcePadding)) {
-      throw new Error(`Padding character "${sourcePadding}" cannot be in the character set`);
-    }
-
-    // 앞에서부터 정확히 1024개만 사용
-    this.dduChar = sourceChar.slice(0, 1024);
-    this.paddingChar = sourcePadding;
-
-    // 룩업 테이블 생성
-    this.dduChar.forEach((char, index) =>
-      this.dduBinaryLookup.set(char, index)
+    super(
+      Ddu1024.DDU_CHAR_DEFAULT,
+      Ddu1024.PADDING_CHAR_DEFAULT,
+      Ddu1024.REQUIRED_LENGTH,
+      Ddu1024.BIT_LENGTH,
+      dduChar,
+      paddingChar
     );
-    this.dduCharDefault.forEach((char, index) =>
-      this.dduBinaryLookupKr.set(char, index)
-    );
-
-    this.paddingRegex.set("default", new RegExp(this.escapeRegExp(this.paddingChar), "g"));
-    this.paddingRegex.set("KR", new RegExp(this.escapeRegExp(this.paddingCharDefault), "g"));
-  }
-
-  private escapeRegExp(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  private *splitString(s: string, length: number): Generator<string> {
-    for (let i = 0; i < s.length; i += length) {
-      yield s.slice(i, Math.min(i + length, s.length));
-    }
-  }
-
-  private getSelectedSets(
-    dduSetSymbol: string
-  ): {
-    dduSet: string[];
-    padChar: string;
-    lookupTable: Map<string, number>;
-    paddingRegExp: RegExp;
-  } {
-    const isKR = dduSetSymbol === "KR";
-    const dduSet = isKR ? this.dduCharDefault : this.dduChar;
-    const padChar = isKR ? this.paddingCharDefault : this.paddingChar;
-
-    return {
-      dduSet,
-      padChar,
-      lookupTable: isKR ? this.dduBinaryLookupKr : this.dduBinaryLookup,
-      paddingRegExp: this.paddingRegex.get(isKR ? "KR" : "default")!,
-    };
-  }
-
-  private bufferToDduBinary(
-    input: Buffer
-  ): { dduBinary: string[]; padding: number } {
-    const encodedBin = input.reduce(
-      (acc, byte) => acc + this.binaryLookup[byte],
-      ""
-    );
-    if (encodedBin.length === 0) {
-      return { dduBinary: [], padding: 0 };
-    }
-    const bitLength = 10; // 1024 = 2^10
-    const dduBinary = Array.from(this.splitString(encodedBin, bitLength));
-    const padding = bitLength - dduBinary[dduBinary.length - 1].length;
-
-    if (padding > 0) {
-      dduBinary[dduBinary.length - 1] += "0".repeat(padding);
-    }
-
-    return { dduBinary, padding };
-  }
-
-  private dduBinaryToBuffer(decodedBin: string, paddingBits: number): Buffer {
-    if (paddingBits > 0) {
-      decodedBin = decodedBin.slice(0, -paddingBits);
-    }
-    const buffer: number[] = [];
-    for (let i = 0; i < decodedBin.length; i += 8) {
-      buffer.push(parseInt(decodedBin.slice(i, i + 8), 2));
-    }
-
-    return Buffer.from(buffer);
-  }
-
-  encode(
-    input: Buffer | string,
-    options: {
-      dduSetSymbol?: string;
-      encoding?: BufferEncoding;
-    } = {}
-  ): string {
-    const {
-      dduSetSymbol = "default",
-      encoding = this.defaultEncoding,
-    } = options;
-    const bufferInput =
-      typeof input === "string" ? Buffer.from(input, encoding) : input;
-
-    const { dduSet, padChar } = this.getSelectedSets(dduSetSymbol);
-    const { dduBinary, padding } = this.bufferToDduBinary(bufferInput);
-
-    let resultString = "";
-
-    // 각 10비트 청크를 charLength 글자 문자열로 변환
-    for (const binaryChunk of dduBinary) {
-      const charInt = parseInt(binaryChunk, 2);
-      resultString += dduSet[charInt];
-    }
-
-    // 패딩 비트 정보를 padChar + 패딩비트수(0-9) 형태로 추가
-    // padding이 0이 아니면 padChar를 추가
-    if (padding > 0) {
-      resultString += padChar + padding;
-    }
-    
-    return resultString;
-  }
-
-  decode(
-    input: string,
-    options: {
-      dduSetSymbol?: string;
-      encoding?: BufferEncoding;
-    } = {}
-  ): string {
-    const {
-      dduSetSymbol = "default",
-      encoding = this.defaultEncoding,
-    } = options;
-    const { lookupTable, padChar } = this.getSelectedSets(dduSetSymbol);
-
-    // 패딩 정보 추출
-    let paddingBits = 0;
-    const padCharIndex = input.indexOf(padChar);
-    if (padCharIndex >= 0) {
-      // padChar 이후의 숫자가 패딩 비트 수
-      const paddingStr = input.substring(padCharIndex + padChar.length);
-      paddingBits = parseInt(paddingStr) || 0;
-      // 패딩 정보 제거
-      input = input.substring(0, padCharIndex);
-    }
-
-    let dduBinary = "";
-
-    // charLength 길이만큼 읽어서 디코딩
-    for (let i = 0; i < input.length; i += this.charLength) {
-      const charChunk = input.slice(i, i + this.charLength);
-      const charIndex = lookupTable.get(charChunk);
-      if (charIndex === undefined)
-        throw new Error(`Invalid character: ${charChunk}`);
-      dduBinary += charIndex.toString(2).padStart(10, "0");
-    }
-
-    const decoded = this.dduBinaryToBuffer(dduBinary, paddingBits);
-
-    return decoded.toString(encoding);
   }
 }
+

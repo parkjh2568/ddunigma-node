@@ -1,7 +1,12 @@
-export class Ddu64 {
+import { BaseDdu } from "../../base";
+import { EncodeOptions, DecodeOptions, SelectedSets, DduSetSymbol } from "../../types";
+
+export class Ddu64 extends BaseDdu {
   private readonly dduChar: string[];
   private readonly paddingChar: string;
-  private readonly dduCharDefault: string[] = [
+  
+  // DDU 문자셋 (한글 기반 - 원래 Ddu64 기본값)
+  private readonly dduCharDdu: string[] = [
     "뜌",
     "땨",
     "이",
@@ -11,19 +16,86 @@ export class Ddu64 {
     "?",
     ".",
   ];
-  private readonly paddingCharDefault: string = "뭐";
-  private readonly defaultEncoding: BufferEncoding = "utf-8";
+  private readonly paddingCharDdu: string = "뭐";
+  
+  // DEFAULT 문자셋 (Custom64 기반 - Base64 스타일)
+  private readonly dduCharDefault: string[] = [
+    "A",
+    "s",
+    "q",
+    "r",
+    "0",
+    "z",
+    "3",
+    "t",
+    "y",
+    "1",
+    "5",
+    "2",
+    "4",
+    "E",
+    "B",
+    "C",
+    "Q",
+    "F",
+    "R",
+    "T",
+    "U",
+    "W",
+    "V",
+    "X",
+    "Y",
+    "Z",
+    "b",
+    "a",
+    "c",
+    "d",
+    "D",
+    "G",
+    "L",
+    "H",
+    "I",
+    "-",
+    "J",
+    "K",
+    "M",
+    "O",
+    "N",
+    "f",
+    "e",
+    "h",
+    "g",
+    "P",
+    "i",
+    "S",
+    "k",
+    "l",
+    "m",
+    "u",
+    "j",
+    "v",
+    "n",
+    "o",
+    "p",
+    "9",
+    "w",
+    "6",
+    "7",
+    "8",
+    "x",
+    "_",
+  ];
+  private readonly paddingCharDefault: string = "=";
 
   private readonly bitLengthMap: Map<number, number> = new Map();
-  private readonly binaryLookup: string[] = Array.from(
-    { length: 256 },
-    (_, i) => i.toString(2).padStart(8, "0")
-  );
   private readonly dduBinaryLookup: Map<string, number> = new Map();
-  private readonly dduBinaryLookupKr: Map<string, number> = new Map();
+  private readonly dduBinaryLookupDefault: Map<string, number> = new Map();
+  private readonly dduBinaryLookupDdu: Map<string, number> = new Map();
   private readonly paddingRegex: Map<string, RegExp> = new Map();
 
   constructor(dduChar?: string[] | string, paddingChar?: string) {
+    super();
+    
     if (typeof dduChar === "string") {
       const removeDuplicatesString = [...new Set(dduChar.trim())].join("");
       this.dduChar = removeDuplicatesString.trim().split("");
@@ -32,50 +104,61 @@ export class Ddu64 {
     }
     this.paddingChar = paddingChar || this.paddingCharDefault;
 
+    // USED 문자셋 룩업 테이블
     this.dduChar.forEach((char, index) =>
       this.dduBinaryLookup.set(char, index)
     );
+    
+    // DEFAULT 문자셋 룩업 테이블 (Custom64 스타일)
     this.dduCharDefault.forEach((char, index) =>
-      this.dduBinaryLookupKr.set(char, index)
+      this.dduBinaryLookupDefault.set(char, index)
+    );
+    
+    // DDU 문자셋 룩업 테이블 (한글 스타일)
+    this.dduCharDdu.forEach((char, index) =>
+      this.dduBinaryLookupDdu.set(char, index)
     );
 
-    this.paddingRegex.set("default", new RegExp(this.paddingChar, "g"));
-    this.paddingRegex.set("KR", new RegExp(this.paddingCharDefault, "g"));
+    this.paddingRegex.set(DduSetSymbol.USED, new RegExp(this.paddingChar, "g"));
+    this.paddingRegex.set(DduSetSymbol.DEFAULT, new RegExp(this.paddingCharDefault, "g"));
+    this.paddingRegex.set(DduSetSymbol.DDU, new RegExp(this.paddingCharDdu, "g"));
   }
 
-  private getBitLength(setLength: number): number {
+  private getBitLengthCached(setLength: number): number {
     let cached = this.bitLengthMap.get(setLength);
     if (cached === undefined) {
-      cached = Math.ceil(Math.log2(setLength));
+      cached = this.getBitLength(setLength);
       this.bitLengthMap.set(setLength, cached);
     }
     return cached;
   }
 
-  private getLargestPowerOfTwo(n: number): number {
-    return 2 ** Math.floor(Math.log2(n));
-  }
-
-  private *splitString(s: string, length: number): Generator<string> {
-    for (let i = 0; i < s.length; i += length) {
-      yield s.slice(i, Math.min(i + length, s.length));
-    }
-  }
-
   private getSelectedSets(
     dduSetSymbol: string,
     usePowerOfTwo?: boolean
-  ): {
-    dduSet: string[];
-    padChar: string;
-    dduLength: number;
-    bitLength: number;
-    lookupTable: Map<string, number>;
-    paddingRegExp: RegExp;
-  } {
-    const isKR = dduSetSymbol === "KR";
-    const dduSet = isKR ? this.dduCharDefault : this.dduChar;
-    const padChar = isKR ? this.paddingCharDefault : this.paddingChar;
+  ): SelectedSets {
+    let dduSet: string[];
+    let padChar: string;
+    let lookupTable: Map<string, number>;
+    
+    // 문자셋 선택
+    if (dduSetSymbol === DduSetSymbol.DEFAULT) {
+      // Custom64 스타일 (Base64 호환)
+      dduSet = this.dduCharDefault;
+      padChar = this.paddingCharDefault;
+      lookupTable = this.dduBinaryLookupDefault;
+    } else if (dduSetSymbol === DduSetSymbol.DDU) {
+      // 한글 스타일 (원래 Ddu64)
+      dduSet = this.dduCharDdu;
+      padChar = this.paddingCharDdu;
+      lookupTable = this.dduBinaryLookupDdu;
+    } else {
+      // USED (사용자 정의)
+      dduSet = this.dduChar;
+      padChar = this.paddingChar;
+      lookupTable = this.dduBinaryLookup;
+    }
+    
     let dduLength = dduSet.length;
 
     if (usePowerOfTwo) {
@@ -87,55 +170,18 @@ export class Ddu64 {
       dduSet: usePowerOfTwo ? dduSet.slice(0, dduLength) : dduSet,
       padChar,
       dduLength,
-      bitLength: this.getBitLength(dduLength),
-      lookupTable: isKR ? this.dduBinaryLookupKr : this.dduBinaryLookup,
-      paddingRegExp: this.paddingRegex.get(isKR ? "KR" : "default")!,
+      bitLength: this.getBitLengthCached(dduLength),
+      lookupTable,
+      paddingRegExp: this.paddingRegex.get(dduSetSymbol)!,
     };
-  }
-
-  private bufferToDduBinary(
-    input: Buffer,
-    bitLength: number
-  ): { dduBinary: string[]; padding: number } {
-    const encodedBin = input.reduce(
-      (acc, byte) => acc + this.binaryLookup[byte],
-      ""
-    );
-    if (encodedBin.length === 0) {
-      return { dduBinary: [], padding: 0 };
-    }
-    const dduBinary = Array.from(this.splitString(encodedBin, bitLength));
-    const padding = bitLength - dduBinary[dduBinary.length - 1].length;
-
-    if (padding > 0) {
-      dduBinary[dduBinary.length - 1] += "0".repeat(padding);
-    }
-
-    return { dduBinary, padding };
-  }
-
-  private dduBinaryToBuffer(decodedBin: string, paddingBits: number): Buffer {
-    if (paddingBits > 0) {
-      decodedBin = decodedBin.slice(0, -paddingBits);
-    }
-    const buffer: number[] = [];
-    for (let i = 0; i < decodedBin.length; i += 8) {
-      buffer.push(parseInt(decodedBin.slice(i, i + 8), 2));
-    }
-
-    return Buffer.from(buffer);
   }
 
   encode(
     input: Buffer | string,
-    options: {
-      dduSetSymbol?: string;
-      encoding?: BufferEncoding;
-      usePowerOfTwo?: boolean;
-    } = {}
+    options: EncodeOptions = {}
   ): string {
     const {
-      dduSetSymbol = "default",
+      dduSetSymbol = DduSetSymbol.USED,
       encoding = this.defaultEncoding,
       usePowerOfTwo = true,
     } = options;
@@ -174,18 +220,14 @@ export class Ddu64 {
 
   decode(
     input: string,
-    options: {
-      dduSetSymbol?: string;
-      encoding?: BufferEncoding;
-      usePowerOfTwo?: boolean;
-    } = {}
+    options: DecodeOptions = {}
   ): string {
     const {
-      dduSetSymbol = "default",
+      dduSetSymbol = DduSetSymbol.USED,
       encoding = this.defaultEncoding,
       usePowerOfTwo = true,
     } = options;
-    const { dduSet, dduLength, bitLength, lookupTable, padChar, paddingRegExp } =
+    const { dduSet, dduLength, bitLength, lookupTable, padChar } =
       this.getSelectedSets(dduSetSymbol, usePowerOfTwo);
 
     // 패딩 정보 추출: padChar 이후의 숫자가 패딩 비트 수 (모든 모드)
@@ -226,3 +268,4 @@ export class Ddu64 {
     return decoded.toString(encoding);
   }
 }
+
