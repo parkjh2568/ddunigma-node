@@ -1,5 +1,5 @@
 import { BaseDdu } from "../../base";
-import { EncodeOptions, DecodeOptions, SelectedSets, DduSetSymbol } from "../../types";
+import { DduOptions, SelectedSets, DduSetSymbol, DduConstructorOptions, dduDefaultConstructorOptions } from "../../types";
 
 export class Ddu64 extends BaseDdu {
   private readonly dduChar: string[];
@@ -93,7 +93,7 @@ export class Ddu64 extends BaseDdu {
   private readonly dduBinaryLookupDdu: Map<string, number> = new Map();
   private readonly paddingRegex: Map<string, RegExp> = new Map();
 
-  constructor(dduChar?: string[] | string, paddingChar?: string) {
+  constructor(dduChar?: string[] | string, paddingChar?: string, dduOptions?: DduConstructorOptions) {
     super();
     
     if (typeof dduChar === "string") {
@@ -178,7 +178,7 @@ export class Ddu64 extends BaseDdu {
 
   encode(
     input: Buffer | string,
-    options: EncodeOptions = {}
+    options: DduOptions = {}
   ): string {
     const {
       dduSetSymbol = DduSetSymbol.USED,
@@ -220,7 +220,7 @@ export class Ddu64 extends BaseDdu {
 
   decode(
     input: string,
-    options: DecodeOptions = {}
+    options: DduOptions = {}
   ): string {
     const {
       dduSetSymbol = DduSetSymbol.USED,

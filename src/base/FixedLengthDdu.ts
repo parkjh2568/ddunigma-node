@@ -1,5 +1,5 @@
 import { BaseDdu } from "./BaseDdu";
-import { EncodeOptions, DecodeOptions, DduSetSymbol } from "../types";
+import { DduOptions, DduSetSymbol } from "../types";
 
 export abstract class FixedLengthDdu extends BaseDdu {
   protected readonly dduChar: string[];
@@ -105,7 +105,7 @@ export abstract class FixedLengthDdu extends BaseDdu {
 
   encode(
     input: Buffer | string,
-    options: EncodeOptions = {}
+    options: DduOptions = {}
   ): string {
     const {
       dduSetSymbol = DduSetSymbol.USED,
@@ -135,7 +135,7 @@ export abstract class FixedLengthDdu extends BaseDdu {
 
   decode(
     input: string,
-    options: DecodeOptions = {}
+    options: DduOptions = {}
   ): string {
     const {
       dduSetSymbol = DduSetSymbol.USED,

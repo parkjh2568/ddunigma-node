@@ -1,7 +1,6 @@
 // Export types
 export type {
-  EncodeOptions,
-  DecodeOptions,
+  DduOptions,
   SelectedSets,
   BufferToDduBinaryResult,
   EncoderConstructorOptions,

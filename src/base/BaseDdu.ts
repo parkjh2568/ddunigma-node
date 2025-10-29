@@ -1,6 +1,5 @@
 import {
-  EncodeOptions,
-  DecodeOptions,
+  DduOptions,
   BufferToDduBinaryResult,
 } from "../types";
 
@@ -86,12 +85,12 @@ export abstract class BaseDdu {
 
   abstract encode(
     input: Buffer | string,
-    options?: EncodeOptions
+    options?: DduOptions
   ): string;
 
   abstract decode(
     input: string,
-    options?: DecodeOptions
+    options?: DduOptions
   ): string;
 }
 
