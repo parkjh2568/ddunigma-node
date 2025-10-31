@@ -1,6 +1,7 @@
-ddunigma Node [![npm version](https://badge.fury.io/js/@ddunigma%2Fnode.svg)](https://www.npmjs.com/package/@ddunigma/node)
+## ddunigma Node 
+[![npm version](https://badge.fury.io/js/@ddunigma%2Fnode.svg)](https://www.npmjs.com/package/@ddunigma/node)
 
-### Overview 
+## Overview 
 
 Node.js implementation of [ddunigma](https://github.com/i3l3/ddunigma) (Python original)
 
