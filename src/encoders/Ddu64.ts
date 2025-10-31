@@ -56,45 +56,102 @@ export class Ddu64 extends BaseDdu {
       isPredefined = true; // fallback도 predefined charset 사용
     }
 
-    // 유효성 검사: 최소 requiredLength개 이상의 문자 필요
+    // 유효성 검사 및 자동 수정
+    const shouldThrowError = dduOptions?.useBuildErrorReturn ?? false;
+    
+    // 최소 길이 검사
     if (finalCharSet.length < requiredLength) {
-      throw new Error(
-        `${this.constructor.name} requires at least ${requiredLength} characters in the character set. Provided: ${finalCharSet.length}`
-      );
+      if (shouldThrowError) {
+        throw new Error(
+          `${this.constructor.name} requires at least ${requiredLength} characters in the character set. Provided: ${finalCharSet.length}`
+        );
+      }
+      // fallback으로 전환
+      const fallbackResult = this.getFallbackCharSet(dduOptions);
+      finalCharSet = fallbackResult.finalCharSet;
+      finalPadding = fallbackResult.finalPadding;
+      requiredLength = fallbackResult.requiredLength;
+      bitLength = fallbackResult.bitLength;
+      isPredefined = true;
     }
 
     // 첫 번째 문자의 길이를 기준으로 설정
     this.charLength = finalCharSet[0].length;
 
-    // 모든 문자의 길이가 동일한지 검사
-    for (let i = 0; i < finalCharSet.length; i++) {
-      if (finalCharSet[i].length !== this.charLength) {
+    // 모든 문자의 길이가 동일한지 검사 및 필터링
+    const validLengthChars = finalCharSet.filter(char => char.length === this.charLength);
+    if (validLengthChars.length !== finalCharSet.length) {
+      if (shouldThrowError) {
+        const invalidIndex = finalCharSet.findIndex(char => char.length !== this.charLength);
         throw new Error(
-          `All characters must have the same length. Expected: ${this.charLength}, but character at index ${i} ("${finalCharSet[i]}") has length ${finalCharSet[i].length}`
+          `All characters must have the same length. Expected: ${this.charLength}, but character at index ${invalidIndex} ("${finalCharSet[invalidIndex]}") has length ${finalCharSet[invalidIndex].length}`
         );
+      }
+      // 길이가 다른 문자 제거
+      finalCharSet = validLengthChars;
+      if (finalCharSet.length < requiredLength) {
+        // 충분한 문자가 없으면 fallback
+        const fallbackResult = this.getFallbackCharSet(dduOptions);
+        finalCharSet = fallbackResult.finalCharSet;
+        finalPadding = fallbackResult.finalPadding;
+        requiredLength = fallbackResult.requiredLength;
+        bitLength = fallbackResult.bitLength;
+        isPredefined = true;
+        this.charLength = finalCharSet[0].length;
       }
     }
 
-    // 패딩 문자 길이 검사
+    // 패딩 문자 길이 검사 및 수정
     if (finalPadding.length !== this.charLength) {
-      throw new Error(
-        `Padding character must have the same length as the characters. Expected: ${this.charLength}, but padding character has length ${finalPadding.length}`
-      );
+      if (shouldThrowError) {
+        throw new Error(
+          `Padding character must have the same length as the characters. Expected: ${this.charLength}, but padding character has length ${finalPadding.length}`
+        );
+      }
+      // 패딩 문자를 첫 번째 문자로 대체하거나 fallback
+      const fallbackResult = this.getFallbackCharSet(dduOptions);
+      finalPadding = fallbackResult.finalPadding;
     }
 
-    // 중복 검사
+    // 중복 제거
     const uniqueChars = new Set(finalCharSet);
     if (uniqueChars.size !== finalCharSet.length) {
-      throw new Error(
-        `Character set contains duplicate characters. Unique: ${uniqueChars.size}, Total: ${finalCharSet.length}`
-      );
+      if (shouldThrowError) {
+        throw new Error(
+          `Character set contains duplicate characters. Unique: ${uniqueChars.size}, Total: ${finalCharSet.length}`
+        );
+      }
+      // 중복 제거
+      finalCharSet = Array.from(uniqueChars);
+      if (finalCharSet.length < requiredLength) {
+        // 중복 제거 후 부족하면 fallback
+        const fallbackResult = this.getFallbackCharSet(dduOptions);
+        finalCharSet = fallbackResult.finalCharSet;
+        finalPadding = fallbackResult.finalPadding;
+        requiredLength = fallbackResult.requiredLength;
+        bitLength = fallbackResult.bitLength;
+        isPredefined = true;
+      }
     }
 
-    // 패딩 문자가 문자셋에 포함되어 있는지 검사
-    if (uniqueChars.has(finalPadding)) {
-      throw new Error(
-        `Padding character "${finalPadding}" cannot be in the character set`
-      );
+    // 패딩 문자가 문자셋에 포함되어 있는지 검사 및 제거
+    if (uniqueChars.has(finalPadding) || finalCharSet.includes(finalPadding)) {
+      if (shouldThrowError) {
+        throw new Error(
+          `Padding character "${finalPadding}" cannot be in the character set`
+        );
+      }
+      // charset에서 패딩 문자 제거
+      finalCharSet = finalCharSet.filter(char => char !== finalPadding);
+      if (finalCharSet.length < requiredLength) {
+        // 제거 후 부족하면 fallback
+        const fallbackResult = this.getFallbackCharSet(dduOptions);
+        finalCharSet = fallbackResult.finalCharSet;
+        finalPadding = fallbackResult.finalPadding;
+        requiredLength = fallbackResult.requiredLength;
+        bitLength = fallbackResult.bitLength;
+        isPredefined = true;
+      }
     }
 
     // 2글자 이상의 문자셋인 경우 조합 중복 검사 (미리 정의된 charset은 건너뜀)
@@ -112,9 +169,10 @@ export class Ddu64 extends BaseDdu {
     this.bitLength = bitLength;
     this.isPredefinedCharSet = isPredefined;
     
-    // requiredLength가 2의 제곱수인 경우 자동으로 usePowerOfTwo 활성화
-    const isPowerOfTwo = (requiredLength & (requiredLength - 1)) === 0 && requiredLength > 0;
-    this.usePowerOfTwo = isPowerOfTwo || (dduOptions?.usePowerOfTwo ?? true);
+    // usePowerOfTwo 설정: initializeCharSet에서 이미 계산된 bitLength가 power of two를 반영
+    // bitLength와 requiredLength 관계로 power of two 사용 여부 판단
+    const isPowerOfTwoLength = (requiredLength & (requiredLength - 1)) === 0 && requiredLength > 0;
+    this.usePowerOfTwo = isPowerOfTwoLength;
     
     // encoding 설정
     this.encoding = dduOptions?.encoding ?? this.defaultEncoding;
@@ -213,11 +271,16 @@ export class Ddu64 extends BaseDdu {
     }
 
     // usePowerOfTwo 처리
+    // charArray의 길이가 2의 제곱수이거나 option에 usePowerOfTwo가 명시적으로 true일 때만 적용
+    const shouldUsePowerOfTwo = 
+      dduOptions?.usePowerOfTwo === true || 
+      (dduOptions?.usePowerOfTwo === undefined && this.isPowerOfTwo(dduCharLength));
+    
     const result = this.applyPowerOfTwoOption(
       dduCharArray,
       paddingChar,
       dduCharLength,
-      dduOptions?.usePowerOfTwo ?? true
+      shouldUsePowerOfTwo
     );
     
     return {
@@ -247,7 +310,12 @@ export class Ddu64 extends BaseDdu {
     const { charSet, paddingChar, maxRequiredLength, bitLength } = fixedCharSet;
 
     // usePowerOfTwo 처리
-    if (dduOptions?.usePowerOfTwo ?? true) {
+    // charArray의 길이가 2의 제곱수이거나 option에 usePowerOfTwo가 명시적으로 true일 때만 적용
+    const shouldUsePowerOfTwo = 
+      dduOptions?.usePowerOfTwo === true || 
+      (dduOptions?.usePowerOfTwo === undefined && this.isPowerOfTwo(maxRequiredLength));
+    
+    if (shouldUsePowerOfTwo) {
       const result = this.applyPowerOfTwoOption(
         charSet,
         paddingChar,
@@ -298,6 +366,7 @@ export class Ddu64 extends BaseDdu {
 
   /**
    * fallback charset 가져오기
+   * 우선순위: dduOptions.dduSetSymbol > dduDefaultConstructorOptions.dduSetSymbol > DduSetSymbol.ONECHARSET
    */
   private getFallbackCharSet(dduOptions?: DduConstructorOptions): {
     finalCharSet: string[];
@@ -305,14 +374,26 @@ export class Ddu64 extends BaseDdu {
     requiredLength: number;
     bitLength: number;
   } {
+    // 우선순위에 따라 fallback symbol 결정
     const fallbackSymbol =
       dduOptions?.dduSetSymbol ??
       dduDefaultConstructorOptions.dduSetSymbol ??
-      DduSetSymbol.DDU;
+      DduSetSymbol.ONECHARSET; // DDU 대신 ONECHARSET 사용
+    
     const fixedCharSet = getCharSet(fallbackSymbol);
 
     if (!fixedCharSet) {
-      throw new Error(`Fallback CharSet with symbol ${fallbackSymbol} not found`);
+      // 최후의 fallback: ONECHARSET
+      const lastResort = getCharSet(DduSetSymbol.ONECHARSET);
+      if (!lastResort) {
+        throw new Error(`Critical: No fallback CharSet available`);
+      }
+      return {
+        finalCharSet: lastResort.charSet,
+        finalPadding: lastResort.paddingChar,
+        requiredLength: lastResort.maxRequiredLength,
+        bitLength: lastResort.bitLength,
+      };
     }
 
     return {
@@ -331,6 +412,13 @@ export class Ddu64 extends BaseDdu {
       return [...new Set(input.trim())].map((c) => c);
     }
     return input;
+  }
+
+  /**
+   * 숫자가 2의 제곱수인지 확인
+   */
+  private isPowerOfTwo(n: number): boolean {
+    return n > 0 && (n & (n - 1)) === 0;
   }
 
   /**
