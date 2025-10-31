@@ -154,359 +154,359 @@ perfTests.forEach(testCase => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-// console.log("[ 4-1. 메모리 사용량 벤치마크 ]");
-// console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-1. 메모리 사용량 벤치마크 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
-// const memoryPerfTests = [
-//   { name: "1KB 데이터", data: "A".repeat(1000), iterations: 100 },
-//   { name: "10KB 데이터", data: "Test ".repeat(2500), iterations: 50 },
-//   { name: "100KB 데이터", data: "Lorem ipsum ".repeat(10000), iterations: 10 },
-// ];
+const memoryPerfTests = [
+  { name: "1KB 데이터", data: "A".repeat(1000), iterations: 100 },
+  { name: "10KB 데이터", data: "Test ".repeat(2500), iterations: 50 },
+  { name: "100KB 데이터", data: "Lorem ipsum ".repeat(10000), iterations: 10 },
+];
 
-// memoryPerfTests.forEach(testCase => {
-//   console.log(`\n${testCase.name} (${testCase.iterations}회 반복):`);
-//   console.log("  인코더      | 시작메모리 | 인코딩후 | 디코딩후 | 최대증가 | GC후메모리");
-//   console.log("  " + "-".repeat(80));
+memoryPerfTests.forEach(testCase => {
+  console.log(`\n${testCase.name} (${testCase.iterations}회 반복):`);
+  console.log("  인코더      | 시작메모리 | 인코딩후 | 디코딩후 | 최대증가 | GC후메모리");
+  console.log("  " + "-".repeat(80));
   
-//   Object.entries(encoders).forEach(([name, encoder]) => {
-//     try {
-//       // 강제 GC (가능한 경우)
-//       if (global.gc) {
-//         global.gc();
-//       }
+  Object.entries(encoders).forEach(([name, encoder]) => {
+    try {
+      // 강제 GC (가능한 경우)
+      if (global.gc) {
+        global.gc();
+      }
       
-//       // 시작 메모리
-//       const startMem = process.memoryUsage();
-//       const startHeap = startMem.heapUsed;
+      // 시작 메모리
+      const startMem = process.memoryUsage();
+      const startHeap = startMem.heapUsed;
       
-//       // 인코딩 반복
-//       let encoded = "";
-//       let maxHeap = startHeap;
-//       for (let i = 0; i < testCase.iterations; i++) {
-//         encoded = encoder.encode(testCase.data);
-//         const currentHeap = process.memoryUsage().heapUsed;
-//         maxHeap = Math.max(maxHeap, currentHeap);
-//       }
+      // 인코딩 반복
+      let encoded = "";
+      let maxHeap = startHeap;
+      for (let i = 0; i < testCase.iterations; i++) {
+        encoded = encoder.encode(testCase.data);
+        const currentHeap = process.memoryUsage().heapUsed;
+        maxHeap = Math.max(maxHeap, currentHeap);
+      }
       
-//       const afterEncodeMem = process.memoryUsage().heapUsed;
+      const afterEncodeMem = process.memoryUsage().heapUsed;
       
-//       // 디코딩 반복
-//       for (let i = 0; i < testCase.iterations; i++) {
-//         encoder.decode(encoded);
-//         const currentHeap = process.memoryUsage().heapUsed;
-//         maxHeap = Math.max(maxHeap, currentHeap);
-//       }
+      // 디코딩 반복
+      for (let i = 0; i < testCase.iterations; i++) {
+        encoder.decode(encoded);
+        const currentHeap = process.memoryUsage().heapUsed;
+        maxHeap = Math.max(maxHeap, currentHeap);
+      }
       
-//       const afterDecodeMem = process.memoryUsage().heapUsed;
+      const afterDecodeMem = process.memoryUsage().heapUsed;
       
-//       // GC 후 메모리
-//       if (global.gc) {
-//         global.gc();
-//       }
-//       const afterGCMem = process.memoryUsage().heapUsed;
+      // GC 후 메모리
+      if (global.gc) {
+        global.gc();
+      }
+      const afterGCMem = process.memoryUsage().heapUsed;
       
-//       const formatBytes = (bytes: number) => {
-//         if (bytes < 1024) return `${bytes}B`;
-//         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-//         return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-//       };
+      const formatBytes = (bytes: number) => {
+        if (bytes < 1024) return `${bytes}B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+      };
       
-//       const startStr = formatBytes(startHeap).padStart(10);
-//       const encodeStr = formatBytes(afterEncodeMem).padStart(8);
-//       const decodeStr = formatBytes(afterDecodeMem).padStart(8);
-//       const maxIncStr = formatBytes(maxHeap - startHeap).padStart(8);
-//       const gcStr = formatBytes(afterGCMem).padStart(10);
+      const startStr = formatBytes(startHeap).padStart(10);
+      const encodeStr = formatBytes(afterEncodeMem).padStart(8);
+      const decodeStr = formatBytes(afterDecodeMem).padStart(8);
+      const maxIncStr = formatBytes(maxHeap - startHeap).padStart(8);
+      const gcStr = formatBytes(afterGCMem).padStart(10);
       
-//       console.log(`  ${name.padEnd(11)} | ${startStr} | ${encodeStr} | ${decodeStr} | ${maxIncStr} | ${gcStr}`);
-//     } catch (err: any) {
-//       console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
-//     }
-//   });
-// });
+      console.log(`  ${name.padEnd(11)} | ${startStr} | ${encodeStr} | ${decodeStr} | ${maxIncStr} | ${gcStr}`);
+    } catch (err: any) {
+      console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+    }
+  });
+});
 
-// // 인코더 인스턴스 메모리 사용량
-// console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-// console.log("인코더 인스턴스 메모리 사용량:");
-// console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+// 인코더 인스턴스 메모리 사용량
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("인코더 인스턴스 메모리 사용량:");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
-// if (global.gc) {
-//   global.gc();
-// }
+if (global.gc) {
+  global.gc();
+}
 
-// const baselineMem = process.memoryUsage().heapUsed;
+const baselineMem = process.memoryUsage().heapUsed;
 
-// console.log("  인코더      | 인스턴스 메모리 | 룩업테이블 | 총 오버헤드");
-// console.log("  " + "-".repeat(60));
+console.log("  인코더      | 인스턴스 메모리 | 룩업테이블 | 총 오버헤드");
+console.log("  " + "-".repeat(60));
 
-// Object.entries({
-//   "Ddu64 (DEFAULT)": DduSetSymbol.ONECHARSET,
-//   "Ddu64 (DDU)": DduSetSymbol.DDU,
-//   "Ddu64 (1024)": DduSetSymbol.TWOCHARSET,
-//   "Ddu64 (32768)": DduSetSymbol.THREECHARSET,
-// }).forEach(([name, symbol]) => {
-//   if (global.gc) {
-//     global.gc();
-//   }
+Object.entries({
+  "Ddu64 (DEFAULT)": DduSetSymbol.ONECHARSET,
+  "Ddu64 (DDU)": DduSetSymbol.DDU,
+  "Ddu64 (1024)": DduSetSymbol.TWOCHARSET,
+  "Ddu64 (32768)": DduSetSymbol.THREECHARSET,
+}).forEach(([name, symbol]) => {
+  if (global.gc) {
+    global.gc();
+  }
   
-//   const beforeMem = process.memoryUsage().heapUsed;
+  const beforeMem = process.memoryUsage().heapUsed;
   
-//   // 인스턴스 생성
-//   const testEncoder = new Ddu64(undefined, undefined, { dduSetSymbol: symbol });
+  // 인스턴스 생성
+  const testEncoder = new Ddu64(undefined, undefined, { dduSetSymbol: symbol });
   
-//   const afterMem = process.memoryUsage().heapUsed;
-//   const instanceMem = afterMem - beforeMem;
+  const afterMem = process.memoryUsage().heapUsed;
+  const instanceMem = afterMem - beforeMem;
   
-//   // 대략적인 룩업 테이블 크기 추정
-//   // Map 오버헤드 + 엔트리당 약 50-100바이트
-//   const charSetSize = testEncoder['dduChar'].length;
-//   const estimatedLookupSize = charSetSize * 80; // 대략적인 추정
+  // 대략적인 룩업 테이블 크기 추정
+  // Map 오버헤드 + 엔트리당 약 50-100바이트
+  const charSetSize = testEncoder['dduChar'].length;
+  const estimatedLookupSize = charSetSize * 80; // 대략적인 추정
   
-//   const formatBytes = (bytes: number) => {
-//     if (bytes < 1024) return `${bytes}B`;
-//     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-//     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-//   };
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
   
-//   console.log(`  ${name.padEnd(11)} | ${formatBytes(instanceMem).padStart(15)} | ${formatBytes(estimatedLookupSize).padStart(10)} | ${formatBytes(instanceMem).padStart(12)}`);
-// });
+  console.log(`  ${name.padEnd(11)} | ${formatBytes(instanceMem).padStart(15)} | ${formatBytes(estimatedLookupSize).padStart(10)} | ${formatBytes(instanceMem).padStart(12)}`);
+});
 
-// // ═══════════════════════════════════════════════════════════════════════════════
-// console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-// console.log("[ 4-2. CPU 사용량 및 처리량 (Throughput) 테스트 ]");
-// console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-2. CPU 사용량 및 처리량 (Throughput) 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
-// const cpuTests = [
-//   { name: "1KB 데이터", data: "A".repeat(1000), duration: 1000 }, // 1초 동안
-//   { name: "10KB 데이터", data: "Test ".repeat(2500), duration: 1000 },
-//   { name: "100KB 데이터", data: "Lorem ipsum ".repeat(10000), duration: 500 }, // 0.5초로 단축
-// ];
+const cpuTests = [
+  { name: "1KB 데이터", data: "A".repeat(1000), duration: 1000 }, // 1초 동안
+  { name: "10KB 데이터", data: "Test ".repeat(2500), duration: 1000 },
+  { name: "100KB 데이터", data: "Lorem ipsum ".repeat(10000), duration: 500 }, // 0.5초로 단축
+];
 
-// cpuTests.forEach(testCase => {
-//   console.log(`\n${testCase.name} (${testCase.duration}ms 동안 최대 처리):`);
-//   console.log("  인코더      | 인코딩횟수 | 처리량(MB/s) | CPU시간(ms) | CPU효율(%)");
-//   console.log("  " + "-".repeat(75));
+cpuTests.forEach(testCase => {
+  console.log(`\n${testCase.name} (${testCase.duration}ms 동안 최대 처리):`);
+  console.log("  인코더      | 인코딩횟수 | 처리량(MB/s) | CPU시간(ms) | CPU효율(%)");
+  console.log("  " + "-".repeat(75));
   
-//   Object.entries(encoders).forEach(([name, encoder]) => {
-//     try {
-//       const dataSize = Buffer.from(testCase.data).length;
+  Object.entries(encoders).forEach(([name, encoder]) => {
+    try {
+      const dataSize = Buffer.from(testCase.data).length;
       
-//       // CPU 시간 측정
-//       const startCPU = process.cpuUsage();
-//       const startTime = performance.now();
+      // CPU 시간 측정
+      const startCPU = process.cpuUsage();
+      const startTime = performance.now();
       
-//       let iterations = 0;
-//       let encoded = "";
+      let iterations = 0;
+      let encoded = "";
       
-//       // 지정된 시간 동안 반복
-//       while (performance.now() - startTime < testCase.duration) {
-//         encoded = encoder.encode(testCase.data);
-//         encoder.decode(encoded);
-//         iterations++;
-//       }
+      // 지정된 시간 동안 반복
+      while (performance.now() - startTime < testCase.duration) {
+        encoded = encoder.encode(testCase.data);
+        encoder.decode(encoded);
+        iterations++;
+      }
       
-//       const endTime = performance.now();
-//       const endCPU = process.cpuUsage(startCPU);
+      const endTime = performance.now();
+      const endCPU = process.cpuUsage(startCPU);
       
-//       const elapsedTime = endTime - startTime;
-//       const totalCPUTime = (endCPU.user + endCPU.system) / 1000; // 마이크로초 → 밀리초
-//       const totalBytesProcessed = dataSize * iterations * 2; // 인코딩 + 디코딩
-//       const throughputMBps = (totalBytesProcessed / (1024 * 1024)) / (elapsedTime / 1000);
-//       const cpuEfficiency = (totalCPUTime / elapsedTime) * 100;
+      const elapsedTime = endTime - startTime;
+      const totalCPUTime = (endCPU.user + endCPU.system) / 1000; // 마이크로초 → 밀리초
+      const totalBytesProcessed = dataSize * iterations * 2; // 인코딩 + 디코딩
+      const throughputMBps = (totalBytesProcessed / (1024 * 1024)) / (elapsedTime / 1000);
+      const cpuEfficiency = (totalCPUTime / elapsedTime) * 100;
       
-//       console.log(`  ${name.padEnd(11)} | ${iterations.toString().padStart(10)} | ${throughputMBps.toFixed(2).padStart(12)} | ${totalCPUTime.toFixed(1).padStart(11)} | ${cpuEfficiency.toFixed(1).padStart(10)}`);
-//     } catch (err: any) {
-//       console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
-//     }
-//   });
-// });
+      console.log(`  ${name.padEnd(11)} | ${iterations.toString().padStart(10)} | ${throughputMBps.toFixed(2).padStart(12)} | ${totalCPUTime.toFixed(1).padStart(11)} | ${cpuEfficiency.toFixed(1).padStart(10)}`);
+    } catch (err: any) {
+      console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+    }
+  });
+});
 
-// // ═══════════════════════════════════════════════════════════════════════════════
-// console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-// console.log("[ 4-3. 메모리 누수 테스트 ]");
-// console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-3. 메모리 누수 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
-// console.log("참고: 10,000회 반복 후 메모리가 증가하지 않으면 메모리 누수 없음\n");
+console.log("참고: 10,000회 반복 후 메모리가 증가하지 않으면 메모리 누수 없음\n");
 
-// const leakTests = [
-//   { name: "작은 데이터", data: "Test", iterations: 10000 },
-//   { name: "중간 데이터", data: "A".repeat(100), iterations: 5000 },
-//   { name: "큰 데이터", data: "Lorem ".repeat(1000), iterations: 1000 },
-// ];
+const leakTests = [
+  { name: "작은 데이터", data: "Test", iterations: 10000 },
+  { name: "중간 데이터", data: "A".repeat(100), iterations: 5000 },
+  { name: "큰 데이터", data: "Lorem ".repeat(1000), iterations: 1000 },
+];
 
-// leakTests.forEach(testCase => {
-//   console.log(`\n${testCase.name} (${testCase.iterations}회 반복):`);
-//   console.log("  인코더      | 시작메모리 | 중간(50%) | 종료메모리 | GC후 | 누수여부");
-//   console.log("  " + "-".repeat(75));
+leakTests.forEach(testCase => {
+  console.log(`\n${testCase.name} (${testCase.iterations}회 반복):`);
+  console.log("  인코더      | 시작메모리 | 중간(50%) | 종료메모리 | GC후 | 누수여부");
+  console.log("  " + "-".repeat(75));
   
-//   Object.entries(encoders).forEach(([name, encoder]) => {
-//     try {
-//       if (global.gc) {
-//         global.gc();
-//       }
+  Object.entries(encoders).forEach(([name, encoder]) => {
+    try {
+      if (global.gc) {
+        global.gc();
+      }
       
-//       const startMem = process.memoryUsage().heapUsed;
+      const startMem = process.memoryUsage().heapUsed;
       
-//       // 전반부 실행
-//       for (let i = 0; i < testCase.iterations / 2; i++) {
-//         const encoded = encoder.encode(testCase.data);
-//         encoder.decode(encoded);
-//       }
+      // 전반부 실행
+      for (let i = 0; i < testCase.iterations / 2; i++) {
+        const encoded = encoder.encode(testCase.data);
+        encoder.decode(encoded);
+      }
       
-//       const midMem = process.memoryUsage().heapUsed;
+      const midMem = process.memoryUsage().heapUsed;
       
-//       // 후반부 실행
-//       for (let i = 0; i < testCase.iterations / 2; i++) {
-//         const encoded = encoder.encode(testCase.data);
-//         encoder.decode(encoded);
-//       }
+      // 후반부 실행
+      for (let i = 0; i < testCase.iterations / 2; i++) {
+        const encoded = encoder.encode(testCase.data);
+        encoder.decode(encoded);
+      }
       
-//       const endMem = process.memoryUsage().heapUsed;
+      const endMem = process.memoryUsage().heapUsed;
       
-//       // GC 실행
-//       if (global.gc) {
-//         global.gc();
-//       }
+      // GC 실행
+      if (global.gc) {
+        global.gc();
+      }
       
-//       const afterGC = process.memoryUsage().heapUsed;
+      const afterGC = process.memoryUsage().heapUsed;
       
-//       const formatBytes = (bytes: number) => {
-//         if (bytes < 1024) return `${bytes}B`;
-//         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-//         return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-//       };
+      const formatBytes = (bytes: number) => {
+        if (bytes < 1024) return `${bytes}B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+      };
       
-//       // 메모리 누수 판단: GC 후 메모리가 시작보다 1MB 이상 크면 의심
-//       const leak = (afterGC - startMem) > 1024 * 1024;
-//       const leakStatus = leak ? "⚠️ 의심" : "✅ 없음";
+      // 메모리 누수 판단: GC 후 메모리가 시작보다 1MB 이상 크면 의심
+      const leak = (afterGC - startMem) > 1024 * 1024;
+      const leakStatus = leak ? "⚠️ 의심" : "✅ 없음";
       
-//       console.log(`  ${name.padEnd(11)} | ${formatBytes(startMem).padStart(10)} | ${formatBytes(midMem).padStart(9)} | ${formatBytes(endMem).padStart(10)} | ${formatBytes(afterGC).padStart(4)} | ${leakStatus}`);
-//     } catch (err: any) {
-//       console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
-//     }
-//   });
-// });
+      console.log(`  ${name.padEnd(11)} | ${formatBytes(startMem).padStart(10)} | ${formatBytes(midMem).padStart(9)} | ${formatBytes(endMem).padStart(10)} | ${formatBytes(afterGC).padStart(4)} | ${leakStatus}`);
+    } catch (err: any) {
+      console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+    }
+  });
+});
 
-// // ═══════════════════════════════════════════════════════════════════════════════
-// console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-// console.log("[ 4-4. 동시성 및 부하 테스트 ]");
-// console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-4. 동시성 및 부하 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
-// console.log("동시 다중 요청 시뮬레이션 (서비스 환경):\n");
+console.log("동시 다중 요청 시뮬레이션 (서비스 환경):\n");
 
-// const concurrencyTests = [
-//   { name: "낮은 부하 (10 동시)", concurrent: 10, data: "Hello World", iterations: 100 },
-//   { name: "중간 부하 (50 동시)", concurrent: 50, data: "Test Data", iterations: 100 },
-//   { name: "높은 부하 (100 동시)", concurrent: 100, data: "A".repeat(100), iterations: 50 },
-// ];
+const concurrencyTests = [
+  { name: "낮은 부하 (10 동시)", concurrent: 10, data: "Hello World", iterations: 100 },
+  { name: "중간 부하 (50 동시)", concurrent: 50, data: "Test Data", iterations: 100 },
+  { name: "높은 부하 (100 동시)", concurrent: 100, data: "A".repeat(100), iterations: 50 },
+];
 
-// concurrencyTests.forEach(testCase => {
-//   console.log(`\n${testCase.name}:`);
-//   console.log("  인코더      | 총 처리시간 | 평균 응답 | 최대 응답 | 성공률(%)");
-//   console.log("  " + "-".repeat(70));
+concurrencyTests.forEach(testCase => {
+  console.log(`\n${testCase.name}:`);
+  console.log("  인코더      | 총 처리시간 | 평균 응답 | 최대 응답 | 성공률(%)");
+  console.log("  " + "-".repeat(70));
   
-//   Object.entries(encoders).forEach(([name, encoder]) => {
-//     try {
-//       const results: number[] = [];
-//       let maxTime = 0;
-//       let successCount = 0;
+  Object.entries(encoders).forEach(([name, encoder]) => {
+    try {
+      const results: number[] = [];
+      let maxTime = 0;
+      let successCount = 0;
       
-//       const startTime = performance.now();
+      const startTime = performance.now();
       
-//       // 동시 요청 시뮬레이션 (실제로는 순차적이지만 빠르게 실행)
-//       for (let concurrent = 0; concurrent < testCase.concurrent; concurrent++) {
-//         for (let i = 0; i < testCase.iterations; i++) {
-//           const reqStart = performance.now();
-//           try {
-//             const encoded = encoder.encode(testCase.data);
-//             const decoded = encoder.decode(encoded);
+      // 동시 요청 시뮬레이션 (실제로는 순차적이지만 빠르게 실행)
+      for (let concurrent = 0; concurrent < testCase.concurrent; concurrent++) {
+        for (let i = 0; i < testCase.iterations; i++) {
+          const reqStart = performance.now();
+          try {
+            const encoded = encoder.encode(testCase.data);
+            const decoded = encoder.decode(encoded);
             
-//             if (decoded === testCase.data) {
-//               successCount++;
-//             }
+            if (decoded === testCase.data) {
+              successCount++;
+            }
             
-//             const reqTime = performance.now() - reqStart;
-//             results.push(reqTime);
-//             maxTime = Math.max(maxTime, reqTime);
-//           } catch {
-//             // 실패
-//           }
-//         }
-//       }
+            const reqTime = performance.now() - reqStart;
+            results.push(reqTime);
+            maxTime = Math.max(maxTime, reqTime);
+          } catch {
+            // 실패
+          }
+        }
+      }
       
-//       const totalTime = performance.now() - startTime;
-//       const avgResponse = results.reduce((a, b) => a + b, 0) / results.length;
-//       const successRate = (successCount / (testCase.concurrent * testCase.iterations)) * 100;
+      const totalTime = performance.now() - startTime;
+      const avgResponse = results.reduce((a, b) => a + b, 0) / results.length;
+      const successRate = (successCount / (testCase.concurrent * testCase.iterations)) * 100;
       
-//       console.log(`  ${name.padEnd(11)} | ${totalTime.toFixed(1).padStart(11)}ms | ${avgResponse.toFixed(3).padStart(9)}ms | ${maxTime.toFixed(3).padStart(9)}ms | ${successRate.toFixed(1).padStart(9)}`);
-//     } catch (err: any) {
-//       console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
-//     }
-//   });
-// });
+      console.log(`  ${name.padEnd(11)} | ${totalTime.toFixed(1).padStart(11)}ms | ${avgResponse.toFixed(3).padStart(9)}ms | ${maxTime.toFixed(3).padStart(9)}ms | ${successRate.toFixed(1).padStart(9)}`);
+    } catch (err: any) {
+      console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+    }
+  });
+});
 
-// // ═══════════════════════════════════════════════════════════════════════════════
-// console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-// console.log("[ 4-5. 장시간 실행 안정성 테스트 ]");
-// console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-5. 장시간 실행 안정성 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
-// console.log("5초 연속 실행 테스트 (서비스 장시간 운영 시뮬레이션):\n");
+console.log("5초 연속 실행 테스트 (서비스 장시간 운영 시뮬레이션):\n");
 
-// console.log("  인코더      | 총 처리수 | 평균속도(op/s) | 메모리변화 | 오류수 | 안정성");
-// console.log("  " + "-".repeat(75));
+console.log("  인코더      | 총 처리수 | 평균속도(op/s) | 메모리변화 | 오류수 | 안정성");
+console.log("  " + "-".repeat(75));
 
-// Object.entries(encoders).forEach(([name, encoder]) => {
-//   try {
-//     if (global.gc) {
-//       global.gc();
-//     }
+Object.entries(encoders).forEach(([name, encoder]) => {
+  try {
+    if (global.gc) {
+      global.gc();
+    }
     
-//     const startMem = process.memoryUsage().heapUsed;
-//     const startTime = performance.now();
-//     const duration = 5000; // 5초
+    const startMem = process.memoryUsage().heapUsed;
+    const startTime = performance.now();
+    const duration = 5000; // 5초
     
-//     let iterations = 0;
-//     let errors = 0;
-//     const testData = "Stability Test Data";
+    let iterations = 0;
+    let errors = 0;
+    const testData = "Stability Test Data";
     
-//     while (performance.now() - startTime < duration) {
-//       try {
-//         const encoded = encoder.encode(testData);
-//         const decoded = encoder.decode(encoded);
+    while (performance.now() - startTime < duration) {
+      try {
+        const encoded = encoder.encode(testData);
+        const decoded = encoder.decode(encoded);
         
-//         if (decoded !== testData) {
-//           errors++;
-//         }
+        if (decoded !== testData) {
+          errors++;
+        }
         
-//         iterations++;
-//       } catch {
-//         errors++;
-//       }
-//     }
+        iterations++;
+      } catch {
+        errors++;
+      }
+    }
     
-//     const endTime = performance.now();
-//     const endMem = process.memoryUsage().heapUsed;
+    const endTime = performance.now();
+    const endMem = process.memoryUsage().heapUsed;
     
-//     const elapsedSec = (endTime - startTime) / 1000;
-//     const opsPerSec = iterations / elapsedSec;
-//     const memChange = endMem - startMem;
+    const elapsedSec = (endTime - startTime) / 1000;
+    const opsPerSec = iterations / elapsedSec;
+    const memChange = endMem - startMem;
     
-//     const formatBytes = (bytes: number) => {
-//       const sign = bytes >= 0 ? "+" : "";
-//       if (Math.abs(bytes) < 1024) return `${sign}${bytes}B`;
-//       if (Math.abs(bytes) < 1024 * 1024) return `${sign}${(bytes / 1024).toFixed(1)}KB`;
-//       return `${sign}${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-//     };
+    const formatBytes = (bytes: number) => {
+      const sign = bytes >= 0 ? "+" : "";
+      if (Math.abs(bytes) < 1024) return `${sign}${bytes}B`;
+      if (Math.abs(bytes) < 1024 * 1024) return `${sign}${(bytes / 1024).toFixed(1)}KB`;
+      return `${sign}${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+    };
     
-//     const stability = errors === 0 && memChange < 10 * 1024 * 1024 ? "✅ 안정" : "⚠️ 주의";
+    const stability = errors === 0 && memChange < 10 * 1024 * 1024 ? "✅ 안정" : "⚠️ 주의";
     
-//     console.log(`  ${name.padEnd(11)} | ${iterations.toString().padStart(9)} | ${opsPerSec.toFixed(0).padStart(14)} | ${formatBytes(memChange).padStart(10)} | ${errors.toString().padStart(6)} | ${stability}`);
-//   } catch (err: any) {
-//     console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
-//   }
-// });
+    console.log(`  ${name.padEnd(11)} | ${iterations.toString().padStart(9)} | ${opsPerSec.toFixed(0).padStart(14)} | ${formatBytes(memChange).padStart(10)} | ${errors.toString().padStart(6)} | ${stability}`);
+  } catch (err: any) {
+    console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+  }
+});
 
-// // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 console.log("\n═══════════════════════════════════════════════════════════════════════════════");
 console.log("[ 5. 특수 케이스 테스트 ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");

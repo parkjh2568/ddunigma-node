@@ -17,8 +17,9 @@ export class Ddu64 extends BaseDdu {
 
   protected readonly dduBinaryLookup: Map<string, number> = new Map();
   private readonly isPredefinedCharSet: boolean;
-  
-  private readonly binaryToIntLookup: Map<string, number> = new Map();
+  private readonly effectiveBitLength: number;
+  private readonly binaryChunkToIntFn: (chunk: string) => number;
+  private readonly indexToBinaryCache: string[] | null;
 
   constructor(
     dduChar?: string[] | string,
@@ -32,11 +33,11 @@ export class Ddu64 extends BaseDdu {
     let finalPadding: string;
     let requiredLength: number;
     let bitLength: number;
-    let isPredefined: boolean = false;
+    let isPredefined = false;
 
     try {
       const result = this.initializeCharSet(dduChar, paddingChar, dduOptions);
-      finalCharSet = result.finalCharSet;
+      finalCharSet = [...result.finalCharSet];
       finalPadding = result.finalPadding;
       requiredLength = result.requiredLength;
       bitLength = result.bitLength;
@@ -49,157 +50,82 @@ export class Ddu64 extends BaseDdu {
 
       // fallback 처리
       const fallbackResult = this.getFallbackCharSet(dduOptions);
-      finalCharSet = fallbackResult.finalCharSet;
+      finalCharSet = [...fallbackResult.finalCharSet];
       finalPadding = fallbackResult.finalPadding;
       requiredLength = fallbackResult.requiredLength;
       bitLength = fallbackResult.bitLength;
       isPredefined = true; // fallback도 predefined charset 사용
     }
 
-    // 유효성 검사 및 자동 수정
     const shouldThrowError = dduOptions?.useBuildErrorReturn ?? false;
-    
-    // 최소 길이 검사
-    if (finalCharSet.length < requiredLength) {
-      if (shouldThrowError) {
-        throw new Error(
-          `${this.constructor.name} requires at least ${requiredLength} characters in the character set. Provided: ${finalCharSet.length}`
-        );
-      }
-      // fallback으로 전환
-      const fallbackResult = this.getFallbackCharSet(dduOptions);
-      finalCharSet = fallbackResult.finalCharSet;
-      finalPadding = fallbackResult.finalPadding;
-      requiredLength = fallbackResult.requiredLength;
-      bitLength = fallbackResult.bitLength;
-      isPredefined = true;
+
+    const normalized = this.normalizeCharSet({
+      charSet: finalCharSet,
+      padding: finalPadding,
+      requiredLength,
+      bitLength,
+      isPredefined,
+      shouldThrowError,
+      dduOptions,
+    });
+
+    this.dduChar = normalized.charSet;
+    this.paddingChar = normalized.padding;
+    this.charLength = normalized.charLength;
+    this.bitLength = normalized.bitLength;
+    this.isPredefinedCharSet = normalized.isPredefined;
+
+    const dduLength = this.dduChar.length;
+    this.usePowerOfTwo = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
+
+    this.effectiveBitLength = this.usePowerOfTwo
+      ? this.bitLength
+      : this.getBitLength(dduLength);
+
+    const canUseBitwise = this.effectiveBitLength <= 26;
+    if (canUseBitwise) {
+      this.binaryChunkToIntFn = (chunk: string): number => {
+        let value = 0;
+        for (let i = 0; i < chunk.length; i++) {
+          value = (value << 1) | (chunk.charCodeAt(i) & 1);
+        }
+        return value;
+      };
+    } else {
+      this.binaryChunkToIntFn = (chunk: string): number => {
+        let value = 0;
+        for (let i = 0; i < chunk.length; i++) {
+          value = value * 2 + (chunk.charCodeAt(i) & 1);
+        }
+        return value;
+      };
     }
 
-    // 첫 번째 문자의 길이를 기준으로 설정
-    this.charLength = finalCharSet[0].length;
+    this.encoding = dduOptions?.encoding ?? this.defaultEncoding;
 
-    // 모든 문자의 길이가 동일한지 검사 및 필터링
-    const validLengthChars = finalCharSet.filter(char => char.length === this.charLength);
-    if (validLengthChars.length !== finalCharSet.length) {
-      if (shouldThrowError) {
-        const invalidIndex = finalCharSet.findIndex(char => char.length !== this.charLength);
-        throw new Error(
-          `All characters must have the same length. Expected: ${this.charLength}, but character at index ${invalidIndex} ("${finalCharSet[invalidIndex]}") has length ${finalCharSet[invalidIndex].length}`
-        );
-      }
-      // 길이가 다른 문자 제거
-      finalCharSet = validLengthChars;
-      if (finalCharSet.length < requiredLength) {
-        // 충분한 문자가 없으면 fallback
-        const fallbackResult = this.getFallbackCharSet(dduOptions);
-        finalCharSet = fallbackResult.finalCharSet;
-        finalPadding = fallbackResult.finalPadding;
-        requiredLength = fallbackResult.requiredLength;
-        bitLength = fallbackResult.bitLength;
-        isPredefined = true;
-        this.charLength = finalCharSet[0].length;
-      }
-    }
+    this.dduChar.forEach((char, index) => {
+      this.dduBinaryLookup.set(char, index);
+    });
 
-    // 패딩 문자 길이 검사 및 수정
-    if (finalPadding.length !== this.charLength) {
-      if (shouldThrowError) {
-        throw new Error(
-          `Padding character must have the same length as the characters. Expected: ${this.charLength}, but padding character has length ${finalPadding.length}`
-        );
-      }
-      // 패딩 문자를 첫 번째 문자로 대체하거나 fallback
-      const fallbackResult = this.getFallbackCharSet(dduOptions);
-      finalPadding = fallbackResult.finalPadding;
-    }
-
-    // 중복 제거
-    const uniqueChars = new Set(finalCharSet);
-    if (uniqueChars.size !== finalCharSet.length) {
-      if (shouldThrowError) {
-        throw new Error(
-          `Character set contains duplicate characters. Unique: ${uniqueChars.size}, Total: ${finalCharSet.length}`
-        );
-      }
-      // 중복 제거
-      finalCharSet = Array.from(uniqueChars);
-      if (finalCharSet.length < requiredLength) {
-        // 중복 제거 후 부족하면 fallback
-        const fallbackResult = this.getFallbackCharSet(dduOptions);
-        finalCharSet = fallbackResult.finalCharSet;
-        finalPadding = fallbackResult.finalPadding;
-        requiredLength = fallbackResult.requiredLength;
-        bitLength = fallbackResult.bitLength;
-        isPredefined = true;
-      }
-    }
-
-    // 패딩 문자가 문자셋에 포함되어 있는지 검사 및 제거
-    if (uniqueChars.has(finalPadding) || finalCharSet.includes(finalPadding)) {
-      if (shouldThrowError) {
-        throw new Error(
-          `Padding character "${finalPadding}" cannot be in the character set`
-        );
-      }
-      // charset에서 패딩 문자 제거
-      finalCharSet = finalCharSet.filter(char => char !== finalPadding);
-      if (finalCharSet.length < requiredLength) {
-        // 제거 후 부족하면 fallback
-        const fallbackResult = this.getFallbackCharSet(dduOptions);
-        finalCharSet = fallbackResult.finalCharSet;
-        finalPadding = fallbackResult.finalPadding;
-        requiredLength = fallbackResult.requiredLength;
-        bitLength = fallbackResult.bitLength;
-        isPredefined = true;
-      }
-    }
-
-    // 2글자 이상의 문자셋인 경우 조합 중복 검사 (미리 정의된 charset은 건너뜀)
-    if (this.charLength >= 2 && !isPredefined) {
+    if (this.charLength >= 2 && !this.isPredefinedCharSet) {
       this.validateCombinationDuplicates(
-        finalCharSet,
-        finalPadding,
-        requiredLength
+        this.dduChar,
+        this.paddingChar,
+        this.dduChar.length
       );
     }
 
-    // 앞에서부터 정확히 requiredLength개만 사용
-    this.dduChar = finalCharSet.slice(0, requiredLength);
-    this.paddingChar = finalPadding;
-    this.bitLength = bitLength;
-    this.isPredefinedCharSet = isPredefined;
-    
-    // usePowerOfTwo 설정: initializeCharSet에서 이미 계산된 bitLength가 power of two를 반영
-    // bitLength와 requiredLength 관계로 power of two 사용 여부 판단
-    const isPowerOfTwoLength = (requiredLength & (requiredLength - 1)) === 0 && requiredLength > 0;
-    this.usePowerOfTwo = isPowerOfTwoLength;
-    
-    // encoding 설정
-    this.encoding = dduOptions?.encoding ?? this.defaultEncoding;
-
-    // 룩업 테이블 생성
-    this.dduChar.forEach((char, index) =>
-      this.dduBinaryLookup.set(char, index)
-    );
-    
-    // parseInt 최적화: 이진수 문자열 → 정수 룩업 테이블 생성
-    // 가능한 모든 비트 패턴을 미리 계산
-    // 성능 최적화: bitLength가 12 이하일 때만 룩업 테이블 사용 (4096 엔트리 이하)
-    // 그 이상은 parseInt가 더 효율적 (캐시 미스 감소)
-    const dduLength = this.dduChar.length;
-    const effectiveBitLength = this.usePowerOfTwo 
-      ? this.bitLength 
-      : this.getBitLength(dduLength);
-    
-    if (effectiveBitLength <= 12) {
-      const maxValue = Math.pow(2, effectiveBitLength);
-      
-      for (let i = 0; i < maxValue; i++) {
-        const binaryStr = i.toString(2).padStart(effectiveBitLength, "0");
-        this.binaryToIntLookup.set(binaryStr, i);
+    if (this.effectiveBitLength <= 16) {
+      const cacheSize = 1 << this.effectiveBitLength;
+      this.indexToBinaryCache = new Array(cacheSize);
+      for (let i = 0; i < cacheSize; i++) {
+        this.indexToBinaryCache[i] = i
+          .toString(2)
+          .padStart(this.effectiveBitLength, "0");
       }
+    } else {
+      this.indexToBinaryCache = null;
     }
-    // effectiveBitLength > 12인 경우 룩업 테이블을 생성하지 않음 (parseInt 사용)
   }
 
   /**
@@ -404,6 +330,162 @@ export class Ddu64 extends BaseDdu {
     };
   }
 
+  private normalizeCharSet(params: {
+    charSet: string[];
+    padding: string;
+    requiredLength: number;
+    bitLength: number;
+    isPredefined: boolean;
+    shouldThrowError: boolean;
+    dduOptions?: DduConstructorOptions;
+  }): {
+    charSet: string[];
+    padding: string;
+    requiredLength: number;
+    bitLength: number;
+    isPredefined: boolean;
+    charLength: number;
+  } {
+    let currentCharSet = [...params.charSet];
+    let currentPadding = params.padding;
+    let currentRequiredLength = params.requiredLength;
+    let currentBitLength = params.bitLength;
+    let currentIsPredefined = params.isPredefined;
+    const { shouldThrowError, dduOptions } = params;
+
+    let fallbackCache:
+      | {
+          finalCharSet: string[];
+          finalPadding: string;
+          requiredLength: number;
+          bitLength: number;
+        }
+      | null = null;
+
+    const getFallback = () => {
+      if (!fallbackCache) {
+        const fallback = this.getFallbackCharSet(dduOptions);
+        fallbackCache = {
+          finalCharSet: [...fallback.finalCharSet],
+          finalPadding: fallback.finalPadding,
+          requiredLength: fallback.requiredLength,
+          bitLength: fallback.bitLength,
+        };
+      }
+      return fallbackCache;
+    };
+
+    const applyFallback = () => {
+      const fallback = getFallback();
+      currentCharSet = [...fallback.finalCharSet];
+      currentPadding = fallback.finalPadding;
+      currentRequiredLength = fallback.requiredLength;
+      currentBitLength = fallback.bitLength;
+      currentIsPredefined = true;
+    };
+
+    const ensureMinLength = () => {
+      if (currentCharSet.length < currentRequiredLength) {
+        if (shouldThrowError) {
+          throw new Error(
+            `${this.constructor.name} requires at least ${currentRequiredLength} characters in the character set. Provided: ${currentCharSet.length}`
+          );
+        }
+        applyFallback();
+      }
+    };
+
+    if (!currentIsPredefined) {
+      const uniqueChars = new Set(currentCharSet);
+      if (uniqueChars.size !== currentCharSet.length) {
+        if (shouldThrowError) {
+          throw new Error(
+            `Character set contains duplicate characters. Unique: ${uniqueChars.size}, Total: ${currentCharSet.length}`
+          );
+        }
+        currentCharSet = Array.from(uniqueChars);
+      }
+    }
+
+    ensureMinLength();
+
+    let charLength = currentCharSet[0]?.length ?? 0;
+    if (charLength === 0) {
+      if (shouldThrowError) {
+        throw new Error(
+          `${this.constructor.name} requires at least ${currentRequiredLength} characters in the character set. Provided: ${currentCharSet.length}`
+        );
+      }
+      applyFallback();
+      charLength = currentCharSet[0]?.length ?? 0;
+    }
+
+    const invalidIndex = currentCharSet.findIndex(
+      (char) => char.length !== charLength
+    );
+    if (invalidIndex !== -1) {
+      if (shouldThrowError) {
+        throw new Error(
+          `All characters must have the same length. Expected: ${charLength}, but character at index ${invalidIndex} ("${currentCharSet[invalidIndex]}") has length ${currentCharSet[invalidIndex].length}`
+        );
+      }
+      currentCharSet = currentCharSet.filter((char) => char.length === charLength);
+      ensureMinLength();
+      charLength = currentCharSet[0]?.length ?? 0;
+    }
+
+    if (!currentCharSet.length) {
+      if (shouldThrowError) {
+        throw new Error(
+          `${this.constructor.name} requires at least ${currentRequiredLength} characters in the character set. Provided: 0`
+        );
+      }
+      applyFallback();
+      charLength = currentCharSet[0]?.length ?? 0;
+    }
+
+    if (currentPadding.length !== charLength) {
+      if (shouldThrowError) {
+        throw new Error(
+          `Padding character must have the same length as the characters. Expected: ${charLength}, but padding character has length ${currentPadding.length}`
+        );
+      }
+      applyFallback();
+      charLength = currentCharSet[0]?.length ?? 0;
+    }
+
+    const charSetLookup = new Set(currentCharSet);
+    if (charSetLookup.has(currentPadding)) {
+      if (shouldThrowError) {
+        throw new Error(
+          `Padding character "${currentPadding}" cannot be in the character set`
+        );
+      }
+      currentCharSet = currentCharSet.filter((char) => char !== currentPadding);
+      ensureMinLength();
+      charLength = currentCharSet[0]?.length ?? 0;
+    }
+
+    currentCharSet = currentCharSet.slice(0, currentRequiredLength);
+
+    return {
+      charSet: currentCharSet,
+      padding: currentPadding,
+      requiredLength: currentRequiredLength,
+      bitLength: currentBitLength,
+      isPredefined: currentIsPredefined,
+      charLength,
+    };
+  }
+
+  private getBinaryFromIndex(index: number): string {
+    const cache = this.indexToBinaryCache;
+    if (cache && index < cache.length) {
+      return cache[index];
+    }
+    return index.toString(2).padStart(this.effectiveBitLength, "0");
+  }
+
   /**
    * string 또는 배열을 문자 배열로 변환
    */
@@ -540,10 +622,8 @@ export class Ddu64 extends BaseDdu {
 
     // 생성자에서 설정된 값 사용
     const dduLength = this.dduChar.length;
-    const effectiveBitLength = this.usePowerOfTwo 
-      ? this.bitLength 
-      : this.getBitLength(dduLength);
-    
+    const effectiveBitLength = this.effectiveBitLength;
+
     const { dduBinary, padding } = this.bufferToDduBinary(
       bufferInput,
       effectiveBitLength
@@ -555,8 +635,7 @@ export class Ddu64 extends BaseDdu {
     // 각 비트 청크를 변환
     for (let i = 0; i < dduBinary.length; i++) {
       const binaryChunk = dduBinary[i];
-      // parseInt 최적화: 룩업 테이블 사용
-      const charInt = this.binaryToIntLookup.get(binaryChunk) ?? parseInt(binaryChunk, 2);
+      const charInt = this.binaryChunkToIntFn(binaryChunk);
       
       if (this.charLength === 1 && !this.usePowerOfTwo) {
         // 가변 길이 조합 인코딩
@@ -595,9 +674,7 @@ export class Ddu64 extends BaseDdu {
     
     // 생성자에서 설정된 값 사용
     const dduLength = this.dduChar.length;
-    const effectiveBitLength = this.usePowerOfTwo 
-      ? this.bitLength 
-      : this.getBitLength(dduLength);
+    const effectiveBitLength = this.effectiveBitLength;
 
     if (this.charLength === 1 && !this.usePowerOfTwo) {
       // 가변 길이 조합 디코딩 (2개씩 읽음)
@@ -611,7 +688,7 @@ export class Ddu64 extends BaseDdu {
           throw new Error(`Invalid character: ${firstChar} or ${secondChar}`);
 
         const value = firstIndex * dduLength + secondIndex;
-        dduBinary += value.toString(2).padStart(effectiveBitLength, "0");
+        dduBinary += this.getBinaryFromIndex(value);
       }
     } else {
       // 고정 길이 직접 매핑 (charLength만큼씩 읽음)
@@ -620,7 +697,7 @@ export class Ddu64 extends BaseDdu {
         const charIndex = this.dduBinaryLookup.get(charChunk);
         if (charIndex === undefined)
           throw new Error(`Invalid character: ${charChunk}`);
-        dduBinary += charIndex.toString(2).padStart(effectiveBitLength, "0");
+        dduBinary += this.getBinaryFromIndex(charIndex);
       }
     }
 
