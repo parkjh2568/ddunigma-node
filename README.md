@@ -1,19 +1,23 @@
-# DDU ENIGMA - Node.js
+ddunigma Node [![npm version](https://badge.fury.io/js/@ddunigma%2Fnode.svg)](https://www.npmjs.com/package/@ddunigma/node)
 
-데이터를 특정 문자셋으로 인코딩하는 Node.js 라이브러리입니다.
+### Overview 
 
-## 크레딧
+Node.js implementation of [ddunigma](https://github.com/i3l3/ddunigma) (Python original)
 
-- 원본 Python 구현: [@i3ls](https://github.com/i3l3), [@gunu3371](https://github.com/gunu3371)
-- 원본 저장소: [ddunigma](https://github.com/i3l3/ddunigma)
+### Credits
 
-## 설치
+- Original Python Implementation by:
+  - [@i3ls](https://github.com/i3l3)
+  - [@gunu3371](https://github.com/gunu3371)
+- Original Repository: [ddunigma](https://github.com/i3l3/ddunigma)
+
+## Install
 
 ```bash
 npm install @ddunigma/node
 ```
 
-## 기본 사용법
+## Usage
 
 ### 간단한 문자열 인코딩/디코딩
 
