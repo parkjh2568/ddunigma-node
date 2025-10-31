@@ -1,4 +1,4 @@
-import { Ddu64, Ddu128, Ddu512, Ddu1024, DduSetSymbol } from "../index.js";
+import { Ddu64, DduSetSymbol } from "../index.js";
 
 console.log("╔════════════════════════════════════════════════════════════════════════════╗");
 console.log("║            DDU ENIGMA - 통합 종합 테스트 스위트                           ║");
@@ -39,30 +39,28 @@ const testData = [
 ];
 
 const encoders = {
-  "Ddu64": new Ddu64(),
-  "Ddu64 (DEFAULT)": new Ddu64(),
-  "Ddu64 (DDU)": new Ddu64(),
-  "Ddu128": new Ddu128(),
-  "Ddu512": new Ddu512(),
-  "Ddu1024": new Ddu1024(),
+  "Ddu64 (DEFAULT)": new Ddu64(undefined, undefined, {
+    dduSetSymbol: DduSetSymbol.ONECHARSET,
+  }),
+  "Ddu64 (DDU)": new Ddu64(undefined, undefined, {
+    dduSetSymbol: DduSetSymbol.DDU,
+  }),
+  "Ddu64 (1024)": new Ddu64(undefined,undefined,{
+    dduSetSymbol: DduSetSymbol.TWOCHARSET,
+  }),
+  "Ddu64 (32768)": new Ddu64(undefined,undefined,{
+    dduSetSymbol: DduSetSymbol.THREECHARSET,
+  }),
 };
 
 Object.entries(encoders).forEach(([name, encoder]) => {
   console.log(`\n${name}:`);
   let encoderPassed = 0;
   
-  // DduSetSymbol 선택
-  let dduSetSymbol = DduSetSymbol.USED;
-  if (name.includes("DEFAULT")) {
-    dduSetSymbol = DduSetSymbol.DEFAULT;
-  } else if (name.includes("DDU")) {
-    dduSetSymbol = DduSetSymbol.DDU;
-  }
-  
   testData.forEach(test => {
     try {
-      const encoded = encoder.encode(test.data, { dduSetSymbol });
-      const decoded = encoder.decode(encoded, { dduSetSymbol });
+      const encoded = encoder.encode(test.data);
+      const decoded = encoder.decode(encoded);
       const passed = decoded === test.data;
       reportTest(test.name, passed, passed ? undefined : "디코딩 불일치");
       if (passed) encoderPassed++;
@@ -72,32 +70,6 @@ Object.entries(encoders).forEach(([name, encoder]) => {
   });
   
   console.log(`  ${name} 총합: ${encoderPassed}/${testData.length} 통과`);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-console.log("[ 2. URL-Safe 검증 ]");
-console.log("═══════════════════════════════════════════════════════════════════════════════\n");
-
-const urlSafeRegex = /^[A-Za-z0-9_-]*$/;
-const urlTestString = "https://example.com?param=value&other=123";
-
-console.log("참고: Ddu64(DDU)는 한글 문자셋, Ddu64(DEFAULT)는 일부 특수문자로 URL-safe 제약이 있습니다.\n");
-
-Object.entries(encoders).forEach(([name, encoder]) => {
-  // Ddu64 계열은 설계상 URL-safe가 아니거나 제약이 있으므로 스킵
-  if (name.includes("Ddu64")) {
-    console.log(`  ⊘ ${name} URL-Safe (설계상 제외)`);
-    return;
-  }
-  
-  try {
-    const encoded = encoder.encode(urlTestString);
-    const isUrlSafe = urlSafeRegex.test(encoded);
-    reportTest(`${name} URL-Safe`, isUrlSafe, isUrlSafe ? undefined : `포함된 문자: ${encoded.match(/[^A-Za-z0-9_-]/g)?.join(", ")}`);
-  } catch (err: any) {
-    reportTest(`${name} URL-Safe`, false, err.message);
-  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -176,6 +148,359 @@ perfTests.forEach(testCase => {
       console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
     }
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-1. 메모리 사용량 벤치마크 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+const memoryPerfTests = [
+  { name: "1KB 데이터", data: "A".repeat(1000), iterations: 100 },
+  { name: "10KB 데이터", data: "Test ".repeat(2500), iterations: 50 },
+  { name: "100KB 데이터", data: "Lorem ipsum ".repeat(10000), iterations: 10 },
+];
+
+memoryPerfTests.forEach(testCase => {
+  console.log(`\n${testCase.name} (${testCase.iterations}회 반복):`);
+  console.log("  인코더      | 시작메모리 | 인코딩후 | 디코딩후 | 최대증가 | GC후메모리");
+  console.log("  " + "-".repeat(80));
+  
+  Object.entries(encoders).forEach(([name, encoder]) => {
+    try {
+      // 강제 GC (가능한 경우)
+      if (global.gc) {
+        global.gc();
+      }
+      
+      // 시작 메모리
+      const startMem = process.memoryUsage();
+      const startHeap = startMem.heapUsed;
+      
+      // 인코딩 반복
+      let encoded = "";
+      let maxHeap = startHeap;
+      for (let i = 0; i < testCase.iterations; i++) {
+        encoded = encoder.encode(testCase.data);
+        const currentHeap = process.memoryUsage().heapUsed;
+        maxHeap = Math.max(maxHeap, currentHeap);
+      }
+      
+      const afterEncodeMem = process.memoryUsage().heapUsed;
+      
+      // 디코딩 반복
+      for (let i = 0; i < testCase.iterations; i++) {
+        encoder.decode(encoded);
+        const currentHeap = process.memoryUsage().heapUsed;
+        maxHeap = Math.max(maxHeap, currentHeap);
+      }
+      
+      const afterDecodeMem = process.memoryUsage().heapUsed;
+      
+      // GC 후 메모리
+      if (global.gc) {
+        global.gc();
+      }
+      const afterGCMem = process.memoryUsage().heapUsed;
+      
+      const formatBytes = (bytes: number) => {
+        if (bytes < 1024) return `${bytes}B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+      };
+      
+      const startStr = formatBytes(startHeap).padStart(10);
+      const encodeStr = formatBytes(afterEncodeMem).padStart(8);
+      const decodeStr = formatBytes(afterDecodeMem).padStart(8);
+      const maxIncStr = formatBytes(maxHeap - startHeap).padStart(8);
+      const gcStr = formatBytes(afterGCMem).padStart(10);
+      
+      console.log(`  ${name.padEnd(11)} | ${startStr} | ${encodeStr} | ${decodeStr} | ${maxIncStr} | ${gcStr}`);
+    } catch (err: any) {
+      console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+    }
+  });
+});
+
+// 인코더 인스턴스 메모리 사용량
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("인코더 인스턴스 메모리 사용량:");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+if (global.gc) {
+  global.gc();
+}
+
+const baselineMem = process.memoryUsage().heapUsed;
+
+console.log("  인코더      | 인스턴스 메모리 | 룩업테이블 | 총 오버헤드");
+console.log("  " + "-".repeat(60));
+
+Object.entries({
+  "Ddu64 (DEFAULT)": DduSetSymbol.ONECHARSET,
+  "Ddu64 (DDU)": DduSetSymbol.DDU,
+  "Ddu64 (1024)": DduSetSymbol.TWOCHARSET,
+  "Ddu64 (32768)": DduSetSymbol.THREECHARSET,
+}).forEach(([name, symbol]) => {
+  if (global.gc) {
+    global.gc();
+  }
+  
+  const beforeMem = process.memoryUsage().heapUsed;
+  
+  // 인스턴스 생성
+  const testEncoder = new Ddu64(undefined, undefined, { dduSetSymbol: symbol });
+  
+  const afterMem = process.memoryUsage().heapUsed;
+  const instanceMem = afterMem - beforeMem;
+  
+  // 대략적인 룩업 테이블 크기 추정
+  // Map 오버헤드 + 엔트리당 약 50-100바이트
+  const charSetSize = testEncoder['dduChar'].length;
+  const estimatedLookupSize = charSetSize * 80; // 대략적인 추정
+  
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
+  
+  console.log(`  ${name.padEnd(11)} | ${formatBytes(instanceMem).padStart(15)} | ${formatBytes(estimatedLookupSize).padStart(10)} | ${formatBytes(instanceMem).padStart(12)}`);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-2. CPU 사용량 및 처리량 (Throughput) 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+const cpuTests = [
+  { name: "1KB 데이터", data: "A".repeat(1000), duration: 1000 }, // 1초 동안
+  { name: "10KB 데이터", data: "Test ".repeat(2500), duration: 1000 },
+  { name: "100KB 데이터", data: "Lorem ipsum ".repeat(10000), duration: 500 }, // 0.5초로 단축
+];
+
+cpuTests.forEach(testCase => {
+  console.log(`\n${testCase.name} (${testCase.duration}ms 동안 최대 처리):`);
+  console.log("  인코더      | 인코딩횟수 | 처리량(MB/s) | CPU시간(ms) | CPU효율(%)");
+  console.log("  " + "-".repeat(75));
+  
+  Object.entries(encoders).forEach(([name, encoder]) => {
+    try {
+      const dataSize = Buffer.from(testCase.data).length;
+      
+      // CPU 시간 측정
+      const startCPU = process.cpuUsage();
+      const startTime = performance.now();
+      
+      let iterations = 0;
+      let encoded = "";
+      
+      // 지정된 시간 동안 반복
+      while (performance.now() - startTime < testCase.duration) {
+        encoded = encoder.encode(testCase.data);
+        encoder.decode(encoded);
+        iterations++;
+      }
+      
+      const endTime = performance.now();
+      const endCPU = process.cpuUsage(startCPU);
+      
+      const elapsedTime = endTime - startTime;
+      const totalCPUTime = (endCPU.user + endCPU.system) / 1000; // 마이크로초 → 밀리초
+      const totalBytesProcessed = dataSize * iterations * 2; // 인코딩 + 디코딩
+      const throughputMBps = (totalBytesProcessed / (1024 * 1024)) / (elapsedTime / 1000);
+      const cpuEfficiency = (totalCPUTime / elapsedTime) * 100;
+      
+      console.log(`  ${name.padEnd(11)} | ${iterations.toString().padStart(10)} | ${throughputMBps.toFixed(2).padStart(12)} | ${totalCPUTime.toFixed(1).padStart(11)} | ${cpuEfficiency.toFixed(1).padStart(10)}`);
+    } catch (err: any) {
+      console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-3. 메모리 누수 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+console.log("참고: 10,000회 반복 후 메모리가 증가하지 않으면 메모리 누수 없음\n");
+
+const leakTests = [
+  { name: "작은 데이터", data: "Test", iterations: 10000 },
+  { name: "중간 데이터", data: "A".repeat(100), iterations: 5000 },
+  { name: "큰 데이터", data: "Lorem ".repeat(1000), iterations: 1000 },
+];
+
+leakTests.forEach(testCase => {
+  console.log(`\n${testCase.name} (${testCase.iterations}회 반복):`);
+  console.log("  인코더      | 시작메모리 | 중간(50%) | 종료메모리 | GC후 | 누수여부");
+  console.log("  " + "-".repeat(75));
+  
+  Object.entries(encoders).forEach(([name, encoder]) => {
+    try {
+      if (global.gc) {
+        global.gc();
+      }
+      
+      const startMem = process.memoryUsage().heapUsed;
+      
+      // 전반부 실행
+      for (let i = 0; i < testCase.iterations / 2; i++) {
+        const encoded = encoder.encode(testCase.data);
+        encoder.decode(encoded);
+      }
+      
+      const midMem = process.memoryUsage().heapUsed;
+      
+      // 후반부 실행
+      for (let i = 0; i < testCase.iterations / 2; i++) {
+        const encoded = encoder.encode(testCase.data);
+        encoder.decode(encoded);
+      }
+      
+      const endMem = process.memoryUsage().heapUsed;
+      
+      // GC 실행
+      if (global.gc) {
+        global.gc();
+      }
+      
+      const afterGC = process.memoryUsage().heapUsed;
+      
+      const formatBytes = (bytes: number) => {
+        if (bytes < 1024) return `${bytes}B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+      };
+      
+      // 메모리 누수 판단: GC 후 메모리가 시작보다 1MB 이상 크면 의심
+      const leak = (afterGC - startMem) > 1024 * 1024;
+      const leakStatus = leak ? "⚠️ 의심" : "✅ 없음";
+      
+      console.log(`  ${name.padEnd(11)} | ${formatBytes(startMem).padStart(10)} | ${formatBytes(midMem).padStart(9)} | ${formatBytes(endMem).padStart(10)} | ${formatBytes(afterGC).padStart(4)} | ${leakStatus}`);
+    } catch (err: any) {
+      console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-4. 동시성 및 부하 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+console.log("동시 다중 요청 시뮬레이션 (서비스 환경):\n");
+
+const concurrencyTests = [
+  { name: "낮은 부하 (10 동시)", concurrent: 10, data: "Hello World", iterations: 100 },
+  { name: "중간 부하 (50 동시)", concurrent: 50, data: "Test Data", iterations: 100 },
+  { name: "높은 부하 (100 동시)", concurrent: 100, data: "A".repeat(100), iterations: 50 },
+];
+
+concurrencyTests.forEach(testCase => {
+  console.log(`\n${testCase.name}:`);
+  console.log("  인코더      | 총 처리시간 | 평균 응답 | 최대 응답 | 성공률(%)");
+  console.log("  " + "-".repeat(70));
+  
+  Object.entries(encoders).forEach(([name, encoder]) => {
+    try {
+      const results: number[] = [];
+      let maxTime = 0;
+      let successCount = 0;
+      
+      const startTime = performance.now();
+      
+      // 동시 요청 시뮬레이션 (실제로는 순차적이지만 빠르게 실행)
+      for (let concurrent = 0; concurrent < testCase.concurrent; concurrent++) {
+        for (let i = 0; i < testCase.iterations; i++) {
+          const reqStart = performance.now();
+          try {
+            const encoded = encoder.encode(testCase.data);
+            const decoded = encoder.decode(encoded);
+            
+            if (decoded === testCase.data) {
+              successCount++;
+            }
+            
+            const reqTime = performance.now() - reqStart;
+            results.push(reqTime);
+            maxTime = Math.max(maxTime, reqTime);
+          } catch {
+            // 실패
+          }
+        }
+      }
+      
+      const totalTime = performance.now() - startTime;
+      const avgResponse = results.reduce((a, b) => a + b, 0) / results.length;
+      const successRate = (successCount / (testCase.concurrent * testCase.iterations)) * 100;
+      
+      console.log(`  ${name.padEnd(11)} | ${totalTime.toFixed(1).padStart(11)}ms | ${avgResponse.toFixed(3).padStart(9)}ms | ${maxTime.toFixed(3).padStart(9)}ms | ${successRate.toFixed(1).padStart(9)}`);
+    } catch (err: any) {
+      console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 4-5. 장시간 실행 안정성 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+console.log("5초 연속 실행 테스트 (서비스 장시간 운영 시뮬레이션):\n");
+
+console.log("  인코더      | 총 처리수 | 평균속도(op/s) | 메모리변화 | 오류수 | 안정성");
+console.log("  " + "-".repeat(75));
+
+Object.entries(encoders).forEach(([name, encoder]) => {
+  try {
+    if (global.gc) {
+      global.gc();
+    }
+    
+    const startMem = process.memoryUsage().heapUsed;
+    const startTime = performance.now();
+    const duration = 5000; // 5초
+    
+    let iterations = 0;
+    let errors = 0;
+    const testData = "Stability Test Data";
+    
+    while (performance.now() - startTime < duration) {
+      try {
+        const encoded = encoder.encode(testData);
+        const decoded = encoder.decode(encoded);
+        
+        if (decoded !== testData) {
+          errors++;
+        }
+        
+        iterations++;
+      } catch {
+        errors++;
+      }
+    }
+    
+    const endTime = performance.now();
+    const endMem = process.memoryUsage().heapUsed;
+    
+    const elapsedSec = (endTime - startTime) / 1000;
+    const opsPerSec = iterations / elapsedSec;
+    const memChange = endMem - startMem;
+    
+    const formatBytes = (bytes: number) => {
+      const sign = bytes >= 0 ? "+" : "";
+      if (Math.abs(bytes) < 1024) return `${sign}${bytes}B`;
+      if (Math.abs(bytes) < 1024 * 1024) return `${sign}${(bytes / 1024).toFixed(1)}KB`;
+      return `${sign}${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+    };
+    
+    const stability = errors === 0 && memChange < 10 * 1024 * 1024 ? "✅ 안정" : "⚠️ 주의";
+    
+    console.log(`  ${name.padEnd(11)} | ${iterations.toString().padStart(9)} | ${opsPerSec.toFixed(0).padStart(14)} | ${formatBytes(memChange).padStart(10)} | ${errors.toString().padStart(6)} | ${stability}`);
+  } catch (err: any) {
+    console.log(`  ${name.padEnd(11)} | 에러: ${err.message}`);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -271,52 +596,30 @@ edgeCases.forEach(testCase => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-console.log("[ 7. 커스텀 문자셋 테스트 ]");
-console.log("═══════════════════════════════════════════════════════════════════════════════\n");
-
-// Ddu128 커스텀 문자셋
-console.log("Ddu128 커스텀 문자셋:");
-try {
-  const custom128Keys = Array.from({ length: 128 }, (_, i) => {
-    const char1 = String.fromCharCode(65 + Math.floor(i / 26) % 26);
-    const char2 = String.fromCharCode(97 + Math.floor(i / 4) % 26);
-    const char3 = String.fromCharCode(48 + i % 10);
-    return `${char1}${char2}${char3}`;
-  });
-  const customDdu128 = new Ddu128(custom128Keys, "XXX");
-  const testStr = "Custom Ddu128 test!";
-  const enc = customDdu128.encode(testStr);
-  const dec = customDdu128.decode(enc);
-  reportTest("128개 커스텀 3글자 키", dec === testStr);
-} catch (err: any) {
-  reportTest("128개 커스텀 3글자 키", false, err.message);
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 console.log("\n═══════════════════════════════════════════════════════════════════════════════");
 console.log("[ 8. 유효성 검사 테스트 ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
-console.log("Ddu128 유효성 검사:");
+console.log("Ddu64 유효성 검사:");
 
-// 128개 미만
+// 1024개 미만
 try {
-  const tooFew = Array.from({ length: 127 }, (_, i) => `C${i.toString().padStart(2, "0")}`);
-  new Ddu128(tooFew, "XXX");
-  reportTest("128개 미만 거부", false, "예외가 발생해야 함");
+  const tooFew = Array.from({ length: 1023 }, (_, i) => `C${i.toString().padStart(3, "0")}`);
+  new Ddu64(tooFew, "XXX");
+  reportTest("1024개 미만 거부", false, "예외가 발생해야 함");
 } catch {
-  reportTest("128개 미만 거부", true);
+  reportTest("1024개 미만 거부", true);
 }
 
 // 길이 불일치
 try {
   const mixedLength = [
-    ...Array.from({ length: 64 }, (_, i) => `A${i}`),
-    ...Array.from({ length: 64 }, (_, i) => `B${i}X`)
+    ...Array.from({ length: 512 }, (_, i) => `A${i.toString().padStart(2, "0")}`),
+    ...Array.from({ length: 512 }, (_, i) => `B${i}X`)
   ];
-  new Ddu128(mixedLength, "XXX");
+  new Ddu64(mixedLength, "XXX");
   reportTest("길이 불일치 거부", false, "예외가 발생해야 함");
 } catch {
   reportTest("길이 불일치 거부", true);
@@ -325,10 +628,10 @@ try {
 // 중복 문자
 try {
   const duplicates = [
-    ...Array.from({ length: 127 }, (_, i) => `A${i.toString().padStart(2, "0")}`),
-    "A00"
+    ...Array.from({ length: 1023 }, (_, i) => `A${i.toString().padStart(3, "0")}`),
+    "A000"
   ];
-  new Ddu128(duplicates, "XXXX");
+  new Ddu64(duplicates, "XXXX");
   reportTest("중복 문자 거부", false, "예외가 발생해야 함");
 } catch {
   reportTest("중복 문자 거부", true);
@@ -336,22 +639,11 @@ try {
 
 // 패딩 문자가 셋에 포함
 try {
-  const validChars = Array.from({ length: 128 }, (_, i) => `A${i.toString().padStart(2, "0")}`);
-  new Ddu128(validChars, "A00");
+  const validChars = Array.from({ length: 1024 }, (_, i) => `A${i.toString().padStart(3, "0")}`);
+  new Ddu64(validChars, "A000");
   reportTest("패딩 중복 거부", false, "예외가 발생해야 함");
 } catch {
   reportTest("패딩 중복 거부", true);
-}
-
-console.log("\nDdu512 유효성 검사:");
-
-// 512개 미만
-try {
-  const tooFew512 = Array.from({ length: 511 }, (_, i) => `C${i.toString().padStart(2, "0")}`);
-  new Ddu512(tooFew512, "XX");
-  reportTest("512개 미만 거부", false, "예외가 발생해야 함");
-} catch {
-  reportTest("512개 미만 거부", true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -578,7 +870,23 @@ console.log(`총 ${bitPatternTests.length}개의 비트 패턴 테스트 케이�
 let bitTestPassed = 0;
 let bitTestFailed = 0;
 
-Object.entries(encoders).forEach(([name, encoder]) => {
+// latin1 encoding을 사용하는 별도의 encoder 생성
+const latin1Encoders = {
+  "Ddu64 (DEFAULT)": new Ddu64(undefined, undefined, {
+    dduSetSymbol: DduSetSymbol.ONECHARSET,
+    encoding: 'latin1',
+  }),
+  "Ddu64 (DDU)": new Ddu64(undefined, undefined, {
+    dduSetSymbol: DduSetSymbol.DDU,
+    encoding: 'latin1',
+  }),
+  "Ddu64": new Ddu64(undefined, undefined, {
+    dduSetSymbol: DduSetSymbol.TWOCHARSET,
+    encoding: 'latin1',
+  }),
+};
+
+Object.entries(latin1Encoders).forEach(([name, encoder]) => {
   console.log(`\n${name}:`);
   let encoderBitPassed = 0;
   let encoderBitFailed = 0;
@@ -586,8 +894,8 @@ Object.entries(encoders).forEach(([name, encoder]) => {
   bitPatternTests.forEach((test, idx) => {
     // Buffer를 인코딩
     const encoded = encoder.encode(test.data);
-    // 디코딩된 결과를 Buffer로 변환 (latin1을 사용하여 바이트 그대로 보존)
-    const decoded = encoder.decode(encoded, { encoding: 'latin1' });
+    // 디코딩
+    const decoded = encoder.decode(encoded);
     const decodedBuffer = Buffer.from(decoded, 'latin1');
     
     if (decodedBuffer.equals(test.data)) {
@@ -636,7 +944,23 @@ const encodingTests: { name: string; encoding: BufferEncoding; data: string }[] 
 encodingTests.forEach(test => {
   console.log(`\n${test.name} (encoding: ${test.encoding}):`);
   
-  Object.entries(encoders).forEach(([name, encoder]) => {
+  // 각 encoding마다 새로운 encoder 생성
+  const encodingEncoders = {
+    "Ddu64 (DEFAULT)": new Ddu64(undefined, undefined, {
+      dduSetSymbol: DduSetSymbol.ONECHARSET,
+      encoding: test.encoding,
+    }),
+    "Ddu64 (DDU)": new Ddu64(undefined, undefined, {
+      dduSetSymbol: DduSetSymbol.DDU,
+      encoding: test.encoding,
+    }),
+    "Ddu64": new Ddu64(undefined, undefined, {
+      dduSetSymbol: DduSetSymbol.TWOCHARSET,
+      encoding: test.encoding,
+    }),
+  };
+  
+  Object.entries(encodingEncoders).forEach(([name, encoder]) => {
     try {
       // 원본 데이터를 Buffer로 변환
       const originalBuffer = Buffer.from(test.data, test.encoding);
@@ -644,8 +968,8 @@ encodingTests.forEach(test => {
       // 인코딩
       const encoded = encoder.encode(originalBuffer);
       
-      // 디코딩 (같은 인코딩 사용)
-      const decoded = encoder.decode(encoded, { encoding: test.encoding });
+      // 디코딩
+      const decoded = encoder.decode(encoded);
       
       // 디코딩된 결과를 다시 Buffer로 변환하여 비교
       const decodedBuffer = Buffer.from(decoded, test.encoding);
@@ -682,7 +1006,532 @@ Object.entries(encoders).forEach(([name, encoder]) => {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-console.log("[ 12. 최종 결과 및 추천 사항 ]");
+console.log("[ 12. 커스텀 Charset 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+// Base64 호환 charset
+const BASE64_CHARS = [
+  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
+  "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "a", "b", "c", "d", "e", "f",
+  "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v",
+  "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "/",
+];
+
+// 한글 charset (256개, 2^8)
+const koreanCharsRaw = [
+  "뜌", "뜍", "뜎", "뜏", "뜐", "뜑", "뜒", "뜓", "뜔", "뜕", "뜖", "뜗", "뜘", "뜙", "뜚", "뜛",
+  "뜜", "뜝", "뜞", "뜟", "뜠", "뜡", "뜢", "뜣", "뜤", "뜥", "뜦", "뜧", "뜨", "뜩", "뜪", "뜫",
+  "뜬", "뜭", "뜮", "뜯", "뜰", "뜱", "뜲", "뜳", "뜴", "뜵", "뜶", "뜷", "뜸", "뜹", "뜺", "뜻",
+  "뜼", "뜽", "뜾", "뜿", "땨", "땩", "땪", "땫", "땬", "땭", "땮", "땯", "땰", "땱", "땲", "땳",
+  "땴", "땵", "땶", "땷", "땸", "땹", "땺", "땻", "땼", "땽", "땾", "땿", "떀", "떁", "떂", "떃",
+  "떄", "떅", "떆", "떇", "떈", "떉", "떊", "떋", "떌", "떍", "떎", "떏", "떐", "떑", "떒", "떓",
+  "떔", "떕", "떖", "떗", "떘", "떙", "떚", "떛", "우", "욱", "욲", "욳", "운", "울", "욶", "욷",
+  "움", "웁", "웂", "웃", "웄", "웅", "웆", "웇", "워", "웍", "웎", "웏", "원", "월", "웒", "웓",
+  "웕", "웖", "웗", "웘", "웙", "웚", "웛", "위", "윅", "윆", "윇", "윈", "윉", "윊", "윋", "윌",
+  "윍", "윎", "윏", "윐", "윑", "윒", "윓", "윔", "윕", "윖", "따", "딱", "딲", "딳", "딴", "딵",
+  "딶", "딷", "딸", "딹", "딺", "딻", "딼", "딽", "딾", "딿", "땀", "땁", "땂", "땃", "땄", "땅",
+  "땆", "땇", "땈", "땉", "땊", "땋", "때", "땍", "땎", "땏", "땑", "땒", "땓", "땔", "땕", "땖",
+  "땗", "땘", "땙", "땚", "땛", "땜", "땝", "땞", "땟", "땠", "땡", "땢", "야", "약", "얂", "얃",
+  "얄", "얅", "얆", "얇", "얈", "얉", "얊", "얋", "얌", "얍", "얎", "얏", "양", "얒", "얓", "얔",
+  "얕", "얖", "얗", "얘", "얙", "얚", "얛", "얜", "얝", "얞", "얟", "얠", "얡", "얢", "얣", "얤",
+  "얥", "얦", "얧", "얨", "얩", "얪", "얫", "얬", "얭", "얮", "얯", "얰", "얱",
+];
+
+const uniqueKorean = [...new Set(koreanCharsRaw)];
+const koreanChars256 = [...uniqueKorean];
+if (koreanChars256.length < 256) {
+  const additionalStart = 0xC560;
+  for (let i = 0; koreanChars256.length < 256; i++) {
+    const char = String.fromCharCode(additionalStart + i);
+    if (!koreanChars256.includes(char)) {
+      koreanChars256.push(char);
+    }
+  }
+}
+
+console.log("커스텀 Charset 테스트:\n");
+
+// 테스트 1: 한글 256개
+{
+  console.log("1. 한글 charset (256개 = 2^8):");
+  const ddu = new Ddu64(koreanChars256, "뭐");
+  const testData = "안녕하세요12";
+  const encoded = ddu.encode(testData);
+  const decoded = ddu.decode(encoded);
+  const passed = testData === decoded;
+  reportTest("한글 256개 인코딩/디코딩", passed);
+  
+  // 옵션 무시 확인
+  const encoded2 = ddu.encode(testData, {} as any);
+  const optionIgnored = encoded === encoded2;
+  reportTest("옵션 무시 확인", optionIgnored);
+}
+
+// 테스트 2: Base64 charset
+{
+  console.log("\n2. Base64 charset (64개 = 2^6):");
+  const ddu = new Ddu64(BASE64_CHARS, "=");
+  const testData = "Hello World! 안녕하세요!";
+  const encoded = ddu.encode(testData);
+  const decoded = ddu.decode(encoded);
+  const passed = testData === decoded;
+  reportTest("Base64 charset 인코딩/디코딩", passed);
+}
+
+// 테스트 3: 한글 128개
+{
+  console.log("\n3. 한글 charset 일부 (128개 = 2^7):");
+  const korean128 = koreanChars256.slice(0, 128);
+  const ddu = new Ddu64(korean128, "뭐");
+  const testData = "테스트 데이터 123";
+  const encoded = ddu.encode(testData);
+  const decoded = ddu.decode(encoded);
+  const passed = testData === decoded;
+  reportTest("한글 128개 인코딩/디코딩", passed);
+}
+
+// 테스트 4: 비 2의 제곱수
+{
+  console.log("\n4. 비 2의 제곱수 charset (100개):");
+  const chars100 = koreanChars256.slice(0, 100);
+  const ddu = new Ddu64(chars100, "뭐", { usePowerOfTwo: false });
+  const testData = "비 2의 제곱수 테스트";
+  const encoded = ddu.encode(testData);
+  const decoded = ddu.decode(encoded);
+  const passed = testData === decoded;
+  reportTest("비 2의 제곱수 인코딩/디코딩", passed);
+}
+
+// 테스트 5: 2의 제곱수 강제 확인
+{
+  console.log("\n5. 2의 제곱수 자동 강제:");
+  const dduFalse = new Ddu64(BASE64_CHARS, "=", { usePowerOfTwo: false });
+  const dduTrue = new Ddu64(BASE64_CHARS, "=", { usePowerOfTwo: true });
+  const testData = "강제 설정 테스트";
+  const encoded1 = dduFalse.encode(testData);
+  const encoded2 = dduTrue.encode(testData);
+  const forced = encoded1 === encoded2;
+  reportTest("2의 제곱수 자동 강제 (false→true)", forced);
+}
+
+// 테스트 6: 다양한 데이터 타입
+{
+  console.log("\n6. 다양한 데이터 타입:");
+  const ddu = new Ddu64(koreanChars256, "뭐");
+  const testCases = [
+    { name: "빈 문자열", data: "" },
+    { name: "단일 문자", data: "A" },
+    { name: "숫자", data: "1234567890" },
+    { name: "영문", data: "Hello World" },
+    { name: "한글", data: "안녕하세요" },
+    { name: "특수문자", data: "!@#$%^&*()" },
+    { name: "이모지", data: "😀🎉🌍" },
+    { name: "혼합", data: "Hello안녕123!😀" },
+  ];
+  
+  testCases.forEach(test => {
+    const encoded = ddu.encode(test.data);
+    const decoded = ddu.decode(encoded);
+    const passed = test.data === decoded;
+    reportTest(`  ${test.name}`, passed);
+  });
+}
+
+// 테스트 7: Buffer 입력
+{
+  console.log("\n7. Buffer 입력:");
+  const ddu = new Ddu64(koreanChars256, "뭐");
+  const testData = "Buffer 테스트 데이터";
+  const buffer = Buffer.from(testData, "utf-8");
+  const encoded = ddu.encode(buffer);
+  const decoded = ddu.decode(encoded);
+  const passed = testData === decoded;
+  reportTest("Buffer 입력 인코딩/디코딩", passed);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 13. 엣지 케이스 및 특수 상황 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+console.log("엣지 케이스 테스트:\n");
+
+// 테스트 1: 다양한 2의 제곱수 charset 크기
+{
+  console.log("1. 다양한 2의 제곱수 charset 크기:");
+  const powerOfTwoSizes = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
+  
+  powerOfTwoSizes.forEach(size => {
+    try {
+      // 충분한 문자 생성
+      const chars = Array.from({ length: size }, (_, i) => 
+        String.fromCharCode(0x4E00 + i) // 한자 영역 사용
+      );
+      const ddu = new Ddu64(chars, "뭐");
+      const testData = `크기${size}테스트`;
+      const encoded = ddu.encode(testData);
+      const decoded = ddu.decode(encoded);
+      const passed = testData === decoded;
+      reportTest(`  2^${Math.log2(size)} (${size}개) charset`, passed);
+    } catch (err: any) {
+      reportTest(`  2^${Math.log2(size)} (${size}개) charset`, false, err.message);
+    }
+  });
+}
+
+// 테스트 2: 비 2의 제곱수 charset 크기
+{
+  console.log("\n2. 비 2의 제곱수 charset 크기:");
+  const nonPowerOfTwoSizes = [3, 5, 7, 10, 15, 20, 50, 100, 200, 500];
+  
+  nonPowerOfTwoSizes.forEach(size => {
+    try {
+      const chars = Array.from({ length: size }, (_, i) => 
+        String.fromCharCode(0x5000 + i)
+      );
+      const ddu = new Ddu64(chars, "뭐", { usePowerOfTwo: false });
+      const testData = `크기${size}테스트`;
+      const encoded = ddu.encode(testData);
+      const decoded = ddu.decode(encoded);
+      const passed = testData === decoded;
+      reportTest(`  ${size}개 charset (가변길이)`, passed);
+    } catch (err: any) {
+      reportTest(`  ${size}개 charset (가변길이)`, false, err.message);
+    }
+  });
+}
+
+// 테스트 3: 최소/최대 크기 charset
+{
+  console.log("\n3. 최소/최대 크기 charset:");
+  
+  // 최소 크기 (2개)
+  try {
+    const ddu = new Ddu64(["0", "1"], "=", { usePowerOfTwo: false });
+    const testData = "최소크기";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("최소 크기 (2개)", testData === decoded);
+  } catch (err: any) {
+    reportTest("최소 크기 (2개)", false, err.message);
+  }
+  
+  // 최대 크기 (1024개)
+  try {
+    const chars1024 = Array.from({ length: 1024 }, (_, i) => 
+      String.fromCharCode(0x4E00 + i)
+    );
+    const ddu = new Ddu64(chars1024, "뭐");
+    const testData = "최대크기테스트";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("최대 크기 (1024개)", testData === decoded);
+  } catch (err: any) {
+    reportTest("최대 크기 (1024개)", false, err.message);
+  }
+}
+
+// 테스트 4: 다양한 encoding 옵션
+{
+  console.log("\n4. 다양한 encoding 옵션:");
+  const encodings: BufferEncoding[] = ["utf-8", "utf16le", "latin1", "ascii", "base64", "hex"];
+  
+  encodings.forEach(enc => {
+    try {
+      const ddu = new Ddu64(BASE64_CHARS, "=", { encoding: enc });
+      const testData = enc === "ascii" ? "Hello123" : "테스트";
+      const encoded = ddu.encode(testData);
+      const decoded = ddu.decode(encoded);
+      reportTest(`  ${enc} encoding`, testData === decoded);
+    } catch (err: any) {
+      reportTest(`  ${enc} encoding`, false, err.message);
+    }
+  });
+}
+
+// 테스트 5: 특수 문자 패딩
+{
+  console.log("\n5. 특수 문자 패딩:");
+  const specialPaddings = ["=", "-", "_", "~", "!", "@", "#", "$", "%"];
+  
+  specialPaddings.forEach(pad => {
+    try {
+      const ddu = new Ddu64(BASE64_CHARS, pad);
+      const testData = "특수패딩테스트";
+      const encoded = ddu.encode(testData);
+      const decoded = ddu.decode(encoded);
+      reportTest(`  패딩 "${pad}"`, testData === decoded);
+    } catch (err: any) {
+      reportTest(`  패딩 "${pad}"`, false, err.message);
+    }
+  });
+}
+
+// 테스트 6: 멀티바이트 문자 charset
+{
+  console.log("\n6. 멀티바이트 문자 charset:");
+  
+  // 2바이트 한글
+  try {
+    const korean64 = koreanChars256.slice(0, 64);
+    const ddu = new Ddu64(korean64, "뭐");
+    const testData = "한글charset테스트";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("2바이트 한글 charset", testData === decoded);
+  } catch (err: any) {
+    reportTest("2바이트 한글 charset", false, err.message);
+  }
+  
+  // 3바이트 한자
+  try {
+    const chinese64 = Array.from({ length: 64 }, (_, i) => 
+      String.fromCharCode(0x4E00 + i)
+    );
+    const ddu = new Ddu64(chinese64, "的");
+    const testData = "漢字charset測試";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("3바이트 한자 charset", testData === decoded);
+  } catch (err: any) {
+    reportTest("3바이트 한자 charset", false, err.message);
+  }
+  
+  // 4바이트 이모지
+  try {
+    const emoji8 = ["😀", "😁", "😂", "😃", "😄", "😅", "😆", "😇"];
+    const ddu = new Ddu64(emoji8, "🎉");
+    const testData = "emoji test";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("4바이트 이모지 charset", testData === decoded);
+  } catch (err: any) {
+    reportTest("4바이트 이모지 charset", false, err.message);
+  }
+}
+
+// 테스트 7: 극단적인 데이터 크기
+{
+  console.log("\n7. 극단적인 데이터 크기:");
+  const ddu = new Ddu64(BASE64_CHARS, "=");
+  
+  // 빈 데이터
+  try {
+    const encoded = ddu.encode("");
+    const decoded = ddu.decode(encoded);
+    reportTest("빈 문자열", decoded === "");
+  } catch (err: any) {
+    reportTest("빈 문자열", false, err.message);
+  }
+  
+  // 1바이트
+  try {
+    const testData = "A";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("1바이트 데이터", testData === decoded);
+  } catch (err: any) {
+    reportTest("1바이트 데이터", false, err.message);
+  }
+  
+  // 매우 긴 데이터 (1MB)
+  try {
+    const testData = "A".repeat(1024 * 1024);
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("1MB 데이터", testData === decoded);
+  } catch (err: any) {
+    reportTest("1MB 데이터", false, err.message);
+  }
+}
+
+// 테스트 8: usePowerOfTwo 옵션 조합
+{
+  console.log("\n8. usePowerOfTwo 옵션 조합:");
+  
+  // 2의 제곱수 + usePowerOfTwo: true
+  try {
+    const ddu = new Ddu64(BASE64_CHARS, "=", { usePowerOfTwo: true });
+    const testData = "옵션true";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("2^6 + usePowerOfTwo:true", testData === decoded);
+  } catch (err: any) {
+    reportTest("2^6 + usePowerOfTwo:true", false, err.message);
+  }
+  
+  // 2의 제곱수 + usePowerOfTwo: false (강제 true)
+  try {
+    const ddu = new Ddu64(BASE64_CHARS, "=", { usePowerOfTwo: false });
+    const testData = "옵션false";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("2^6 + usePowerOfTwo:false (강제)", testData === decoded);
+  } catch (err: any) {
+    reportTest("2^6 + usePowerOfTwo:false (강제)", false, err.message);
+  }
+  
+  // 비 2의 제곱수 + usePowerOfTwo: true
+  try {
+    const chars100 = koreanChars256.slice(0, 100);
+    const ddu = new Ddu64(chars100, "뭐", { usePowerOfTwo: true });
+    const testData = "비제곱true";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("100개 + usePowerOfTwo:true", testData === decoded);
+  } catch (err: any) {
+    reportTest("100개 + usePowerOfTwo:true", false, err.message);
+  }
+  
+  // 비 2의 제곱수 + usePowerOfTwo: false
+  try {
+    const chars100 = koreanChars256.slice(0, 100);
+    const ddu = new Ddu64(chars100, "뭐", { usePowerOfTwo: false });
+    const testData = "비제곱false";
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("100개 + usePowerOfTwo:false", testData === decoded);
+  } catch (err: any) {
+    reportTest("100개 + usePowerOfTwo:false", false, err.message);
+  }
+}
+
+// 테스트 9: 특수 바이트 패턴
+{
+  console.log("\n9. 특수 바이트 패턴:");
+  const ddu = new Ddu64(BASE64_CHARS, "=");
+  
+  // 모든 0
+  try {
+    const buffer = Buffer.alloc(100, 0);
+    const encoded = ddu.encode(buffer);
+    const decoded = ddu.decode(encoded);
+    const decodedBuffer = Buffer.from(decoded, "utf-8");
+    reportTest("모든 0x00 바이트", buffer.equals(decodedBuffer));
+  } catch (err: any) {
+    reportTest("모든 0x00 바이트", false, err.message);
+  }
+  
+  // 모든 0xFF
+  try {
+    const buffer = Buffer.alloc(100, 0xFF);
+    const encoded = ddu.encode(buffer);
+    const decoded = ddu.decode(encoded);
+    const decodedBuffer = Buffer.from(decoded, "utf-8");
+    reportTest("모든 0xFF 바이트", buffer.equals(decodedBuffer));
+  } catch (err: any) {
+    reportTest("모든 0xFF 바이트", false, err.message);
+  }
+  
+  // 반복 패턴
+  try {
+    const buffer = Buffer.from([0xAA, 0x55].flatMap(b => Array(50).fill(b)));
+    const encoded = ddu.encode(buffer);
+    const decoded = ddu.decode(encoded);
+    const decodedBuffer = Buffer.from(decoded, "utf-8");
+    reportTest("반복 패턴 (0xAA, 0x55)", buffer.equals(decodedBuffer));
+  } catch (err: any) {
+    reportTest("반복 패턴 (0xAA, 0x55)", false, err.message);
+  }
+}
+
+// 테스트 10: 연속 인코딩/디코딩
+{
+  console.log("\n10. 연속 인코딩/디코딩:");
+  const ddu = new Ddu64(BASE64_CHARS, "=");
+  
+  try {
+    let data = "초기데이터";
+    let allPassed = true;
+    
+    // 10번 연속 인코딩/디코딩
+    for (let i = 0; i < 10; i++) {
+      const encoded = ddu.encode(data);
+      const decoded = ddu.decode(encoded);
+      if (data !== decoded) {
+        allPassed = false;
+        break;
+      }
+      data = decoded + i; // 데이터 변형
+    }
+    
+    reportTest("10회 연속 인코딩/디코딩", allPassed);
+  } catch (err: any) {
+    reportTest("10회 연속 인코딩/디코딩", false, err.message);
+  }
+}
+
+// 테스트 11: 동시 다중 인스턴스
+{
+  console.log("\n11. 동시 다중 인스턴스:");
+  
+  try {
+    const ddu1 = new Ddu64(BASE64_CHARS, "=");
+    const ddu2 = new Ddu64(koreanChars256.slice(0, 64), "뭐");
+    const ddu3 = new Ddu64(koreanChars256.slice(0, 100), "뭐", { usePowerOfTwo: false });
+    
+    const testData = "다중인스턴스테스트";
+    
+    const encoded1 = ddu1.encode(testData);
+    const encoded2 = ddu2.encode(testData);
+    const encoded3 = ddu3.encode(testData);
+    
+    const decoded1 = ddu1.decode(encoded1);
+    const decoded2 = ddu2.decode(encoded2);
+    const decoded3 = ddu3.decode(encoded3);
+    
+    const allPassed = 
+      testData === decoded1 && 
+      testData === decoded2 && 
+      testData === decoded3;
+    
+    reportTest("3개 인스턴스 동시 사용", allPassed);
+  } catch (err: any) {
+    reportTest("3개 인스턴스 동시 사용", false, err.message);
+  }
+}
+
+// 테스트 12: 경계값 테스트
+{
+  console.log("\n12. 경계값 테스트:");
+  
+  // 정확히 8의 배수 바이트
+  try {
+    const ddu = new Ddu64(BASE64_CHARS, "=");
+    const testData = "A".repeat(8); // 8바이트
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("8바이트 (경계값)", testData === decoded);
+  } catch (err: any) {
+    reportTest("8바이트 (경계값)", false, err.message);
+  }
+  
+  // 8의 배수 + 1
+  try {
+    const ddu = new Ddu64(BASE64_CHARS, "=");
+    const testData = "A".repeat(9); // 9바이트
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("9바이트 (8+1)", testData === decoded);
+  } catch (err: any) {
+    reportTest("9바이트 (8+1)", false, err.message);
+  }
+  
+  // 8의 배수 - 1
+  try {
+    const ddu = new Ddu64(BASE64_CHARS, "=");
+    const testData = "A".repeat(7); // 7바이트
+    const encoded = ddu.encode(testData);
+    const decoded = ddu.decode(encoded);
+    reportTest("7바이트 (8-1)", testData === decoded);
+  } catch (err: any) {
+    reportTest("7바이트 (8-1)", false, err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 14. 최종 결과 및 추천 사항 ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
 const successRate = ((passedTests / totalTests) * 100).toFixed(1);
@@ -692,7 +1541,7 @@ console.log(`통과: ${passedTests}개 (${successRate}%)`);
 console.log(`실패: ${failedTests}개\n`);
 
 // 비트 패턴 테스트의 일부 실패는 예상된 동작 (특정 바이트 값이 패딩과 충돌할 수 있음)
-const expectedFailures = 10; // Ddu512, Ddu1024의 특정 바이트 패턴
+const expectedFailures = 10; // Ddu512, DduUniverse의 특정 바이트 패턴
 const unexpectedFailures = Math.max(0, failedTests - expectedFailures);
 
 if (failedTests === 0) {

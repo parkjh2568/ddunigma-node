@@ -9,41 +9,23 @@ export interface CharSetConfig {
   }
   
   export interface DduOptions {
-    dduSetSymbol?: DduSetSymbol;
-    encoding?: BufferEncoding;
-    usePowerOfTwo?: boolean;
+    // options는 현재 사용하지 않지만 호환성을 위해 유지
   }
   
-  export interface DduConstructorOptions extends DduOptions {
+  export interface DduConstructorOptions {
+    dduSetSymbol?: DduSetSymbol;
     dduChar?: string[] | string;
     paddingChar?: string;
     requiredLength?: number;
     bitLength?: number;
+    usePowerOfTwo?: boolean;
     useBuildErrorReturn?: boolean;
+    encoding?: BufferEncoding;
   }
   
-  export interface SelectedSets {
-    dduSet: string[];
-    padChar: string;
-    dduLength: number;
-    bitLength: number;
-    lookupTable: Map<string, number>;
-    paddingRegExp: RegExp;
-  }
-  
-  export interface BufferToDduBinaryResult {
-    dduBinary: string[];
-    padding: number;
-  }
-  
-  export interface EncoderConstructorOptions {
-    dduChar?: string[] | string;
-    paddingChar?: string;
-  }
-  
-  export interface FixedLengthEncoderOptions {
-    dduChar?: string[];
-    paddingChar?: string;
-  }
+export interface BufferToDduBinaryResult {
+  dduBinary: string[];
+  padding: number;
+}
   
   

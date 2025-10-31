@@ -1,5 +1,4 @@
 function generateCharList(count) {
-  // URL-safe 문자 정의 (. 과 ~ 제외)
   const urlSafeChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
   
   // 첫 글자 후보 

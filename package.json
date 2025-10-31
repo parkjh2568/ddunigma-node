@@ -7,7 +7,8 @@
   "type": "module",
   "scripts": {
     "build": "rm -rf dist/* && tsc -p tsconfig.json && tsc -p tsconfig-cjs.json && sh postProcess.sh",
-    "test": "tsx ./src/test/test-comprehensive.ts"
+    "test": "NODE_OPTIONS='--expose-gc' tsx ./src/test/test-comprehensive.ts",
+    "test:no-gc": "tsx ./src/test/test-comprehensive.ts"
   },
   "exports": {
     ".": {

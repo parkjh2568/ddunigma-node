@@ -38,6 +38,13 @@ export abstract class BaseDdu {
   }
 
   /**
+   * 2의 거듭제곱 지수 계산
+   */
+  protected getLargestPowerOfTwoExponent(n: number): number {
+    return Math.floor(Math.log2(n));
+  }
+
+  /**
    * 비트 길이 계산
    */
   protected getBitLength(setLength: number): number {
@@ -51,13 +58,17 @@ export abstract class BaseDdu {
     input: Buffer,
     bitLength: number
   ): BufferToDduBinaryResult {
-    const encodedBin = input.reduce(
-      (acc, byte) => acc + this.binaryLookup[byte],
-      ""
-    );
-    if (encodedBin.length === 0) {
+    // 성능 최적화: reduce 대신 for loop + join 사용
+    if (input.length === 0) {
       return { dduBinary: [], padding: 0 };
     }
+    
+    const binaryParts: string[] = new Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      binaryParts[i] = this.binaryLookup[input[i]];
+    }
+    const encodedBin = binaryParts.join("");
+    
     const dduBinary = Array.from(this.splitString(encodedBin, bitLength));
     const padding = bitLength - dduBinary[dduBinary.length - 1].length;
 

@@ -1,17 +1,15 @@
 // Export types
 export type {
   DduOptions,
-  SelectedSets,
   BufferToDduBinaryResult,
-  EncoderConstructorOptions,
-  FixedLengthEncoderOptions,
+  DduConstructorOptions,
 } from "./types";
 
 // Export enums
 export { DduSetSymbol } from "./types";
 
 // Export base classes
-export { BaseDdu, FixedLengthDdu } from "./base";
+export { BaseDdu } from "./base";
 
 // Export encoders
-export { Ddu64, Ddu128, Ddu512, Ddu1024 } from "./encoders";
+export { Ddu64 } from "./encoders";
