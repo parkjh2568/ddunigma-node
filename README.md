@@ -64,6 +64,7 @@ const encoder4 = new Ddu64(undefined, undefined, {
 const text = "안녕하세요";
 const encoded = encoder1.encode(text);
 const decoded = encoder1.decode(encoded);
+const decodedBuffer = encoder1.decodeToBuffer(encoded);
 ```
 
 ### 커스텀 Charset 사용
@@ -82,4 +83,47 @@ const encoder = new Ddu64(koreanChars, "뭐");
 const text = "안녕하세요12";
 const encoded = encoder.encode(text);
 const decoded = encoder.decode(encoded);
+const decodedBuffer = encoder.decodeToBuffer(encoded);
+```
+
+## API
+
+### `new Ddu64(dduChar?, paddingChar?, options?)`
+
+인코더 인스턴스를 생성합니다.
+
+**Parameters:**
+- `dduChar` (string | string[]): charset 문자열 또는 배열
+- `paddingChar` (string): 패딩 문자
+- `options` (DduOptions): 옵션 객체
+  - `dduSetSymbol`: 미리 정의된 charset 사용
+  - `encoding`: Buffer encoding (기본값: 'utf-8')
+  - `usePowerOfTwo`: 2의 제곱수 강제 여부
+  - `useBuildErrorReturn`: 에러 발생 시 throw 여부
+
+### `encode(data: string | Buffer): string`
+
+데이터를 인코딩
+
+### `decode(encoded: string): string`
+
+인코딩된 문자열을 디코딩
+
+### `decodeToBuffer(encoded: string): Buffer`
+
+인코딩된 문자열을 Buffer로 직접 디코딩
+
+### `getCharSetInfo()`
+
+현재 charset 정보를 반환
+
+```typescript
+{
+  charSet: string[];
+  paddingChar: string;
+  charLength: number;
+  bitLength: number;
+  usePowerOfTwo: boolean;
+  encoding: BufferEncoding;
+}
 ```

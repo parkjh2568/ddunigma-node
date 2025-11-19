@@ -921,11 +921,8 @@ encodingTests.forEach(test => {
       // 인코딩
       const encoded = encoder.encode(originalBuffer);
       
-      // 디코딩
-      const decoded = encoder.decode(encoded);
-      
-      // 디코딩된 결과를 다시 Buffer로 변환하여 비교
-      const decodedBuffer = Buffer.from(decoded, test.encoding);
+      // decodeToBuffer를 사용하여 직접 Buffer로 디코딩
+      const decodedBuffer = encoder.decodeToBuffer(encoded);
       
       const passed = decodedBuffer.equals(originalBuffer);
       reportTest(`${name.padEnd(11)}`, passed, passed ? undefined : `버퍼 불일치`);
@@ -1193,9 +1190,10 @@ console.log("엣지 케이스 테스트:\n");
     try {
       const ddu = new Ddu64(BASE64_CHARS, "=", { encoding: enc });
       const testData = enc === "ascii" ? "Hello123" : "테스트";
-      const encoded = ddu.encode(testData);
-      const decoded = ddu.decode(encoded);
-      reportTest(`  ${enc} encoding`, testData === decoded);
+      const originalBuffer = Buffer.from(testData, enc);
+      const encoded = ddu.encode(originalBuffer);
+      const decodedBuffer = ddu.decodeToBuffer(encoded);
+      reportTest(`  ${enc} encoding`, originalBuffer.equals(decodedBuffer));
     } catch (err: any) {
       reportTest(`  ${enc} encoding`, false, err.message);
     }
@@ -1352,36 +1350,34 @@ console.log("엣지 케이스 테스트:\n");
 // 테스트 9: 특수 바이트 패턴
 {
   console.log("\n9. 특수 바이트 패턴:");
-  const ddu = new Ddu64(BASE64_CHARS, "=");
+  // latin1 encoding 사용으로 바이너리 데이터 안전하게 처리
+  const ddu = new Ddu64(BASE64_CHARS, "=", { encoding: 'latin1' });
   
   // 모든 0
   try {
     const buffer = Buffer.alloc(100, 0);
     const encoded = ddu.encode(buffer);
-    const decoded = ddu.decode(encoded);
-    const decodedBuffer = Buffer.from(decoded, "utf-8");
+    const decodedBuffer = ddu.decodeToBuffer(encoded);
     reportTest("모든 0x00 바이트", buffer.equals(decodedBuffer));
   } catch (err: any) {
     reportTest("모든 0x00 바이트", false, err.message);
   }
   
-  // 모든 0xFF
+  // 모든 0xFF (이전 실패 케이스 - 이제 해결!)
   try {
     const buffer = Buffer.alloc(100, 0xFF);
     const encoded = ddu.encode(buffer);
-    const decoded = ddu.decode(encoded);
-    const decodedBuffer = Buffer.from(decoded, "utf-8");
+    const decodedBuffer = ddu.decodeToBuffer(encoded);
     reportTest("모든 0xFF 바이트", buffer.equals(decodedBuffer));
   } catch (err: any) {
     reportTest("모든 0xFF 바이트", false, err.message);
   }
   
-  // 반복 패턴
+  // 반복 패턴 (이전 실패 케이스 - 이제 해결!)
   try {
     const buffer = Buffer.from([0xAA, 0x55].flatMap(b => Array(50).fill(b)));
     const encoded = ddu.encode(buffer);
-    const decoded = ddu.decode(encoded);
-    const decodedBuffer = Buffer.from(decoded, "utf-8");
+    const decodedBuffer = ddu.decodeToBuffer(encoded);
     reportTest("반복 패턴 (0xAA, 0x55)", buffer.equals(decodedBuffer));
   } catch (err: any) {
     reportTest("반복 패턴 (0xAA, 0x55)", false, err.message);
@@ -1493,18 +1489,12 @@ console.log(`총 테스트: ${totalTests}개`);
 console.log(`통과: ${passedTests}개 (${successRate}%)`);
 console.log(`실패: ${failedTests}개\n`);
 
-// 비트 패턴 테스트의 일부 실패는 예상된 동작 (특정 바이트 값이 패딩과 충돌할 수 있음)
-const expectedFailures = 10; // Ddu512, DduUniverse의 특정 바이트 패턴
-const unexpectedFailures = Math.max(0, failedTests - expectedFailures);
-
 if (failedTests === 0) {
   console.log("✅ 모든 테스트 통과! 모든 인코더가 정상적으로 작동합니다.\n");
-} else if (failedTests <= expectedFailures) {
-  console.log(`✅ 핵심 기능 테스트 통과! (${failedTests}개의 예상된 엣지 케이스 실패)\n`);
-  console.log("참고: 실패한 테스트는 특정 바이트 값이 인코딩 중 패딩 문자와 충돌하는");
-  console.log("      극히 드문 엣지 케이스입니다. 실제 문자열 인코딩에는 영향을 주지 않습니다.\n");
+  console.log("참고: decodeToBuffer 메서드를 사용하여 바이너리 데이터 처리 문제를 해결했습니다.");
+  console.log("      이전에 실패했던 0xFF 및 0xAA/0x55 패턴 테스트도 이제 통과합니다.\n");
 } else {
-  console.log(`❌ ${unexpectedFailures}개 예상치 못한 테스트 실패\n`);
+  console.log(`❌ ${failedTests}개 예상치 못한 테스트 실패\n`);
   process.exit(1);
 }
 
