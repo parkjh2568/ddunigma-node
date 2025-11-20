@@ -22,33 +22,24 @@ export class Ddu64 extends BaseDdu {
   private readonly binaryChunkToIntFn: (chunk: string) => number;
   private readonly indexToBinaryCache: string[] | null;
 
+  // [최적화] 정적 캐시
+  private static readonly MAX_CACHE_SIZE = 5;
+  private static readonly bitLengthToBinaryCache = new Map<number, string[]>();
+
+  public static clearCache() {
+    Ddu64.bitLengthToBinaryCache.clear();
+  }
+
   constructor(dduChar?: string[] | string, paddingChar?: string, dduOptions?: DduConstructorOptions) {
     super();
 
     const shouldThrowError = dduOptions?.useBuildErrorReturn ?? false;
-    const {
-      charSet,
-      padding,
-      requiredLength,
-      bitLength,
-      isPredefined,
-    } = this.resolveInitialCharSet(
-      dduChar,
-      paddingChar,
-      dduOptions,
-      shouldThrowError
-    );
+    
+    // 1. 초기 CharSet 해석
+    const initial = this.resolveInitialCharSet(dduChar, paddingChar, dduOptions, shouldThrowError);
 
-    // 정규화 및 검증
-    const normalized = this.normalizeCharSet(
-      charSet,
-      padding,
-      requiredLength,
-      bitLength,
-      isPredefined,
-      shouldThrowError,
-      dduOptions
-    );
+    // 2. 정규화 및 검증 (재시도 로직 포함)
+    const normalized = this.normalizeCharSet(initial, shouldThrowError, dduOptions);
     
     this.dduChar = normalized.charSet;
     this.paddingChar = normalized.padding;
@@ -56,17 +47,16 @@ export class Ddu64 extends BaseDdu {
     this.isPredefinedCharSet = normalized.isPredefined;
     this.encoding = dduOptions?.encoding ?? this.defaultEncoding;
 
+    // 3. 비트 길이 및 내부 상수 계산
     const dduLength = this.dduChar.length;
-    const recalculatedBitLength = this.getBitLength(dduLength);
     this.usePowerOfTwo = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
-    this.bitLength = this.usePowerOfTwo
-      ? this.getLargestPowerOfTwoExponent(dduLength)
-      : recalculatedBitLength;
-    this.effectiveBitLength = this.usePowerOfTwo ? this.bitLength : recalculatedBitLength;
+    
+    const computedBitLength = this.getBitLength(dduLength);
+    this.bitLength = this.usePowerOfTwo ? this.getLargestPowerOfTwoExponent(dduLength) : computedBitLength;
+    this.effectiveBitLength = this.usePowerOfTwo ? this.bitLength : computedBitLength;
     this.maxBinaryValue = 2 ** this.effectiveBitLength;
     
-    // 성능 최적화: 단일 구현 사용 (벤치마크 결과 Method2가 더 빠르고 안정적)
-    // Method2는 32비트 이상에서도 오버플로우 없이 정확한 결과 제공
+    // 4. 바이너리 변환 함수 (Method2)
     this.binaryChunkToIntFn = (chunk) => {
       let value = 0;
       for (let i = 0; i < chunk.length; i++) {
@@ -75,181 +65,106 @@ export class Ddu64 extends BaseDdu {
       return value;
     };
 
-    this.dduChar.forEach((char, index) => this.dduBinaryLookup.set(char, index));
+    // 5. Lookup Table 초기화
+    for (let i = 0; i < dduLength; i++) {
+      this.dduBinaryLookup.set(this.dduChar[i], i);
+    }
 
+    // 6. 조합 중복 검사 (조건부)
     if (this.charLength === 1 && !this.isPredefinedCharSet) {
       this.validateCombinationDuplicates(this.dduChar, this.paddingChar, dduLength);
     }
 
-    if (this.effectiveBitLength <= 16) {
-      this.indexToBinaryCache = Array.from({ length: this.maxBinaryValue }, (_, i) =>
-        i.toString(2).padStart(this.effectiveBitLength, "0")
-      );
-    } else {
-      this.indexToBinaryCache = null;
+    // 7. 정적 캐시 초기화
+    this.indexToBinaryCache = this.initCache();
+  }
+
+  private initCache(): string[] | null {
+    if (this.effectiveBitLength > 16) return null;
+
+    if (!Ddu64.bitLengthToBinaryCache.has(this.effectiveBitLength)) {
+      if (Ddu64.bitLengthToBinaryCache.size >= Ddu64.MAX_CACHE_SIZE) {
+        Ddu64.bitLengthToBinaryCache.clear();
+      }
+      const cache = new Array(this.maxBinaryValue);
+      for (let i = 0; i < this.maxBinaryValue; i++) {
+        cache[i] = i.toString(2).padStart(this.effectiveBitLength, "0");
+      }
+      Ddu64.bitLengthToBinaryCache.set(this.effectiveBitLength, cache);
     }
+    return Ddu64.bitLengthToBinaryCache.get(this.effectiveBitLength)!;
   }
 
   private normalizeCharSet(
-    charSet: string[],
-    padding: string,
-    requiredLength: number,
-    bitLength: number,
-    isPredefined: boolean,
+    current: { charSet: string[]; padding: string; requiredLength: number; bitLength: number; isPredefined: boolean },
     shouldThrowError: boolean,
     dduOptions?: DduConstructorOptions
-  ): {
-    charSet: string[];
-    padding: string;
-    requiredLength: number;
-    bitLength: number;
-    isPredefined: boolean;
-    charLength: number;
-  } {
-    const applyFallback = () =>
-      this.getFallbackCharSet(dduOptions);
+  ): { charSet: string[]; padding: string; charLength: number; isPredefined: boolean } {
+    let state = { ...current };
 
     while (true) {
-      const ensure = (condition: boolean, message: string): boolean => {
-        if (!condition) return false;
-        if (shouldThrowError) throw new Error(message);
-        ({
-          charSet,
-          padding,
-          requiredLength,
-          bitLength,
-          isPredefined,
-        } = applyFallback());
-        return true;
-      };
-
-      const uniqueChars = new Set(charSet);
-      if (uniqueChars.size !== charSet.length) {
-        const duplicates = charSet.filter(
-          (char, index) => charSet.indexOf(char) !== index
-        );
-        const errorMsg = `[Ddu64 normalizeCharSet] Character set contains duplicate characters. Total: ${charSet.length}, Unique: ${uniqueChars.size}, Duplicates: [${[
-          ...new Set(duplicates),
-        ].join(", ")}]`;
-
-        if (shouldThrowError) throw new Error(errorMsg);
-
-        charSet = Array.from(uniqueChars);
-        if (!isPredefined) {
-          requiredLength = charSet.length;
+      try {
+        const uniqueChars = Array.from(new Set(state.charSet));
+        if (uniqueChars.length !== state.charSet.length) {
+          const duplicates = state.charSet.filter((c, i) => state.charSet.indexOf(c) !== i);
+          if (shouldThrowError) {
+            throw new Error(`[Ddu64 normalizeCharSet] Character set contains duplicate characters. Total: ${state.charSet.length}, Unique: ${uniqueChars.length}, Duplicates: [${[...new Set(duplicates)].join(", ")}]`);
+          }
+          state.charSet = uniqueChars;
+          if (!state.isPredefined) state.requiredLength = state.charSet.length;
         }
-      }
 
-      if (
-        ensure(
-          charSet.length < requiredLength,
-          `[Ddu64 normalizeCharSet] Insufficient characters. Required: ${requiredLength}, Provided: ${charSet.length}`
-        )
-      ) {
-        continue;
-      }
+        const check = (condition: boolean, msg: string) => {
+          if (condition) throw new Error(`[Ddu64 normalizeCharSet] ${msg}`);
+        };
 
-      if (
-        ensure(
-          requiredLength < 2,
-          `[Ddu64 normalizeCharSet] At least 2 unique characters are required. Provided: ${requiredLength}`
-        )
-      ) {
-        continue;
-      }
+        check(state.charSet.length < state.requiredLength, 
+          `Insufficient characters. Required: ${state.requiredLength}, Provided: ${state.charSet.length}`);
+        check(state.requiredLength < 2, 
+          `At least 2 unique characters are required. Provided: ${state.requiredLength}`);
+        check(state.bitLength <= 0, 
+          `Invalid bit length (${state.bitLength}) for charset size ${state.requiredLength}`);
+        check(state.charSet.length === 0, 
+          `Empty charset. Required: ${state.requiredLength} characters`);
 
-      if (
-        ensure(
-          bitLength <= 0,
-          `[Ddu64 normalizeCharSet] Invalid bit length (${bitLength}) for charset size ${requiredLength}`
-        )
-      ) {
-        continue;
-      }
-
-      if (
-        ensure(
-          !charSet.length,
-          `[Ddu64 normalizeCharSet] Empty charset. Required: ${requiredLength} characters`
-        )
-      ) {
-        continue;
-      }
-
-      let charLength = charSet[0].length;
-
-      const invalidIndex = charSet.findIndex(
-        (char) => char.length !== charLength
-      );
-      if (invalidIndex !== -1) {
-        if (shouldThrowError) {
-          throw new Error(
-            `[Ddu64 normalizeCharSet] Inconsistent character length. Expected: ${charLength}, but character at index ${invalidIndex} ("${charSet[invalidIndex]}") has length ${charSet[invalidIndex].length}`
-          );
+        // 문자 길이 일관성 체크
+        let charLength = state.charSet[0].length;
+        const invalidIdx = state.charSet.findIndex(c => c.length !== charLength);
+        
+        if (invalidIdx !== -1) {
+          if (shouldThrowError) {
+            throw new Error(`[Ddu64 normalizeCharSet] Inconsistent character length. Expected: ${charLength}, but character at index ${invalidIdx} ("${state.charSet[invalidIdx]}") has length ${state.charSet[invalidIdx].length}`);
+          }
+          state.charSet = state.charSet.filter(c => c.length === charLength);
+          // 필터링 후 재검증을 위해 에러 throw
+          check(true, "Filtered inconsistent length chars"); 
         }
-        charSet = charSet.filter((char) => char.length === charLength);
-        if (
-          ensure(
-            charSet.length < requiredLength,
-            `[Ddu64 normalizeCharSet] Insufficient characters after filtering. Required: ${requiredLength}, Remaining: ${charSet.length}`
-          )
-        ) {
-          continue;
-        }
-        if (
-          ensure(
-            !charSet.length,
-            `[Ddu64 normalizeCharSet] Empty charset after filtering`
-          )
-        ) {
-          continue;
-        }
-        charLength = charSet[0].length;
-      }
 
-      if (
-        ensure(
-          padding.length !== charLength,
-          `[Ddu64 normalizeCharSet] Padding character length mismatch. Expected: ${charLength}, Got: ${padding.length} (padding: "${padding}")`
-        )
-      ) {
-        continue;
-      }
+        check(state.padding.length !== charLength, 
+          `Padding character length mismatch. Expected: ${charLength}, Got: ${state.padding.length} (padding: "${state.padding}")`);
 
-      if (charSet.includes(padding)) {
-        if (shouldThrowError) {
-          throw new Error(
-            `[Ddu64 normalizeCharSet] Padding character "${padding}" conflicts with charset. Padding must not be in the character set.`
-          );
+        if (state.charSet.includes(state.padding)) {
+          if (shouldThrowError) {
+            throw new Error(`[Ddu64 normalizeCharSet] Padding character "${state.padding}" conflicts with charset. Padding must not be in the character set.`);
+          }
+          state.charSet = state.charSet.filter(c => c !== state.padding);
+          check(true, "Removed padding conflict");
         }
-        charSet = charSet.filter((char) => char !== padding);
-        if (
-          ensure(
-            charSet.length < requiredLength,
-            `[Ddu64 normalizeCharSet] Insufficient characters after removing padding conflict. Required: ${requiredLength}, Remaining: ${charSet.length}`
-          )
-        ) {
-          continue;
-        }
-        if (
-          ensure(
-            !charSet.length,
-            `[Ddu64 normalizeCharSet] Empty charset after removing padding conflict`
-          )
-        ) {
-          continue;
-        }
-        charLength = charSet[0].length;
-      }
 
-      return {
-        charSet: charSet.slice(0, requiredLength),
-        padding,
-        requiredLength,
-        bitLength,
-        isPredefined,
-        charLength,
-      };
+        return {
+          charSet: state.charSet.slice(0, state.requiredLength),
+          padding: state.padding,
+          charLength,
+          isPredefined: state.isPredefined,
+        };
+
+      } catch (e: any) {
+        if (shouldThrowError && !e.message.includes("Filtered") && !e.message.includes("Removed")) {
+          throw e;
+        }
+        // Fallback 적용
+        state = this.getFallbackCharSet(dduOptions);
+      }
     }
   }
 
@@ -258,144 +173,60 @@ export class Ddu64 extends BaseDdu {
     paddingChar: string | undefined,
     dduOptions: DduConstructorOptions | undefined,
     shouldThrowError: boolean
-  ): {
-    charSet: string[];
-    padding: string;
-    requiredLength: number;
-    bitLength: number;
-    isPredefined: boolean;
-  } {
-    const finalize = (
-      set: string[],
-      padding: string,
-      length: number,
-      baseBitLength?: number,
-      predefined = false
-    ) => {
+  ) {
+    const finalize = (set: string[], padding: string, length: number, predefined = false) => {
       const usePow2 = this.shouldUsePowerOfTwo(length, dduOptions?.usePowerOfTwo);
       if (usePow2 && length > 0) {
         const exponent = this.getLargestPowerOfTwoExponent(length);
         const pow2Length = 1 << exponent;
-        return {
-          charSet: set.slice(0, pow2Length),
-          padding,
-          requiredLength: pow2Length,
-          bitLength: exponent,
-          isPredefined: predefined,
-        };
+        return { charSet: set.slice(0, pow2Length), padding, requiredLength: pow2Length, bitLength: exponent, isPredefined: predefined };
       }
-
-      const computedBitLength =
-        baseBitLength ?? (length > 0 ? this.getBitLength(length) : 0);
-
-      return {
-        charSet: set.slice(0, length),
-        padding,
-        requiredLength: length,
-        bitLength: computedBitLength,
-        isPredefined: predefined,
-      };
+      return { charSet: set.slice(0, length), padding, requiredLength: length, bitLength: length > 0 ? this.getBitLength(length) : 0, isPredefined: predefined };
     };
-
-    const fallback = () => this.getFallbackCharSet(dduOptions);
 
     try {
       const finalDduChar = dduChar ?? dduOptions?.dduChar;
       const finalPadding = paddingChar ?? dduOptions?.paddingChar;
 
       if (finalDduChar) {
-        if (!finalPadding) {
-          throw new Error(
-            `[Ddu64 Constructor] paddingChar is required when dduChar is provided. Received: dduChar=${typeof finalDduChar}, paddingChar=${finalPadding}`
-          );
-        }
-
-        const arr =
-          typeof finalDduChar === "string"
-            ? [...finalDduChar.trim()]
-            : [...finalDduChar];
-
+        if (!finalPadding) throw new Error(`[Ddu64 Constructor] paddingChar is required when dduChar is provided.`);
+        
+        const arr = typeof finalDduChar === "string" ? [...finalDduChar.trim()] : [...finalDduChar];
         if (shouldThrowError) {
-          const uniqueChars = new Set(arr);
-          if (uniqueChars.size !== arr.length) {
-            const duplicates = arr.filter(
-              (char, index) => arr.indexOf(char) !== index
-            );
-            throw new Error(
-              `[Ddu64 Constructor] Character set contains duplicate characters. Total: ${arr.length}, Unique: ${uniqueChars.size}, Duplicates: [${[
-                ...new Set(duplicates),
-              ].join(", ")}]`
-            );
-          }
+          const unique = new Set(arr);
+          if (unique.size !== arr.length) throw new Error(`[Ddu64 Constructor] Character set contains duplicate characters.`);
         }
-
+        
         const len = dduOptions?.requiredLength ?? arr.length;
-        if (arr.length < len) {
-          throw new Error(
-            `[Ddu64 Constructor] Insufficient characters in charset. Required: ${len}, Provided: ${arr.length}`
-          );
-        }
-
-        return finalize(arr, finalPadding, len, undefined, false);
+        if (arr.length < len) throw new Error(`[Ddu64 Constructor] Insufficient characters in charset.`);
+        
+        return finalize(arr, finalPadding, len, false);
       }
 
       if (dduOptions?.dduSetSymbol) {
         const cs = this.getCharSetOrThrow(dduOptions.dduSetSymbol);
-        return finalize(
-          cs.charSet,
-          cs.paddingChar,
-          cs.maxRequiredLength,
-          cs.bitLength,
-          true
-        );
+        return finalize(cs.charSet, cs.paddingChar, cs.maxRequiredLength, true);
       }
 
-      const defaultSymbol =
-        dduDefaultConstructorOptions.dduSetSymbol ?? DduSetSymbol.DDU;
+      const defaultSymbol = dduDefaultConstructorOptions.dduSetSymbol ?? DduSetSymbol.DDU;
       const cs = this.getCharSetOrThrow(defaultSymbol);
-      return finalize(
-        cs.charSet,
-        cs.paddingChar,
-        cs.maxRequiredLength,
-        cs.bitLength,
-        true
-      );
+      return finalize(cs.charSet, cs.paddingChar, cs.maxRequiredLength, true);
+
     } catch (error) {
       if (shouldThrowError) throw error;
-      return fallback();
+      return this.getFallbackCharSet(dduOptions);
     }
   }
 
-  private getFallbackCharSet(dduOptions?: DduConstructorOptions): {
-    charSet: string[];
-    padding: string;
-    requiredLength: number;
-    bitLength: number;
-    isPredefined: boolean;
-  } {
-    const fallbackSymbol =
-      dduOptions?.dduSetSymbol ??
-      dduDefaultConstructorOptions.dduSetSymbol ??
-      DduSetSymbol.ONECHARSET;
-    const cs =
-      getCharSet(fallbackSymbol) ?? getCharSet(DduSetSymbol.ONECHARSET);
+  private getFallbackCharSet(dduOptions?: DduConstructorOptions) {
+    const symbol = dduOptions?.dduSetSymbol ?? dduDefaultConstructorOptions.dduSetSymbol ?? DduSetSymbol.ONECHARSET;
+    const cs = getCharSet(symbol) ?? getCharSet(DduSetSymbol.ONECHARSET);
     if (!cs) throw new Error(`Critical: No fallback CharSet available`);
-    return {
-      charSet: cs.charSet,
-      padding: cs.paddingChar,
-      requiredLength: cs.maxRequiredLength,
-      bitLength: cs.bitLength,
-      isPredefined: true,
-    };
+    return { charSet: cs.charSet, padding: cs.paddingChar, requiredLength: cs.maxRequiredLength, bitLength: cs.bitLength, isPredefined: true };
   }
 
   private shouldUsePowerOfTwo(length: number, preference?: boolean): boolean {
-    if (preference === true) {
-      return length > 0;
-    }
-    if (preference === false) {
-      return false;
-    }
+    if (preference !== undefined) return preference ? length > 0 : false;
     return length > 0 && (length & (length - 1)) === 0;
   }
 
@@ -407,180 +238,126 @@ export class Ddu64 extends BaseDdu {
 
   private getBinaryFromIndex(index: number): string {
     if (index < 0 || index >= this.maxBinaryValue) {
-      throw new Error(
-        `[Ddu64] Binary index overflow. Received: ${index}, Allowed range: 0-${this.maxBinaryValue - 1}`
-      );
+      throw new Error(`[Ddu64] Binary index overflow. Received: ${index}, Allowed: 0-${this.maxBinaryValue - 1}`);
     }
     return this.indexToBinaryCache?.[index] ?? index.toString(2).padStart(this.effectiveBitLength, "0");
   }
 
   private validateCombinationDuplicates(charSet: string[], paddingChar: string, requiredLength: number): void {
-    const charLength = charSet[0].length;
-    // 조합 충돌 검사는 단일 문자 집합이면서 비교적 작은 경우(<=256)에만 적용한다.
-    if (charLength !== 1 || requiredLength > 256) {
-      return;
-    }
+    // 단일 문자 집합이면서 비교적 작은 경우(<=256)에만 충돌 검사
+    if (charSet[0].length !== 1 || requiredLength > 256) return;
 
-    const allStrings = new Set([...charSet.slice(0, requiredLength), paddingChar]);
     const limit = Math.min(charSet.length, requiredLength);
+    const targetChars = charSet.slice(0, limit);
+    const combinations = new Set<string>();
+    
+    // 조합 생성 및 검사
+    const addOrThrow = (s: string, msg: string) => {
+      if (combinations.has(s)) throw new Error(`Combination conflict: ${msg}`);
+      combinations.add(s);
+    };
 
-    for (let i = 0; i < limit; i++) {
-      for (let j = 0; j < limit; j++) {
-        const combo = charSet[i] + charSet[j];
-        if (allStrings.has(combo)) {
-          throw new Error(
-            `Combination conflict: "${charSet[i]}" + "${charSet[j]}" = "${combo}" already exists`
-          );
-        }
-      }
+    // 1. 기본 문자 및 패딩 등록
+    targetChars.forEach(c => combinations.add(c));
+    combinations.add(paddingChar);
 
-      const charPad = charSet[i] + paddingChar;
-      const padChar = paddingChar + charSet[i];
-      if (allStrings.has(charPad)) {
-        throw new Error(`Combination conflict: "${charSet[i]}" + padding "${paddingChar}" = "${charPad}"`);
+    // 2. 조합 검사
+    for (const c1 of targetChars) {
+      for (const c2 of targetChars) {
+        addOrThrow(c1 + c2, `"${c1}" + "${c2}" already exists`);
       }
-      if (allStrings.has(padChar)) {
-        throw new Error(`Combination conflict: padding "${paddingChar}" + "${charSet[i]}" = "${padChar}"`);
-      }
+      addOrThrow(c1 + paddingChar, `"${c1}" + padding`);
+      addOrThrow(paddingChar + c1, `padding + "${c1}"`);
     }
-
-    const doublePad = paddingChar + paddingChar;
-    if (allStrings.has(doublePad)) {
-      throw new Error(`Combination conflict: double padding "${doublePad}" already exists`);
-    }
+    addOrThrow(paddingChar + paddingChar, "double padding");
   }
 
   encode(input: Buffer | string, _options?: DduOptions): string {
-    // options는 구버전 호환성을 위해 유지하지만 사용하지 않음
-    const bufferInput =
-      typeof input === "string" ? Buffer.from(input, this.encoding) : input;
+    const bufferInput = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
+    const { dduBinary, padding } = this.bufferToDduBinary(bufferInput, this.effectiveBitLength);
 
-    const { dduBinary, padding } = this.bufferToDduBinary(
-      bufferInput,
-      this.effectiveBitLength
-    );
-
-    const resultParts: string[] = new Array(dduBinary.length);
+    const resultParts = new Array(dduBinary.length);
+    const dduLength = this.dduChar.length;
 
     if (this.usePowerOfTwo) {
       for (let i = 0; i < dduBinary.length; i++) {
-        const charInt = this.binaryChunkToIntFn(dduBinary[i]);
-        resultParts[i] = this.dduChar[charInt];
+        resultParts[i] = this.dduChar[this.binaryChunkToIntFn(dduBinary[i])];
       }
     } else {
-      const dduLength = this.dduChar.length;
       for (let i = 0; i < dduBinary.length; i++) {
         const value = this.binaryChunkToIntFn(dduBinary[i]);
-        const quotient = Math.floor(value / dduLength);
-        const remainder = value % dduLength;
-        resultParts[i] = this.dduChar[quotient] + this.dduChar[remainder];
+        resultParts[i] = this.dduChar[Math.floor(value / dduLength)] + this.dduChar[value % dduLength];
       }
     }
 
-    let resultString = resultParts.join("");
-
-    // 패딩 비트 정보를 padChar + 패딩비트수 형태로 추가
-    if (padding > 0) {
-      resultString += this.paddingChar + padding;
-    }
-
-    return resultString;
+    return resultParts.join("") + (padding > 0 ? this.paddingChar + padding : "");
   }
 
   decodeToBuffer(input: string, _options?: DduOptions): Buffer {
-    let paddingBits = 0;
-
-    if (input.length >= this.paddingChar.length) {
-      const padCharIndex = input.lastIndexOf(this.paddingChar);
-
-      if (
-        padCharIndex >= 0 &&
-        padCharIndex % this.charLength === 0 &&
-        padCharIndex + this.paddingChar.length <= input.length
-      ) {
-        const paddingSection = input.slice(
-          padCharIndex + this.paddingChar.length
-        );
-
-        if (paddingSection.length === 0) {
-          throw new Error(
-            `[Ddu64 decode] Invalid padding format. Missing padding length after "${this.paddingChar}"`
-          );
-        }
-
-        paddingBits = parseInt(paddingSection, 10);
-
-        if (
-          isNaN(paddingBits) ||
-          paddingSection !== paddingBits.toString() ||
-          paddingBits < 0 ||
-          paddingBits >= this.effectiveBitLength
-        ) {
-          throw new Error(
-            `[Ddu64 decode] Invalid padding format. Expected integer between 0 and ${this.effectiveBitLength - 1}, Got: "${paddingSection}"`
-          );
-        }
-
-        input = input.substring(0, padCharIndex);
-      }
-    }
-
-    const binaryParts: string[] = [];
-    const charLength = this.charLength;
-    const dduLength = this.dduChar.length;
-
-    if (!this.usePowerOfTwo) {
-      const chunkSize = charLength * 2;
-      for (let i = 0; i < input.length; i += chunkSize) {
-        const firstChar = input.slice(i, i + charLength);
-        const secondChar = input.slice(i + charLength, i + chunkSize);
-
-        const firstIndex = this.dduBinaryLookup.get(firstChar);
-        const secondIndex = this.dduBinaryLookup.get(secondChar);
-        if (firstIndex === undefined || secondIndex === undefined) {
-          const invalidChar = firstIndex === undefined ? firstChar : secondChar;
-          throw new Error(
-            `[Ddu64 decode] Invalid character in encoded string. Character: "${invalidChar}", Position: ${i}, Expected charset size: ${dduLength}`
-          );
-        }
-
-        const value = firstIndex * dduLength + secondIndex;
-        if (value >= this.maxBinaryValue) {
-          throw new Error(
-            `[Ddu64 decode] Invalid character combination detected. Calculated value ${value} exceeds binary range ${this.maxBinaryValue - 1}.`
-          );
-        }
-        binaryParts.push(this.getBinaryFromIndex(value));
-      }
-    } else {
-      for (let i = 0; i < input.length; i += charLength) {
-        const charChunk = input.slice(i, i + charLength);
-        const charIndex = this.dduBinaryLookup.get(charChunk);
-        if (charIndex === undefined) {
-          throw new Error(
-            `[Ddu64 decode] Invalid character in encoded string. Character: "${charChunk}", Position: ${i}, Charset size: ${dduLength}, Character length: ${charLength}`
-          );
-        }
-        if (charIndex >= this.maxBinaryValue) {
-          throw new Error(
-            `[Ddu64 decode] Invalid binary index ${charIndex}. Allowed range: 0-${this.maxBinaryValue - 1}`
-          );
-        }
-        binaryParts.push(this.getBinaryFromIndex(charIndex));
-      }
-    }
-
-    return this.dduBinaryToBuffer(binaryParts.join(""), paddingBits);
+    const { cleanedInput, paddingBits } = this.parsePaddingAndGetInput(input);
+    const binaryString = this.decodeBinaryString(cleanedInput);
+    return this.dduBinaryToBuffer(binaryString, paddingBits);
   }
 
   decode(input: string, _options?: DduOptions): string {
     return this.decodeToBuffer(input, _options).toString(this.encoding);
   }
 
-  /**
-   * 테스트 및 디버깅용 getter 메서드
-   * 인코더의 내부 상태 정보를 반환
-   */
+  private parsePaddingAndGetInput(input: string): { cleanedInput: string, paddingBits: number } {
+    let paddingBits = 0;
+    const padLen = this.paddingChar.length;
+
+    if (input.length >= padLen) {
+      const padIdx = input.lastIndexOf(this.paddingChar);
+      if (padIdx >= 0 && padIdx % this.charLength === 0 && padIdx + padLen <= input.length) {
+        const paddingSection = input.slice(padIdx + padLen);
+        if (paddingSection.length === 0) throw new Error(`[Ddu64 decode] Invalid padding format. Missing padding length`);
+        
+        paddingBits = parseInt(paddingSection, 10);
+        if (isNaN(paddingBits) || paddingSection !== paddingBits.toString() || paddingBits < 0 || paddingBits >= this.effectiveBitLength) {
+          throw new Error(`[Ddu64 decode] Invalid padding format. Got: "${paddingSection}"`);
+        }
+        return { cleanedInput: input.substring(0, padIdx), paddingBits };
+      }
+    }
+    return { cleanedInput: input, paddingBits };
+  }
+
+  private decodeBinaryString(input: string): string {
+    const binaryParts: string[] = [];
+    const { charLength, dduChar, maxBinaryValue } = this;
+    const dduLength = dduChar.length;
+    const inputLen = input.length;
+
+    // 청크 단위 처리 함수
+    const processChunk = (chunk: string, index: number): number => {
+      const val = this.dduBinaryLookup.get(chunk);
+      if (val === undefined) {
+        throw new Error(`[Ddu64 decode] Invalid character "${chunk}" at ${index}`);
+      }
+      return val;
+    };
+
+    if (!this.usePowerOfTwo) {
+      const chunkSize = charLength * 2;
+      for (let i = 0; i < inputLen; i += chunkSize) {
+        const v1 = processChunk(input.slice(i, i + charLength), i);
+        const v2 = processChunk(input.slice(i + charLength, i + chunkSize), i + charLength);
+        
+        const value = v1 * dduLength + v2;
+        if (value >= maxBinaryValue) throw new Error(`[Ddu64 decode] Value ${value} exceeds range`);
+        binaryParts.push(this.getBinaryFromIndex(value));
+      }
+    } else {
+      for (let i = 0; i < inputLen; i += charLength) {
+        const value = processChunk(input.slice(i, i + charLength), i);
+        if (value >= maxBinaryValue) throw new Error(`[Ddu64 decode] Index ${value} exceeds range`);
+        binaryParts.push(this.getBinaryFromIndex(value));
+      }
+    }
+    return binaryParts.join("");
+  }
+
   getCharSetInfo() {
     return {
       charSet: [...this.dduChar],
@@ -592,4 +369,3 @@ export class Ddu64 extends BaseDdu {
     };
   }
 }
-
