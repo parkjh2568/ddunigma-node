@@ -304,11 +304,21 @@ console.log("══════════════════════�
       { name: "대용량 (1KB)", data: "Lorem ipsum dolor sit amet, ".repeat(40) },
     ];
     
+    const encodedResults: { name: string; encoded: string; original: string }[] = [];
+    
     testCases.forEach(test => {
       try {
         const encoded = encoder.encode(test.data);
         const decoded = encoder.decode(encoded);
         const passed = test.data === decoded;
+        
+        // 인코딩 결과를 저장 (대용량 데이터는 일부만)
+        encodedResults.push({
+          name: test.name,
+          encoded: encoded,
+          original: test.data
+        });
+        
         reportTest(
           `[커스텀81] ${test.name}`,
           passed,
@@ -318,8 +328,53 @@ console.log("══════════════════════�
         reportTest(`[커스텀81] ${test.name}`, false, err.message);
       }
     });
+    
   } catch (err: any) {
     reportTest("[커스텀81] 인코더 초기화", false, err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 10-1. 커스텀 charset decode 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+{
+  const customCharset = "qa1437zwo1437IOPLcrlp0NX7IOPLcrlp0NXfgbujmiHDGk6ye37IOPLcrlp0NXdWERThn5QKAJvtSFMZBCV";
+  const customPadding = "9";
+  
+  // 10번 테스트의 실제 인코딩 결과들
+  const encodedTestCases = [
+    { name: "빈 문자열", encoded: "", original: "" },
+    { name: "단일 문자", encoded: "qpqp94", original: "A" },
+    { name: "짧은 영문", encoded: "qNqzqgqAqHqza792", original: "Hello" },
+    { name: "긴 영문", encoded: "qgqzqeqRqoqwq7qCqiqbqcqKqoqzqIqMqHaqqGqvqoqzqmqtqkq1qaqQqGqbqCqSqDqMqaqtqGqTqgqMqoqwq0qnqmqNqaqAqjquq5a1qoqzq0qtqmqS94", original: "The quick brown fox jumps over the lazy dog" },
+    { name: "숫자", encoded: "qLqXqoqZqcq4qfqVqcqZqya1qLqq94", original: "1234567890" },
+    { name: "한글", encoded: "a3qIqbqoa4aaqbqga3qmqbqja3qoqNaaa3qIqQqf", original: "안녕하세요" },
+    { name: "혼합 텍스트", encoded: "qNqzqgqAqHqza7qyqgqVazqMqHqzqpqeqoqrqMqgqdqrqvq7qRqNqqqFqLqWqLqya7qIawqjqyqq94", original: "Hello World! 안녕 123 😀" },
+    { name: "특수문자", encoded: "qoqfqqqWqIq1qgqkqIqdqnqnqOqga7qKqPqXqCqHququqJazq6q4qAa4qIqMqSqvqlq4aaaoqPqS94", original: "!@#$%^&*()_+-=[]{}|;:',.<>?/" },
+    { name: "반복 패턴", encoded: "qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1", original: "ABABAB".repeat(10) },
+    { name: "대용량 (1KB)", encoded: "qXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoq3qFqtqDqTqgqJqoqzqRqSqDaqqgqJqoqzq0qtqHqzazqMqoqwqcq5qGq1qaqeqHqbqgqBqPq1qaqLqHaqqIqRqHqNqaq5qDqwqcqCqHqNqaqEqHqVqFqtqDqdqaqZqiquqpqyqjqbqCqRqGq1qSqyqXqzazqMqmqbqBqyqiquqaqZqGqbqBqyqmqzazqAqHaqqoqyqDqVqRqBqoqzq7qJqmquqpqAqoqq94", original: "Lorem ipsum dolor sit amet, ".repeat(40) },
+  ];
+  
+  try {
+    const decoder = new Ddu64(customCharset, customPadding, { usePowerOfTwo: false });
+    
+    encodedTestCases.forEach(test => {
+      try {
+        const decoded = decoder.decode(test.encoded);
+        const passed = test.original === decoded;
+        reportTest(
+          `[디코드] ${test.name}`,
+          passed,
+          passed ? undefined : `예상: "${test.original.substring(0, 50)}...", 실제: "${decoded.substring(0, 50)}..."`
+        );
+      } catch (err: any) {
+        reportTest(`[디코드] ${test.name}`, false, err.message);
+      }
+    });
+  } catch (err: any) {
+    reportTest("[디코드] 디코더 초기화", false, err.message);
   }
 }
 
