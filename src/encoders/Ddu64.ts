@@ -19,16 +19,6 @@ export class Ddu64 extends BaseDdu {
   private readonly isPredefinedCharSet: boolean;
   private readonly effectiveBitLength: number;
   private readonly maxBinaryValue: number;
-  private readonly binaryChunkToIntFn: (chunk: string) => number;
-  private readonly indexToBinaryCache: string[] | null;
-
-  // [최적화] 정적 캐시
-  private static readonly MAX_CACHE_SIZE = 5;
-  private static readonly bitLengthToBinaryCache = new Map<number, string[]>();
-
-  public static clearCache() {
-    Ddu64.bitLengthToBinaryCache.clear();
-  }
 
   constructor(dduChar?: string[] | string, paddingChar?: string, dduOptions?: DduConstructorOptions) {
     super();
@@ -56,43 +46,15 @@ export class Ddu64 extends BaseDdu {
     this.effectiveBitLength = this.usePowerOfTwo ? this.bitLength : computedBitLength;
     this.maxBinaryValue = 2 ** this.effectiveBitLength;
     
-    // 4. 바이너리 변환 함수 (Method2)
-    this.binaryChunkToIntFn = (chunk) => {
-      let value = 0;
-      for (let i = 0; i < chunk.length; i++) {
-        value = value * 2 + (chunk.charCodeAt(i) & 1);
-      }
-      return value;
-    };
-
-    // 5. Lookup Table 초기화
+    // 4. Lookup Table 초기화
     for (let i = 0; i < dduLength; i++) {
       this.dduBinaryLookup.set(this.dduChar[i], i);
     }
 
-    // 6. 조합 중복 검사 (조건부)
+    // 5. 조합 중복 검사 (조건부)
     if (this.charLength === 1 && !this.isPredefinedCharSet) {
       this.validateCombinationDuplicates(this.dduChar, this.paddingChar, dduLength);
     }
-
-    // 7. 정적 캐시 초기화
-    this.indexToBinaryCache = this.initCache();
-  }
-
-  private initCache(): string[] | null {
-    if (this.effectiveBitLength > 16) return null;
-
-    if (!Ddu64.bitLengthToBinaryCache.has(this.effectiveBitLength)) {
-      if (Ddu64.bitLengthToBinaryCache.size >= Ddu64.MAX_CACHE_SIZE) {
-        Ddu64.bitLengthToBinaryCache.clear();
-      }
-      const cache = new Array(this.maxBinaryValue);
-      for (let i = 0; i < this.maxBinaryValue; i++) {
-        cache[i] = i.toString(2).padStart(this.effectiveBitLength, "0");
-      }
-      Ddu64.bitLengthToBinaryCache.set(this.effectiveBitLength, cache);
-    }
-    return Ddu64.bitLengthToBinaryCache.get(this.effectiveBitLength)!;
   }
 
   private normalizeCharSet(
@@ -194,7 +156,10 @@ export class Ddu64 extends BaseDdu {
         const arr = typeof finalDduChar === "string" ? [...finalDduChar.trim()] : [...finalDduChar];
         if (shouldThrowError) {
           const unique = new Set(arr);
-          if (unique.size !== arr.length) throw new Error(`[Ddu64 Constructor] Character set contains duplicate characters.`);
+          if (unique.size !== arr.length) {
+            const duplicates = arr.filter((c, i) => arr.indexOf(c) !== i);
+            throw new Error(`[Ddu64 Constructor] Character set contains duplicate characters. Duplicates: [${[...new Set(duplicates)].join(", ")}]`);
+          }
         }
         
         const len = dduOptions?.requiredLength ?? arr.length;
@@ -236,13 +201,6 @@ export class Ddu64 extends BaseDdu {
     return cs;
   }
 
-  private getBinaryFromIndex(index: number): string {
-    if (index < 0 || index >= this.maxBinaryValue) {
-      throw new Error(`[Ddu64] Binary index overflow. Received: ${index}, Allowed: 0-${this.maxBinaryValue - 1}`);
-    }
-    return this.indexToBinaryCache?.[index] ?? index.toString(2).padStart(this.effectiveBitLength, "0");
-  }
-
   private validateCombinationDuplicates(charSet: string[], paddingChar: string, requiredLength: number): void {
     // 단일 문자 집합이면서 비교적 작은 경우(<=256)에만 충돌 검사
     if (charSet[0].length !== 1 || requiredLength > 256) return;
@@ -274,29 +232,117 @@ export class Ddu64 extends BaseDdu {
 
   encode(input: Buffer | string, _options?: DduOptions): string {
     const bufferInput = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
-    const { dduBinary, padding } = this.bufferToDduBinary(bufferInput, this.effectiveBitLength);
+    const resultParts: string[] = [];
+    
+    let accumulator = 0n;
+    let accumulatorBits = 0;
+    const bitLength = this.effectiveBitLength;
+    const bigBitLength = BigInt(bitLength);
 
-    const resultParts = new Array(dduBinary.length);
-    const dduLength = this.dduChar.length;
+    for (const byte of bufferInput) {
+      accumulator = (accumulator << 8n) | BigInt(byte);
+      accumulatorBits += 8;
 
-    if (this.usePowerOfTwo) {
-      for (let i = 0; i < dduBinary.length; i++) {
-        resultParts[i] = this.dduChar[this.binaryChunkToIntFn(dduBinary[i])];
-      }
-    } else {
-      for (let i = 0; i < dduBinary.length; i++) {
-        const value = this.binaryChunkToIntFn(dduBinary[i]);
-        resultParts[i] = this.dduChar[Math.floor(value / dduLength)] + this.dduChar[value % dduLength];
+      while (accumulatorBits >= bitLength) {
+        const shift = accumulatorBits - bitLength;
+        const value = accumulator >> BigInt(shift);
+        const index = Number(value);
+        
+        // 상위 비트를 추출했으므로 제거 (하위 비트만 남김)
+        accumulator = accumulator & ((1n << BigInt(shift)) - 1n);
+        accumulatorBits -= bitLength;
+
+        if (this.usePowerOfTwo) {
+          resultParts.push(this.dduChar[index]);
+        } else {
+          const dduLen = this.dduChar.length;
+          resultParts.push(this.dduChar[Math.floor(index / dduLen)] + this.dduChar[index % dduLen]);
+        }
       }
     }
 
-    return resultParts.join("") + (padding > 0 ? this.paddingChar + padding : "");
+    let paddingStr = "";
+    if (accumulatorBits > 0) {
+      const paddingBits = bitLength - accumulatorBits;
+      // 남은 비트를 왼쪽으로 밀어서 bitLength 크기로 만듦
+      const index = Number(accumulator << BigInt(paddingBits));
+      
+      if (this.usePowerOfTwo) {
+        resultParts.push(this.dduChar[index]);
+      } else {
+        const dduLen = this.dduChar.length;
+        resultParts.push(this.dduChar[Math.floor(index / dduLen)] + this.dduChar[index % dduLen]);
+      }
+      
+      paddingStr = this.paddingChar + paddingBits.toString();
+    }
+
+    return resultParts.join("") + paddingStr;
   }
 
   decodeToBuffer(input: string, _options?: DduOptions): Buffer {
     const { cleanedInput, paddingBits } = this.parsePaddingAndGetInput(input);
-    const binaryString = this.decodeBinaryString(cleanedInput);
-    return this.dduBinaryToBuffer(binaryString, paddingBits);
+    const inputLen = cleanedInput.length;
+    const buffer: number[] = [];
+    
+    let accumulator = 0n;
+    let accumulatorBits = 0;
+    const bitLength = this.effectiveBitLength;
+    const bigBitLength = BigInt(bitLength);
+    
+    const chunkSize = this.usePowerOfTwo ? this.charLength : this.charLength * 2;
+    const dduLength = this.dduChar.length;
+    const maxBinaryValue = this.maxBinaryValue;
+
+    for (let i = 0; i < inputLen; i += chunkSize) {
+      let value: number;
+      
+      if (this.usePowerOfTwo) {
+        const chunk = cleanedInput.slice(i, i + this.charLength);
+        const val = this.dduBinaryLookup.get(chunk);
+        if (val === undefined) {
+          throw new Error(`[Ddu64 decode] Invalid character "${chunk}" at ${i}`);
+        }
+        value = val;
+      } else {
+        const c1 = cleanedInput.slice(i, i + this.charLength);
+        const c2 = cleanedInput.slice(i + this.charLength, i + chunkSize);
+        const v1 = this.dduBinaryLookup.get(c1);
+        const v2 = this.dduBinaryLookup.get(c2);
+        
+        if (v1 === undefined) throw new Error(`[Ddu64 decode] Invalid character "${c1}" at ${i}`);
+        if (v2 === undefined) throw new Error(`[Ddu64 decode] Invalid character "${c2}" at ${i + this.charLength}`);
+        
+        value = v1 * dduLength + v2;
+      }
+
+      if (value >= maxBinaryValue) {
+        throw new Error(`[Ddu64 decode] Value ${value} exceeds range`);
+      }
+
+      accumulator = (accumulator << bigBitLength) | BigInt(value);
+      accumulatorBits += bitLength;
+
+      // 마지막 청크인 경우 패딩 비트 처리
+      const isLastChunk = (i + chunkSize >= inputLen);
+      if (isLastChunk && paddingBits > 0) {
+        accumulator = accumulator >> BigInt(paddingBits);
+        accumulatorBits -= paddingBits;
+      }
+
+      while (accumulatorBits >= 8) {
+        const shift = accumulatorBits - 8;
+        const byte = Number((accumulator >> BigInt(shift)) & 0xFFn);
+        
+        buffer.push(byte);
+        
+        // 처리된 바이트 제거 (하위 비트만 남김)
+        accumulator = accumulator & ((1n << BigInt(shift)) - 1n);
+        accumulatorBits -= 8;
+      }
+    }
+
+    return Buffer.from(buffer);
   }
 
   decode(input: string, _options?: DduOptions): string {
@@ -321,41 +367,6 @@ export class Ddu64 extends BaseDdu {
       }
     }
     return { cleanedInput: input, paddingBits };
-  }
-
-  private decodeBinaryString(input: string): string {
-    const binaryParts: string[] = [];
-    const { charLength, dduChar, maxBinaryValue } = this;
-    const dduLength = dduChar.length;
-    const inputLen = input.length;
-
-    // 청크 단위 처리 함수
-    const processChunk = (chunk: string, index: number): number => {
-      const val = this.dduBinaryLookup.get(chunk);
-      if (val === undefined) {
-        throw new Error(`[Ddu64 decode] Invalid character "${chunk}" at ${index}`);
-      }
-      return val;
-    };
-
-    if (!this.usePowerOfTwo) {
-      const chunkSize = charLength * 2;
-      for (let i = 0; i < inputLen; i += chunkSize) {
-        const v1 = processChunk(input.slice(i, i + charLength), i);
-        const v2 = processChunk(input.slice(i + charLength, i + chunkSize), i + charLength);
-        
-        const value = v1 * dduLength + v2;
-        if (value >= maxBinaryValue) throw new Error(`[Ddu64 decode] Value ${value} exceeds range`);
-        binaryParts.push(this.getBinaryFromIndex(value));
-      }
-    } else {
-      for (let i = 0; i < inputLen; i += charLength) {
-        const value = processChunk(input.slice(i, i + charLength), i);
-        if (value >= maxBinaryValue) throw new Error(`[Ddu64 decode] Index ${value} exceeds range`);
-        binaryParts.push(this.getBinaryFromIndex(value));
-      }
-    }
-    return binaryParts.join("");
   }
 
   getCharSetInfo() {
