@@ -1480,24 +1480,76 @@ console.log("엣지 케이스 테스트:\n");
 
 // ═══════════════════════════════════════════════════════════════════════════════
 console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-console.log("[ 14. 최종 결과 및 추천 사항 ]");
+console.log("[ 13. Heavy Fuzzing & Concurrency ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
-const successRate = ((passedTests / totalTests) * 100).toFixed(1);
-
-console.log(`총 테스트: ${totalTests}개`);
-console.log(`통과: ${passedTests}개 (${successRate}%)`);
-console.log(`실패: ${failedTests}개\n`);
-
-if (failedTests === 0) {
-  console.log("✅ 모든 테스트 통과! 모든 인코더가 정상적으로 작동합니다.\n");
-  console.log("참고: decodeToBuffer 메서드를 사용하여 바이너리 데이터 처리 문제를 해결했습니다.");
-  console.log("      이전에 실패했던 0xFF 및 0xAA/0x55 패턴 테스트도 이제 통과합니다.\n");
-} else {
-  console.log(`❌ ${failedTests}개 예상치 못한 테스트 실패\n`);
-  process.exit(1);
+async function runAsyncTests() {
+  console.log("비동기 동시성 테스트 시작 (Promise.all 사용)...\n");
+  
+  const encoder = new Ddu64(BASE64_CHARS, "=");
+  const tasks: Promise<boolean>[] = [];
+  const ITERATIONS = 1000;
+  
+  for (let i = 0; i < ITERATIONS; i++) {
+    tasks.push(new Promise<boolean>((resolve) => {
+      setImmediate(() => {
+        try {
+          // 랜덤 데이터 생성
+          const len = Math.floor(Math.random() * 1000) + 1;
+          const buffer = Buffer.allocUnsafe(len);
+          for(let j=0; j<len; j++) buffer[j] = Math.floor(Math.random() * 256);
+          
+          const encoded = encoder.encode(buffer);
+          const decoded = encoder.decodeToBuffer(encoded);
+          resolve(buffer.equals(decoded));
+        } catch {
+          resolve(false);
+        }
+      });
+    }));
+  }
+  
+  const results = await Promise.all(tasks);
+  const failures = results.filter(r => !r).length;
+  
+  if (failures === 0) {
+    console.log(`  ✓ 비동기 Fuzzing ${ITERATIONS}회 성공`);
+    passedTests++;
+  } else {
+    console.log(`  ✗ 비동기 Fuzzing 실패: ${failures}/${ITERATIONS}`);
+    failedTests++;
+  }
+  totalTests++;
+  
+  printFinalResults();
 }
 
-console.log("╔════════════════════════════════════════════════════════════════════════════╗");
-console.log("║                       테스트 완료!                                         ║");
-console.log("╚════════════════════════════════════════════════════════════════════════════╝");
+function printFinalResults() {
+  // ═══════════════════════════════════════════════════════════════════════════════
+  console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+  console.log("[ 14. 최종 결과 및 추천 사항 ]");
+  console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+  const successRate = ((passedTests / totalTests) * 100).toFixed(1);
+
+  console.log(`총 테스트: ${totalTests}개`);
+  console.log(`통과: ${passedTests}개 (${successRate}%)`);
+  console.log(`실패: ${failedTests}개\n`);
+
+  if (failedTests === 0) {
+    console.log("✅ 모든 테스트 통과! 모든 인코더가 정상적으로 작동합니다.\n");
+    console.log("참고: decodeToBuffer 메서드를 사용하여 바이너리 데이터 처리 문제를 해결했습니다.");
+    console.log("      이전에 실패했던 0xFF 및 0xAA/0x55 패턴 테스트도 이제 통과합니다.\n");
+  } else {
+    console.log(`❌ ${failedTests}개 예상치 못한 테스트 실패\n`);
+    process.exit(1);
+  }
+
+  console.log("╔════════════════════════════════════════════════════════════════════════════╗");
+  console.log("║                       테스트 완료!                                         ║");
+  console.log("╚════════════════════════════════════════════════════════════════════════════╝");
+}
+
+// 기존 동기 코드 끝난 후 실행
+runAsyncTests();
+

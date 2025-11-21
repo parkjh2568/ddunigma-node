@@ -430,6 +430,46 @@ console.log("══════════════════════�
 
 // ═══════════════════════════════════════════════════════════════════════════════
 console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 12. 랜덤 데이터 (Fuzzing Lite) ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+{
+  const encoder = new Ddu64(BASE64_CHARS, "=");
+  let allPassed = true;
+  let failedDetails = "";
+
+  console.log("  랜덤 길이/내용의 문자열 50개 테스트 진행 중...");
+
+  for (let i = 0; i < 50; i++) {
+    // 1~100 사이 랜덤 길이
+    const length = Math.floor(Math.random() * 100) + 1;
+    let randomStr = "";
+    for (let j = 0; j < length; j++) {
+      // 랜덤 유니코드 문자 (0x0020 ~ 0xD7A3: 한글 영역 포함)
+      const code = Math.floor(Math.random() * (0xD7A3 - 0x0020)) + 0x0020;
+      randomStr += String.fromCharCode(code);
+    }
+
+    try {
+      const encoded = encoder.encode(randomStr);
+      const decoded = encoder.decode(encoded);
+      if (randomStr !== decoded) {
+        allPassed = false;
+        failedDetails = `Failed at iter ${i}, len ${length}`;
+        break;
+      }
+    } catch (e: any) {
+      allPassed = false;
+      failedDetails = `Error at iter ${i}: ${e.message}`;
+      break;
+    }
+  }
+
+  reportTest("랜덤 문자열 50회 반복 검증", allPassed, failedDetails);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
 console.log("[ 최종 결과 ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
