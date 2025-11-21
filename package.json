@@ -25,9 +25,6 @@
   "author": "",
   "license": "ISC",
   "description": "",
-  "engines": {
-    "node": ">=14.0.0"
-  },
   "devDependencies": {
     "@types/node": "^22.13.0",
     "tsx": "^4.19.2",
