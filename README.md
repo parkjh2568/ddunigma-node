@@ -12,6 +12,10 @@ Node.js implementation of [ddunigma](https://github.com/i3l3/ddunigma) (Python o
   - [@gunu3371](https://github.com/gunu3371)
 - Original Repository: [ddunigma](https://github.com/i3l3/ddunigma)
 
+## Requirements
+
+- **Node.js >= 14.0.0**
+
 ## Install
 
 ```bash
