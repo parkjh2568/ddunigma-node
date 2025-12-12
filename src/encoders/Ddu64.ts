@@ -49,7 +49,9 @@ export class Ddu64 extends BaseDdu {
     const computedBitLength = this.getBitLength(dduLength);
     this.bitLength = this.usePowerOfTwo ? this.getLargestPowerOfTwoExponent(dduLength) : computedBitLength;
     this.effectiveBitLength = this.usePowerOfTwo ? this.bitLength : computedBitLength;
-    this.maxBinaryValue = 1 << this.effectiveBitLength;
+    this.maxBinaryValue = this.effectiveBitLength < 31 
+      ? 1 << this.effectiveBitLength 
+      : Math.pow(2, this.effectiveBitLength);
     
     if (this.charLength === 1) {
       let allAscii = true;
@@ -78,6 +80,12 @@ export class Ddu64 extends BaseDdu {
     }
   }
 
+  /**
+   * 입력 데이터를 인코딩합니다.
+   * @param input - 인코딩할 문자열 또는 Buffer
+   * @param options - 인코딩 옵션 (compress: 압축 여부)
+   * @returns 인코딩된 문자열
+   */
   encode(input: Buffer | string, options?: DduOptions): string {
     const shouldCompress = options?.compress ?? this.defaultCompress;
     const originalBuffer = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
@@ -101,6 +109,13 @@ export class Ddu64 extends BaseDdu {
       : this.encodeBigInt(compressedBuffer, true);
   }
 
+  /**
+   * 인코딩된 문자열을 Buffer로 디코딩합니다.
+   * @param input - 디코딩할 인코딩된 문자열
+   * @param _options - 디코딩 옵션 (현재 미사용)
+   * @returns 디코딩된 Buffer
+   * @throws 잘못된 문자나 패딩 형식일 경우 에러
+   */
   decodeToBuffer(input: string, _options?: DduOptions): Buffer {
     const { cleanedInput, paddingBits, isCompressed } = this.parseFooter(input);
 
@@ -111,10 +126,21 @@ export class Ddu64 extends BaseDdu {
     return isCompressed ? inflateSync(decoded) : decoded;
   }
 
+  /**
+   * 인코딩된 문자열을 원본 문자열로 디코딩합니다.
+   * @param input - 디코딩할 인코딩된 문자열
+   * @param options - 디코딩 옵션
+   * @returns 디코딩된 문자열
+   * @throws 잘못된 문자나 패딩 형식일 경우 에러
+   */
   decode(input: string, options?: DduOptions): string {
     return this.decodeToBuffer(input, options).toString(this.encoding);
   }
 
+  /**
+   * 현재 인코더의 charset 정보를 반환합니다.
+   * @returns charset 설정 정보 객체
+   */
   getCharSetInfo() {
     return {
       charSet: [...this.dduChar],
@@ -136,9 +162,20 @@ export class Ddu64 extends BaseDdu {
 
     const markerLen = COMPRESS_MARKER.length;
     const maxPaddingBits = Math.max(0, this.effectiveBitLength - 1);
-    const maxDigits = maxPaddingBits.toString().length; // >= 1
+    const maxDigits = maxPaddingBits.toString().length;
 
-    const isDigitCode = (code: number) => code >= 48 && code <= 57; // '0'..'9'
+    // 인덱스 기반 문자열 비교 (slice 호출 감소)
+    const matchesAt = (str: string, pattern: string, start: number): boolean => {
+      const pLen = pattern.length;
+      if (start < 0 || start + pLen > str.length) return false;
+      for (let i = 0; i < pLen; i++) {
+        if (str.charCodeAt(start + i) !== pattern.charCodeAt(i)) return false;
+      }
+      return true;
+    };
+
+    const isDigitCode = (code: number) => code >= 48 && code <= 57;
+    
     for (let digitCount = Math.min(maxDigits, inputLen); digitCount >= 1; digitCount--) {
       const digitsStart = inputLen - digitCount;
       const firstCode = input.charCodeAt(digitsStart);
@@ -153,49 +190,50 @@ export class Ddu64 extends BaseDdu {
       }
       if (!allDigits) continue;
 
-      const digitSuffix = input.slice(digitsStart);
+      // 숫자 파싱 (slice 대신 substring 사용 - 더 최적화된 구현)
+      const digitSuffix = input.substring(digitsStart);
       const paddingBits = parseInt(digitSuffix, 10);
-      const digitSuffixValid =
-        !Number.isNaN(paddingBits) &&
-        digitSuffix === paddingBits.toString() &&
-        paddingBits >= 0 &&
-        paddingBits < this.effectiveBitLength;
-      if (!digitSuffixValid) continue;
+      if (
+        Number.isNaN(paddingBits) ||
+        paddingBits < 0 ||
+        paddingBits >= this.effectiveBitLength ||
+        digitSuffix !== paddingBits.toString()
+      ) continue;
 
       // Compressed footer: ... + pad + marker + digits
       if (digitsStart >= padLen + markerLen) {
         const markerStart = digitsStart - markerLen;
-        if (
-          input.slice(markerStart, digitsStart) === COMPRESS_MARKER &&
-          input.slice(markerStart - padLen, markerStart) === pad
-        ) {
-          const idx = markerStart - padLen;
-          if (idx % this.charLength !== 0) {
+        const padStart = markerStart - padLen;
+        if (matchesAt(input, COMPRESS_MARKER, markerStart) && matchesAt(input, pad, padStart)) {
+          if (padStart % this.charLength !== 0) {
             throw new Error(`[Ddu64 decode] Invalid padding format. Misaligned padding marker`);
           }
-          return { cleanedInput: input.substring(0, idx), paddingBits, isCompressed: true };
+          return { cleanedInput: input.substring(0, padStart), paddingBits, isCompressed: true };
         }
       }
 
       // Normal footer: ... + pad + digits
-      if (digitsStart >= padLen && input.slice(digitsStart - padLen, digitsStart) === pad) {
-        const idx = digitsStart - padLen;
-        if (idx % this.charLength !== 0) {
+      const padStart = digitsStart - padLen;
+      if (padStart >= 0 && matchesAt(input, pad, padStart)) {
+        if (padStart % this.charLength !== 0) {
           throw new Error(`[Ddu64 decode] Invalid padding format. Misaligned padding marker`);
         }
-        return { cleanedInput: input.substring(0, idx), paddingBits, isCompressed: false };
+        return { cleanedInput: input.substring(0, padStart), paddingBits, isCompressed: false };
       }
     }
 
+    // Fallback: lastIndexOf 기반 (잘못된 형식 검출용)
     const lastPadIdx = input.lastIndexOf(pad);
     if (lastPadIdx >= 0 && lastPadIdx % this.charLength === 0) {
-      let tail = input.slice(lastPadIdx + padLen);
-      if (!tail) {
+      const tailStart = lastPadIdx + padLen;
+      if (tailStart >= inputLen) {
         throw new Error(`[Ddu64 decode] Invalid padding format. Missing padding length`);
       }
 
-      if (tail.startsWith(COMPRESS_MARKER)) {
-        tail = tail.slice(COMPRESS_MARKER.length);
+      let tail = input.substring(tailStart);
+      const hasMarker = tail.length >= markerLen && matchesAt(tail, COMPRESS_MARKER, 0);
+      if (hasMarker) {
+        tail = tail.substring(markerLen);
         if (!tail) {
           throw new Error(`[Ddu64 decode] Invalid padding format. Missing padding length`);
         }
@@ -586,8 +624,15 @@ export class Ddu64 extends BaseDdu {
           state.charSet = state.charSet.filter(c => c !== state.padding);
         }
 
+        // 불필요한 배열 복사 방지:
+        // - predefined charset(특히 1024/32768)의 경우 매 인스턴스마다 slice()로 큰 배열을 복제하면 메모리 낭비가 큼
+        // - requiredLength가 전체 길이와 같으면 동일 배열을 그대로 사용
+        const finalSet = state.charSet.length === state.requiredLength
+          ? state.charSet
+          : state.charSet.slice(0, state.requiredLength);
+
         return {
-          charSet: state.charSet.slice(0, state.requiredLength),
+          charSet: finalSet,
           padding: state.padding,
           charLength,
           isPredefined: state.isPredefined,
@@ -620,9 +665,11 @@ export class Ddu64 extends BaseDdu {
       if (usePow2 && length > 0) {
         const exponent = this.getLargestPowerOfTwoExponent(length);
         const pow2Length = 1 << exponent;
-        return { charSet: set.slice(0, pow2Length), padding, requiredLength: pow2Length, bitLength: exponent, isPredefined };
+        const selected = set.length === pow2Length ? set : set.slice(0, pow2Length);
+        return { charSet: selected, padding, requiredLength: pow2Length, bitLength: exponent, isPredefined };
       }
-      return { charSet: set.slice(0, length), padding, requiredLength: length, bitLength: length > 0 ? this.getBitLength(length) : 0, isPredefined };
+      const selected = set.length === length ? set : set.slice(0, length);
+      return { charSet: selected, padding, requiredLength: length, bitLength: length > 0 ? this.getBitLength(length) : 0, isPredefined };
     };
 
     try {
