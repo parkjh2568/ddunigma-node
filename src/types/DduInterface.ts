@@ -10,6 +10,8 @@ export interface CharSetConfig {
 
 export interface DduOptions {
   compress?: boolean;
+  maxDecodedBytes?: number;
+  maxDecompressedBytes?: number;
 }
 
 export interface DduConstructorOptions extends DduOptions {

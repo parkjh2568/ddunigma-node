@@ -12,6 +12,8 @@ const BYTE_BITS = 8;
 const MAX_FAST_BITS = 16;
 const BYTE_MASK = 0xFF;
 const COMPRESS_MARKER = "ELYSIA";
+const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024; // 64MB
+const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024; // 64MB
 
 export class Ddu64 extends BaseDdu {
   protected readonly dduChar: string[];
@@ -21,6 +23,8 @@ export class Ddu64 extends BaseDdu {
   protected readonly usePowerOfTwo: boolean;
   protected readonly encoding: BufferEncoding;
   protected readonly defaultCompress: boolean;
+  private readonly defaultMaxDecodedBytes: number;
+  private readonly defaultMaxDecompressedBytes: number;
 
   protected readonly dduBinaryLookup: Map<string, number> = new Map();
   private readonly isPredefinedCharSet: boolean;
@@ -42,6 +46,18 @@ export class Ddu64 extends BaseDdu {
     this.isPredefinedCharSet = normalized.isPredefined;
     this.encoding = dduOptions?.encoding ?? this.defaultEncoding;
     this.defaultCompress = dduOptions?.compress ?? false;
+    this.defaultMaxDecodedBytes = this.normalizeLimit(
+      dduOptions?.maxDecodedBytes,
+      DEFAULT_MAX_DECODED_BYTES,
+      shouldThrow,
+      "maxDecodedBytes"
+    );
+    this.defaultMaxDecompressedBytes = this.normalizeLimit(
+      dduOptions?.maxDecompressedBytes,
+      DEFAULT_MAX_DECOMPRESSED_BYTES,
+      shouldThrow,
+      "maxDecompressedBytes"
+    );
 
     const dduLength = this.dduChar.length;
     this.usePowerOfTwo = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
@@ -112,18 +128,41 @@ export class Ddu64 extends BaseDdu {
   /**
    * 인코딩된 문자열을 Buffer로 디코딩합니다.
    * @param input - 디코딩할 인코딩된 문자열
-   * @param _options - 디코딩 옵션 (현재 미사용)
+   * @param options - 디코딩 옵션
    * @returns 디코딩된 Buffer
    * @throws 잘못된 문자나 패딩 형식일 경우 에러
    */
-  decodeToBuffer(input: string, _options?: DduOptions): Buffer {
+  decodeToBuffer(input: string, options?: DduOptions): Buffer {
     const { cleanedInput, paddingBits, isCompressed } = this.parseFooter(input);
+
+    this.assertEncodedInputAligned(cleanedInput);
+
+    const maxDecodedBytes = this.normalizeLimit(
+      options?.maxDecodedBytes,
+      this.defaultMaxDecodedBytes,
+      true,
+      "maxDecodedBytes"
+    );
+    const estimatedDecodedBytes = this.estimateDecodedBytes(cleanedInput.length, paddingBits);
+    if (estimatedDecodedBytes > maxDecodedBytes) {
+      throw new Error(
+        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`
+      );
+    }
 
     const decoded = this.effectiveBitLength <= MAX_FAST_BITS
       ? this.decodeFast(cleanedInput, paddingBits)
       : this.decodeBigInt(cleanedInput, paddingBits);
 
-    return isCompressed ? inflateSync(decoded) : decoded;
+    if (!isCompressed) return decoded;
+
+    const maxDecompressedBytes = this.normalizeLimit(
+      options?.maxDecompressedBytes,
+      this.defaultMaxDecompressedBytes,
+      true,
+      "maxDecompressedBytes"
+    );
+    return this.inflateWithLimit(decoded, maxDecompressedBytes);
   }
 
   /**
@@ -150,7 +189,86 @@ export class Ddu64 extends BaseDdu {
       usePowerOfTwo: this.usePowerOfTwo,
       encoding: this.encoding,
       defaultCompress: this.defaultCompress,
+      defaultMaxDecodedBytes: this.defaultMaxDecodedBytes,
+      defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
     };
+  }
+
+  private normalizeLimit(
+    value: number | undefined,
+    fallback: number,
+    shouldThrow: boolean,
+    name: string
+  ): number {
+    if (value === undefined) return fallback;
+    if (value === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY;
+    if (!Number.isFinite(value) || value <= 0) {
+      if (shouldThrow) throw new Error(`[Ddu64 options] Invalid ${name}. Must be a positive finite number or Infinity.`);
+      return fallback;
+    }
+    return Math.floor(value);
+  }
+
+  private estimateDecodedBytes(cleanedInputLen: number, paddingBits: number): number {
+    if (cleanedInputLen === 0) return 0;
+    if (paddingBits < 0 || paddingBits >= this.effectiveBitLength) {
+      throw new Error(`[Ddu64 decode] Invalid padding bits: ${paddingBits}`);
+    }
+    const chunkSize = this.usePowerOfTwo ? this.charLength : this.charLength * 2;
+    const numChunks = Math.ceil(cleanedInputLen / chunkSize);
+    const bits = numChunks * this.effectiveBitLength - paddingBits;
+    if (bits < 0) throw new Error(`[Ddu64 decode] Invalid decoded bit length`);
+    return Math.ceil(bits / BYTE_BITS);
+  }
+
+  private assertEncodedInputAligned(cleanedInput: string): void {
+    const { charLength } = this;
+    if (charLength <= 0) return;
+    if (cleanedInput.length % charLength !== 0) {
+      throw new Error(`[Ddu64 decode] Invalid encoded length. Expected multiple of ${charLength}, got ${cleanedInput.length}`);
+    }
+    if (!this.usePowerOfTwo) {
+      const chunkSize = charLength * 2;
+      if (cleanedInput.length % chunkSize !== 0) {
+        throw new Error(`[Ddu64 decode] Invalid encoded length for variable charset. Expected multiple of ${chunkSize}, got ${cleanedInput.length}`);
+      }
+    }
+  }
+
+  private inflateWithLimit(data: Buffer, maxBytes: number): Buffer {
+    if (maxBytes === Number.POSITIVE_INFINITY) return inflateSync(data);
+
+    // Node.js 버전에 따라 maxOutputLength 옵션이 없을 수 있어 2단계로 처리합니다.
+    try {
+      return inflateSync(data, { maxOutputLength: maxBytes } as any);
+    } catch (e: any) {
+      // 옵션 미지원 또는 기타 오류
+      const msg = String(e?.message ?? "");
+      const code = String(e?.code ?? "");
+
+      // maxOutputLength 미지원이면 fallback 후 길이 검증(완전한 zip-bomb 방지는 Node 지원이 필요)
+      if (
+        msg.toLowerCase().includes("maxoutputlength") ||
+        msg.toLowerCase().includes("unknown option") ||
+        code === "ERR_INVALID_ARG_VALUE"
+      ) {
+        const inflated = inflateSync(data);
+        if (inflated.length > maxBytes) {
+          throw new Error(`[Ddu64 decode] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`);
+        }
+        return inflated;
+      }
+
+      // 출력 제한에 걸린 케이스(버전/플랫폼별 메시지 상이)
+      if (
+        code === "ERR_BUFFER_TOO_LARGE" ||
+        msg.toLowerCase().includes("output length") ||
+        msg.toLowerCase().includes("buffer too large")
+      ) {
+        throw new Error(`[Ddu64 decode] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`);
+      }
+      throw e;
+    }
   }
 
   private parseFooter(input: string): { cleanedInput: string; paddingBits: number; isCompressed: boolean } {

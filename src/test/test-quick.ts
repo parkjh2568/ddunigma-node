@@ -835,6 +835,38 @@ Morbi ac elit ultricies, blandit orci vitae, consectetur urna. Nam libero ipsum,
 
 // ═══════════════════════════════════════════════════════════════════════════════
 console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 12-1. 보안/안정성 제한(maxDecodedBytes / maxDecompressedBytes) ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+{
+  // 1) decode 결과 버퍼 제한 (압축 해제 전)
+  try {
+    const encoder = new Ddu64(BASE64_CHARS, "=");
+    const data = "A".repeat(1024); // 1KB
+    const encoded = encoder.encode(data);
+    encoder.decodeToBuffer(encoded, { maxDecodedBytes: 16 }); // 일부러 낮게
+    reportTest("maxDecodedBytes 제한", false, "에러가 발생해야 함");
+  } catch (err: any) {
+    reportTest("maxDecodedBytes 제한", String(err.message).includes("exceeds limit"));
+  }
+
+  // 2) compress 해제 결과 제한 (zip-bomb/메모리 폭주 방지)
+  try {
+    const encoder = new Ddu64(BASE64_CHARS, "=", { compress: true });
+    const data = "AAAAABBBBB".repeat(2000); // 잘 압축되는 패턴
+    const encoded = encoder.encode(data, { compress: true });
+    encoder.decodeToBuffer(encoded, { maxDecompressedBytes: 64 }); // 일부러 낮게
+    reportTest("maxDecompressedBytes 제한", false, "에러가 발생해야 함");
+  } catch (err: any) {
+    reportTest(
+      "maxDecompressedBytes 제한",
+      String(err.message).includes("Decompressed data exceeds limit") || String(err.message).includes("exceeds limit")
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
 console.log("[ 최종 결과 ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 

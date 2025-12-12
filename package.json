@@ -10,7 +10,7 @@
     "test": "tsx ./src/test/test-quick.ts",
     "test:comprehensive": "tsx ./src/test/test-comprehensive.ts",
     "test:all": "tsx ./src/test/test-all-integrated.ts",
-    "dev": "tsx ./src/test/test.ts"
+    "dev": "tsx ./src/test/test-quick.ts"
   },
   "exports": {
     ".": {
@@ -29,7 +29,7 @@
     "url": "https://github.com/parkjh2568/ddunigma-node.git"
   },
   "author": "",
-  "license": "ISC",
+  "license": "BSD-2-Clause",
   "description": "",
   "devDependencies": {
     "@types/node": "^22.13.0",
