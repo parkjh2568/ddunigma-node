@@ -26,10 +26,6 @@ export abstract class BaseDdu {
     options?: DduOptions
   ): string;
 
-  /**
-   * 테스트 및 디버깅용 추상 메서드
-   * 구현 클래스의 내부 상태 정보를 반환
-   */
   abstract getCharSetInfo(): {
     charSet: string[];
     paddingChar: string;

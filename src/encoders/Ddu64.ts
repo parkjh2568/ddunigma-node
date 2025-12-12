@@ -78,7 +78,6 @@ export class Ddu64 extends BaseDdu {
     }
   }
 
-  /** Encode data to DDU format string. Use { compress: true } for smaller output. */
   encode(input: Buffer | string, options?: DduOptions): string {
     const shouldCompress = options?.compress ?? this.defaultCompress;
     const originalBuffer = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
@@ -89,23 +88,19 @@ export class Ddu64 extends BaseDdu {
         : this.encodeBigInt(originalBuffer, false);
     }
     
-    // 압축 시도: 버퍼 크기로 먼저 비교 (인코딩 전 조기 판단)
     const compressedBuffer = deflateSync(originalBuffer, { level: 9 });
     
-    // 압축된 버퍼가 원본보다 크거나 같으면 비압축 인코딩만 수행
     if (compressedBuffer.length >= originalBuffer.length) {
       return this.effectiveBitLength <= MAX_FAST_BITS
         ? this.encodeFast(originalBuffer, false)
         : this.encodeBigInt(originalBuffer, false);
     }
     
-    // 압축된 버퍼가 더 작으면 압축 인코딩만 수행
     return this.effectiveBitLength <= MAX_FAST_BITS
       ? this.encodeFast(compressedBuffer, true)
       : this.encodeBigInt(compressedBuffer, true);
   }
 
-  /** Decode DDU format string to Buffer. */
   decodeToBuffer(input: string, _options?: DduOptions): Buffer {
     const { isCompressed, cleanedInput } = this.parseCompressMarker(input);
     
@@ -119,12 +114,10 @@ export class Ddu64 extends BaseDdu {
     return decoded;
   }
 
-  /** Decode DDU format string to string. */
   decode(input: string, options?: DduOptions): string {
     return this.decodeToBuffer(input, options).toString(this.encoding);
   }
 
-  /** Get charset configuration info. */
   getCharSetInfo() {
     return {
       charSet: [...this.dduChar],

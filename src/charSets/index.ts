@@ -4323,7 +4323,6 @@ const threeCharSet: CharSetConfig = {
   bitLength: 15, // 32768 = 2^15
 };
 
-// Map을 사용한 효율적인 CharSet 저장소 (O(1) 조회)
 const charSetMap = new Map<DduSetSymbol, CharSetConfig>([
   [dduCharSet.symbol, dduCharSet],
   [oneCharSet.symbol, oneCharSet],
