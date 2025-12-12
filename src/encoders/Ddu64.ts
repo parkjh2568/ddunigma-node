@@ -102,16 +102,13 @@ export class Ddu64 extends BaseDdu {
   }
 
   decodeToBuffer(input: string, _options?: DduOptions): Buffer {
-    const { isCompressed, cleanedInput } = this.parseCompressMarker(input);
-    
+    const { cleanedInput, paddingBits, isCompressed } = this.parseFooter(input);
+
     const decoded = this.effectiveBitLength <= MAX_FAST_BITS
-      ? this.decodeFast(cleanedInput)
-      : this.decodeBigInt(cleanedInput);
-    
-    if (isCompressed) {
-      return inflateSync(decoded);
-    }
-    return decoded;
+      ? this.decodeFast(cleanedInput, paddingBits)
+      : this.decodeBigInt(cleanedInput, paddingBits);
+
+    return isCompressed ? inflateSync(decoded) : decoded;
   }
 
   decode(input: string, options?: DduOptions): string {
@@ -130,20 +127,115 @@ export class Ddu64 extends BaseDdu {
     };
   }
 
-  private parseCompressMarker(input: string): { isCompressed: boolean, cleanedInput: string } {
-    const padIdx = input.lastIndexOf(this.paddingChar);
-    if (padIdx < 0) return { isCompressed: false, cleanedInput: input };
-    
-    const paddingSection = input.slice(padIdx + this.paddingChar.length);
-    if (paddingSection.startsWith(COMPRESS_MARKER)) {
-      const newPadding = paddingSection.slice(COMPRESS_MARKER.length);
-      return {
-        isCompressed: true,
-        cleanedInput: input.substring(0, padIdx) + this.paddingChar + newPadding,
-      };
+  /**
+   * Footer format:
+   * - No padding: <data>
+   * - Padding only: <data> + paddingChar + <paddingBits decimal>
+   * - Compressed: <data> + paddingChar + COMPRESS_MARKER + <paddingBits decimal>
+   *
+   * IMPORTANT:
+   * - paddingChar itself can be a digit (e.g. "1"), so we cannot use a single lastIndexOf()
+   *   and assume it's the true delimiter.
+   * - We first parse a trailing decimal number suffix, then validate that it is preceded by
+   *   (paddingChar) or (paddingChar + COMPRESS_MARKER). This is robust even when paddingChar
+   *   appears inside the decimal suffix itself (e.g., paddingChar="1", suffix="10").
+   */
+  private parseFooter(input: string): { cleanedInput: string; paddingBits: number; isCompressed: boolean } {
+    const inputLen = input.length;
+    const pad = this.paddingChar;
+    const padLen = pad.length;
+
+    if (inputLen < padLen) return { cleanedInput: input, paddingBits: 0, isCompressed: false };
+
+    // 1) Try to parse a valid footer by testing possible digit lengths.
+    // paddingBits is always < effectiveBitLength, so digit length is bounded.
+    const markerLen = COMPRESS_MARKER.length;
+    const maxPaddingBits = Math.max(0, this.effectiveBitLength - 1);
+    const maxDigits = maxPaddingBits.toString().length; // >= 1
+
+    const isDigitCode = (code: number) => code >= 48 && code <= 57; // '0'..'9'
+    for (let digitCount = Math.min(maxDigits, inputLen); digitCount >= 1; digitCount--) {
+      const digitsStart = inputLen - digitCount;
+      const firstCode = input.charCodeAt(digitsStart);
+      if (!isDigitCode(firstCode)) continue;
+
+      // Ensure all are digits
+      let allDigits = true;
+      for (let i = digitsStart + 1; i < inputLen; i++) {
+        if (!isDigitCode(input.charCodeAt(i))) {
+          allDigits = false;
+          break;
+        }
+      }
+      if (!allDigits) continue;
+
+      const digitSuffix = input.slice(digitsStart);
+      const paddingBits = parseInt(digitSuffix, 10);
+      const digitSuffixValid =
+        !Number.isNaN(paddingBits) &&
+        digitSuffix === paddingBits.toString() &&
+        paddingBits >= 0 &&
+        paddingBits < this.effectiveBitLength;
+      if (!digitSuffixValid) continue;
+
+      // Compressed footer: ... + pad + marker + digits
+      if (digitsStart >= padLen + markerLen) {
+        const markerStart = digitsStart - markerLen;
+        if (
+          input.slice(markerStart, digitsStart) === COMPRESS_MARKER &&
+          input.slice(markerStart - padLen, markerStart) === pad
+        ) {
+          const idx = markerStart - padLen;
+          if (idx % this.charLength !== 0) {
+            throw new Error(`[Ddu64 decode] Invalid padding format. Misaligned padding marker`);
+          }
+          return { cleanedInput: input.substring(0, idx), paddingBits, isCompressed: true };
+        }
+      }
+
+      // Normal footer: ... + pad + digits
+      if (digitsStart >= padLen && input.slice(digitsStart - padLen, digitsStart) === pad) {
+        const idx = digitsStart - padLen;
+        if (idx % this.charLength !== 0) {
+          throw new Error(`[Ddu64 decode] Invalid padding format. Misaligned padding marker`);
+        }
+        return { cleanedInput: input.substring(0, idx), paddingBits, isCompressed: false };
+      }
     }
-    
-    return { isCompressed: false, cleanedInput: input };
+
+    // 3) Compatibility behavior:
+    // If the last occurrence of paddingChar "looks like" a footer delimiter but the suffix is invalid,
+    // throw Invalid padding (matches prior behavior), while still avoiding digit-suffix collisions.
+    const lastPadIdx = input.lastIndexOf(pad);
+    if (lastPadIdx >= 0 && lastPadIdx % this.charLength === 0) {
+      let tail = input.slice(lastPadIdx + padLen);
+      if (!tail) {
+        throw new Error(`[Ddu64 decode] Invalid padding format. Missing padding length`);
+      }
+
+      if (tail.startsWith(COMPRESS_MARKER)) {
+        tail = tail.slice(COMPRESS_MARKER.length);
+        if (!tail) {
+          throw new Error(`[Ddu64 decode] Invalid padding format. Missing padding length`);
+        }
+      }
+
+      const paddingBits = parseInt(tail, 10);
+      if (
+        Number.isNaN(paddingBits) ||
+        tail !== paddingBits.toString() ||
+        paddingBits < 0 ||
+        paddingBits >= this.effectiveBitLength
+      ) {
+        throw new Error(`[Ddu64 decode] Invalid padding format. Got: "${tail}"`);
+      }
+
+      // If it is actually valid, accept it even if it didn't match the digit-suffix fast path.
+      const isCompressed = input.slice(lastPadIdx + padLen).startsWith(COMPRESS_MARKER);
+      return { cleanedInput: input.substring(0, lastPadIdx), paddingBits, isCompressed };
+    }
+
+    return { cleanedInput: input, paddingBits: 0, isCompressed: false };
   }
 
   private encodeFast(bufferInput: Buffer, compress?: boolean): string {
@@ -155,7 +247,8 @@ export class Ddu64 extends BaseDdu {
     
     const totalBits = inputLen * BYTE_BITS;
     const estimatedChunks = Math.ceil(totalBits / bitLength);
-    const resultParts: string[] = new Array(estimatedChunks + 3);
+    const estimatedSymbols = this.usePowerOfTwo ? estimatedChunks : estimatedChunks * 2;
+    const resultParts: string[] = new Array(estimatedSymbols + 3);
     let resultIdx = 0;
     
     let accumulator = 0;
@@ -211,8 +304,7 @@ export class Ddu64 extends BaseDdu {
     return resultParts.join("");
   }
 
-  private decodeFast(input: string): Buffer {
-    const { cleanedInput, paddingBits } = this.parsePaddingAndGetInput(input);
+  private decodeFast(cleanedInput: string, paddingBits: number): Buffer {
     const inputLen = cleanedInput.length;
     
     if (inputLen === 0) return Buffer.alloc(0);
@@ -326,7 +418,8 @@ export class Ddu64 extends BaseDdu {
     const dduLength = dduChar.length;
     
     const estimatedChunks = Math.ceil((inputLen * BYTE_BITS) / bitLength);
-    const resultParts: string[] = new Array(estimatedChunks + 3);
+    const estimatedSymbols = this.usePowerOfTwo ? estimatedChunks : estimatedChunks * 2;
+    const resultParts: string[] = new Array(estimatedSymbols + 3);
     let resultIdx = 0;
     
     let accumulator = 0n;
@@ -383,8 +476,7 @@ export class Ddu64 extends BaseDdu {
     return resultParts.join("");
   }
 
-  private decodeBigInt(input: string): Buffer {
-    const { cleanedInput, paddingBits } = this.parsePaddingAndGetInput(input);
+  private decodeBigInt(cleanedInput: string, paddingBits: number): Buffer {
     const inputLen = cleanedInput.length;
     
     if (inputLen === 0) return Buffer.alloc(0);
@@ -462,33 +554,6 @@ export class Ddu64 extends BaseDdu {
     }
 
     return Buffer.from(buffer.subarray(0, bufIdx));
-  }
-
-  private parsePaddingAndGetInput(input: string): { cleanedInput: string, paddingBits: number } {
-    const inputLen = input.length;
-    const padLen = this.paddingChar.length;
-    
-    if (inputLen < padLen) return { cleanedInput: input, paddingBits: 0 };
-
-    const padIdx = input.lastIndexOf(this.paddingChar);
-    if (padIdx >= 0 && padIdx % this.charLength === 0 && padIdx + padLen <= inputLen) {
-      let paddingSection = input.slice(padIdx + padLen);
-      if (!paddingSection) {
-        throw new Error(`[Ddu64 decode] Invalid padding format. Missing padding length`);
-      }
-      
-      if (paddingSection.startsWith(COMPRESS_MARKER)) {
-        paddingSection = paddingSection.slice(COMPRESS_MARKER.length);
-      }
-      
-      const paddingBits = parseInt(paddingSection, 10);
-      if (isNaN(paddingBits) || paddingSection !== paddingBits.toString() || paddingBits < 0 || paddingBits >= this.effectiveBitLength) {
-        throw new Error(`[Ddu64 decode] Invalid padding format. Got: "${paddingSection}"`);
-      }
-      return { cleanedInput: input.substring(0, padIdx), paddingBits };
-    }
-    
-    return { cleanedInput: input, paddingBits: 0 };
   }
 
   private normalizeCharSet(
