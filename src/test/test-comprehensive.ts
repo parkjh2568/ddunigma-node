@@ -1480,7 +1480,220 @@ console.log("엣지 케이스 테스트:\n");
 
 // ═══════════════════════════════════════════════════════════════════════════════
 console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-console.log("[ 13. Heavy Fuzzing & Concurrency ]");
+console.log("[ 13. 압축(compress) 옵션 테스트 ]");
+console.log("═══════════════════════════════════════════════════════════════════════════════\n");
+
+{
+  const encoder = new Ddu64(BASE64_CHARS, "=");
+  
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 1) 원문 vs 기존인코딩 vs 압축인코딩 상세 비교
+  // ─────────────────────────────────────────────────────────────────────────────
+  console.log("┌─────────────────────────────────────────────────────────────────────────────┐");
+  console.log("│                    원문 vs 기존인코딩 vs 압축인코딩 비교                    │");
+  console.log("├───────────────────┬──────────┬──────────┬──────────┬──────────┬────────────┤");
+  console.log("│ 데이터 타입       │ 원문(자) │ 기존(자) │ 압축(자) │ 압축률   │ 디코딩검증 │");
+  console.log("├───────────────────┼──────────┼──────────┼──────────┼──────────┼────────────┤");
+
+  const compressTestCases = [
+    { name: "짧은 영문", data: "Hello World!" },
+    { name: "반복 패턴", data: "ABCD".repeat(250) },
+    { name: "긴 영문", data: "The quick brown fox jumps over the lazy dog. ".repeat(25) },
+    { name: "한글 텍스트", data: "안녕하세요! 반갑습니다. 오늘 날씨가 좋네요. ".repeat(20) },
+    { name: "혼합 텍스트", data: "Hello안녕123!@#가나다ABC".repeat(40) },
+    { name: "숫자 반복", data: "0123456789".repeat(100) },
+    { name: "특수문자", data: "!@#$%^&*()_+-=[]{}|;':\",./<>?".repeat(30) },
+    { name: "공백 반복", data: "    ".repeat(250) },
+    { name: "JSON 데이터", data: JSON.stringify({ users: Array(50).fill({ name: "Test", age: 25, email: "test@test.com" }) }) },
+    { name: "대용량 (10KB)", data: "Lorem ipsum dolor sit amet. ".repeat(400) },
+  ];
+
+  let allCompressionPassed = true;
+  
+  for (const tc of compressTestCases) {
+    try {
+      const original = tc.data;
+      const normalEncoded = encoder.encode(original);
+      const compressEncoded = encoder.encode(original, { compress: true });
+      
+      // 각각 디코딩 검증
+      const normalDecoded = encoder.decode(normalEncoded);
+      const compressDecoded = encoder.decode(compressEncoded);
+      
+      const normalOk = normalDecoded === original;
+      const compressOk = compressDecoded === original;
+      const bothOk = normalOk && compressOk;
+      
+      if (!bothOk) allCompressionPassed = false;
+
+      const ratio = ((1 - compressEncoded.length / normalEncoded.length) * 100).toFixed(1);
+      const ratioStr = compressEncoded.length < normalEncoded.length ? `${ratio}%↓` : `+${Math.abs(parseFloat(ratio))}%`;
+      
+      console.log(`│ ${tc.name.padEnd(17)} │ ${original.length.toString().padStart(8)} │ ${normalEncoded.length.toString().padStart(8)} │ ${compressEncoded.length.toString().padStart(8)} │ ${ratioStr.padStart(8)} │ ${bothOk ? "✓ 정상" : "✗ 실패"}     │`);
+    } catch (err: any) {
+      allCompressionPassed = false;
+      console.log(`│ ${tc.name.padEnd(17)} │ 에러: ${err.message.substring(0, 50).padEnd(56)} │`);
+    }
+  }
+  
+  console.log("└───────────────────┴──────────┴──────────┴──────────┴──────────┴────────────┘\n");
+  
+  reportTest("원문/기존/압축 비교 테이블 검증", allCompressionPassed);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 2) 압축 인코딩 → 디코딩 상세 테스트
+  // ─────────────────────────────────────────────────────────────────────────────
+  console.log("\n  [압축 인코딩 → 디코딩 상세 검증]");
+  
+  // 기본 압축 테스트
+  try {
+    const testData = "Hello World! This is a test for compression. Repeated text works well.";
+    const encoded = encoder.encode(testData, { compress: true });
+    const decoded = encoder.decode(encoded);
+    
+    console.log(`    원문: "${testData.substring(0, 40)}..."`);
+    console.log(`    압축: "${encoded.substring(0, 50)}..." (${encoded.length}자)`);
+    console.log(`    복원: "${decoded.substring(0, 40)}..."`);
+    
+    reportTest("압축 인코딩 → 디코딩 일치", testData === decoded);
+  } catch (err: any) {
+    reportTest("압축 인코딩 → 디코딩 일치", false, err.message);
+  }
+
+  // decodeToBuffer 테스트
+  try {
+    const testData = "Buffer 압축 테스트 데이터입니다. 이 문장이 정확히 복원되어야 합니다.";
+    const encoded = encoder.encode(testData, { compress: true });
+    const decodedBuffer = encoder.decodeToBuffer(encoded);
+    const decodedStr = decodedBuffer.toString('utf-8');
+    
+    reportTest("압축 decodeToBuffer 검증", testData === decodedStr);
+  } catch (err: any) {
+    reportTest("압축 decodeToBuffer 검증", false, err.message);
+  }
+
+  // 한글 압축 테스트
+  try {
+    const koreanData = "안녕하세요! 반갑습니다. 오늘 날씨가 좋네요. ".repeat(50);
+    const compressEncoded = encoder.encode(koreanData, { compress: true });
+    const decoded = encoder.decode(compressEncoded);
+    reportTest("압축 (한글 대용량)", koreanData === decoded);
+  } catch (err: any) {
+    reportTest("압축 (한글 대용량)", false, err.message);
+  }
+
+  // 빈 문자열 압축
+  try {
+    const emptyData = "";
+    const encoded = encoder.encode(emptyData, { compress: true });
+    const decoded = encoder.decode(encoded);
+    reportTest("압축 (빈 문자열)", emptyData === decoded);
+  } catch (err: any) {
+    reportTest("압축 (빈 문자열)", false, err.message);
+  }
+
+  // 비압축 데이터 호환성
+  try {
+    const testData = "Normal encoding without compression flag";
+    const encoded = encoder.encode(testData); // compress: false
+    const decoded = encoder.decode(encoded);
+    reportTest("비압축 데이터 디코딩 호환성", testData === decoded);
+  } catch (err: any) {
+    reportTest("비압축 데이터 디코딩 호환성", false, err.message);
+  }
+
+  // 바이너리 데이터 압축
+  try {
+    const binaryEncoder = new Ddu64(BASE64_CHARS, "=", { encoding: 'latin1' });
+    const buffer = Buffer.alloc(1000, 0xAB);
+    const compressEncoded = binaryEncoder.encode(buffer, { compress: true });
+    const decodedBuffer = binaryEncoder.decodeToBuffer(compressEncoded);
+    reportTest("압축 (바이너리 1KB)", buffer.equals(decodedBuffer));
+  } catch (err: any) {
+    reportTest("압축 (바이너리 1KB)", false, err.message);
+  }
+
+  // 다양한 charset에서 압축 테스트
+  try {
+    const koreanEncoder = new Ddu64("우따야", "뭐", { usePowerOfTwo: false });
+    const testData = "다른 charset에서도 압축이 잘 되는지 테스트합니다! 반복 반복 반복.".repeat(20);
+    const encoded = koreanEncoder.encode(testData, { compress: true });
+    const decoded = koreanEncoder.decode(encoded);
+    reportTest("압축 (한글 charset)", testData === decoded);
+  } catch (err: any) {
+    reportTest("압축 (한글 charset)", false, err.message);
+  }
+
+  // 대용량 데이터 압축/디코딩
+  try {
+    const largeData = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(2000);
+    const normalEncoded = encoder.encode(largeData);
+    const compressEncoded = encoder.encode(largeData, { compress: true });
+    const decoded = encoder.decode(compressEncoded);
+    
+    const compressionRatio = ((1 - compressEncoded.length / normalEncoded.length) * 100).toFixed(1);
+    console.log(`\n  [대용량 테스트] 원본: ${largeData.length}자`);
+    console.log(`    비압축: ${normalEncoded.length}자 → 압축: ${compressEncoded.length}자 (${compressionRatio}% 감소)`);
+    
+    reportTest("압축 (대용량 114KB)", largeData === decoded);
+  } catch (err: any) {
+    reportTest("압축 (대용량 114KB)", false, err.message);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 3) 다양한 인코더에서 압축 테스트
+  // ─────────────────────────────────────────────────────────────────────────────
+  console.log("\n  [다양한 인코더에서 압축 테스트]");
+  
+  const testDataForEncoders = "압축 테스트용 데이터입니다. 반복되는 패턴이 있으면 압축률이 높아집니다. ".repeat(30);
+  
+  Object.entries(encoders).forEach(([name, enc]) => {
+    try {
+      const normalEncoded = enc.encode(testDataForEncoders);
+      const compressEncoded = enc.encode(testDataForEncoders, { compress: true });
+      const decoded = enc.decode(compressEncoded);
+      
+      const ratio = ((1 - compressEncoded.length / normalEncoded.length) * 100).toFixed(1);
+      const passed = decoded === testDataForEncoders;
+      
+      console.log(`    ${name}: 비압축 ${normalEncoded.length}자 → 압축 ${compressEncoded.length}자 (${ratio}%↓)`);
+      reportTest(`압축 (${name})`, passed);
+    } catch (err: any) {
+      reportTest(`압축 (${name})`, false, err.message);
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 4) 압축 랜덤 데이터 Fuzzing
+  // ─────────────────────────────────────────────────────────────────────────────
+  console.log("\n  [압축 랜덤 데이터 Fuzzing (100회)]");
+  
+  let fuzzingPassed = 0;
+  const fuzzingTotal = 100;
+  
+  for (let i = 0; i < fuzzingTotal; i++) {
+    try {
+      const length = Math.floor(Math.random() * 5000) + 100;
+      let randomData = "";
+      for (let j = 0; j < length; j++) {
+        randomData += String.fromCharCode(Math.floor(Math.random() * 0xD800));
+      }
+      
+      const encoded = encoder.encode(randomData, { compress: true });
+      const decoded = encoder.decode(encoded);
+      
+      if (decoded === randomData) fuzzingPassed++;
+    } catch {
+      // 에러 발생 시 패스하지 않음
+    }
+  }
+  
+  reportTest(`압축 Fuzzing (${fuzzingPassed}/${fuzzingTotal} 성공)`, fuzzingPassed === fuzzingTotal);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+console.log("\n═══════════════════════════════════════════════════════════════════════════════");
+console.log("[ 14. Heavy Fuzzing & Concurrency ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
 async function runAsyncTests() {
@@ -1527,7 +1740,7 @@ async function runAsyncTests() {
 function printFinalResults() {
   // ═══════════════════════════════════════════════════════════════════════════════
   console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-  console.log("[ 14. 최종 결과 및 추천 사항 ]");
+  console.log("[ 15. 최종 결과 및 추천 사항 ]");
   console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
   const successRate = ((passedTests / totalTests) * 100).toFixed(1);

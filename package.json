@@ -3,19 +3,25 @@
   "version": "2.0.1",
   "main": "dist/cjs/index.js",
   "module": "dist/mjs/index.js",
-  "types": "dist/index.d.ts",
+  "types": "dist/mjs/index.d.ts",
   "type": "module",
   "scripts": {
     "build": "rm -rf dist/* && tsc -p tsconfig.json && tsc -p tsconfig-cjs.json && sh postProcess.sh",
     "test": "tsx ./src/test/test-quick.ts",
     "test:comprehensive": "tsx ./src/test/test-comprehensive.ts",
     "test:all": "tsx ./src/test/test-all-integrated.ts",
-    "dev": "tsx ./src/test/test.ts"
+    "dev": "tsx ./src/test/test-quick.ts"
   },
   "exports": {
     ".": {
-      "import": "./dist/mjs/index.js",
-      "require": "./dist/cjs/index.js"
+      "import": {
+        "types": "./dist/mjs/index.d.ts",
+        "default": "./dist/mjs/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
     }
   },
   "repository": {
@@ -23,7 +29,7 @@
     "url": "https://github.com/parkjh2568/ddunigma-node.git"
   },
   "author": "",
-  "license": "ISC",
+  "license": "BSD-2-Clause",
   "description": "",
   "devDependencies": {
     "@types/node": "^22.13.0",

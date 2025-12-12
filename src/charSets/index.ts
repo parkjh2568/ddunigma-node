@@ -81,9 +81,12 @@ const oneCharSet: CharSetConfig = {
   bitLength: 6, // 64 = 2^6
 };
 
-const twoCharSet: CharSetConfig = {
-  symbol: DduSetSymbol.TWOCHARSET,
-  charSet: [
+let twoCharSetCache: CharSetConfig | null = null;
+const getTwoCharSet = (): CharSetConfig => {
+  if (twoCharSetCache) return twoCharSetCache;
+  twoCharSetCache = {
+    symbol: DduSetSymbol.TWOCHARSET,
+    charSet: [
     'Ok',   '-d',   'b4',   'mF',   'pP',   'vL',   'eA',   '87',
     '2j',   'G8',   'Bj',   'PR',   'eI',   'a6',   'pQ',   'eZ',
     'qv',   '3j',   'h6',   '-2',   '1I',   'tc',   'qa',   'OX',
@@ -213,14 +216,19 @@ const twoCharSet: CharSetConfig = {
     'D4',   '3c',   'bX',   '0C',   'Tz',   'Bx',   'HQ',   'pd',
     '2I',   'w4',   '8n',   'hz',   'Yr',   '3i',   'hC',   'dL'
   ],
-  paddingChar: "ly",
-  maxRequiredLength: 1024,
-  bitLength: 10, // 1024 = 2^10
+    paddingChar: "ly",
+    maxRequiredLength: 1024,
+    bitLength: 10, // 1024 = 2^10
+  };
+  return twoCharSetCache;
 };
 
-const threeCharSet: CharSetConfig = {
-  symbol: DduSetSymbol.THREECHARSET,
-  charSet: [
+let threeCharSetCache: CharSetConfig | null = null;
+const getThreeCharSet = (): CharSetConfig => {
+  if (threeCharSetCache) return threeCharSetCache;
+  threeCharSetCache = {
+    symbol: DduSetSymbol.THREECHARSET,
+    charSet: [
     'uFy',   'HPL',   'QHt',   '02C',   'pNn',   '-8I',   'rCj',   '_0G',
     'CUI',   'cDr',   'TBO',   'SGx',   'Wqv',   '016',   'fyv',   'jcX',
     'Lr6',   'Nkc',   'yb9',   'Pbx',   'Avv',   '5JD',   'DPz',   'F_x',
@@ -4318,27 +4326,61 @@ const threeCharSet: CharSetConfig = {
     'sA5',   'RvH',   'wqy',   's9q',   'gNr',   'BG2',   'ybr',   'A4n',
     'KOF',   'B8b',   'wUd',   'HFB',   'aqG',   'r5R',   '6II',   'yj6'
   ],
-  paddingChar: "ELE",
-  maxRequiredLength: 32768,
-  bitLength: 15, // 32768 = 2^15
+    paddingChar: "ELE",
+    maxRequiredLength: 32768,
+    bitLength: 15, // 32768 = 2^15
+  };
+  return threeCharSetCache;
 };
 
-// Map을 사용한 효율적인 CharSet 저장소 (O(1) 조회)
-const charSetMap = new Map<DduSetSymbol, CharSetConfig>([
-  [dduCharSet.symbol, dduCharSet],
-  [oneCharSet.symbol, oneCharSet],
-  [twoCharSet.symbol, twoCharSet],
-  [threeCharSet.symbol, threeCharSet],
-]);
+const ALL_SYMBOLS: readonly DduSetSymbol[] = [
+  DduSetSymbol.DDU,
+  DduSetSymbol.ONECHARSET,
+  DduSetSymbol.TWOCHARSET,
+  DduSetSymbol.THREECHARSET,
+] as const;
 
+/**
+ * 심볼에 해당하는 charset 설정을 반환합니다.
+ * @param symbol - charset 심볼
+ * @returns CharSetConfig 또는 undefined
+ */
 export function getCharSet(symbol: DduSetSymbol): CharSetConfig | undefined {
-  return charSetMap.get(symbol);
+  switch (symbol) {
+    case DduSetSymbol.DDU:
+      return dduCharSet;
+    case DduSetSymbol.ONECHARSET:
+      return oneCharSet;
+    case DduSetSymbol.TWOCHARSET:
+      return getTwoCharSet();
+    case DduSetSymbol.THREECHARSET:
+      return getThreeCharSet();
+    default:
+      return undefined;
+  }
 }
 
+/**
+ * 모든 사용 가능한 charset 심볼 목록을 반환합니다.
+ * @returns DduSetSymbol 배열
+ */
 export function getAllSymbols(): DduSetSymbol[] {
-  return Array.from(charSetMap.keys());
+  return [...ALL_SYMBOLS];
 }
 
+/**
+ * 해당 심볼의 charset이 존재하는지 확인합니다.
+ * @param symbol - 확인할 charset 심볼
+ * @returns 존재 여부
+ */
 export function hasCharSet(symbol: DduSetSymbol): boolean {
-  return charSetMap.has(symbol);
+  switch (symbol) {
+    case DduSetSymbol.DDU:
+    case DduSetSymbol.ONECHARSET:
+    case DduSetSymbol.TWOCHARSET:
+    case DduSetSymbol.THREECHARSET:
+      return true;
+    default:
+      return false;
+  }
 }
