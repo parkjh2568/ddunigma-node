@@ -1,3 +1,4 @@
+import { deflateSync, inflateSync } from "zlib";
 import { BaseDdu } from "../base/BaseDdu";
 import {
   DduConstructorOptions,
@@ -10,6 +11,7 @@ import { getCharSet } from "../charSets";
 const BYTE_BITS = 8;
 const MAX_FAST_BITS = 16;
 const BYTE_MASK = 0xFF;
+const COMPRESS_MARKER = "ELYSIA";
 
 export class Ddu64 extends BaseDdu {
   protected readonly dduChar: string[];
@@ -18,6 +20,7 @@ export class Ddu64 extends BaseDdu {
   protected readonly bitLength: number;
   protected readonly usePowerOfTwo: boolean;
   protected readonly encoding: BufferEncoding;
+  protected readonly defaultCompress: boolean;
 
   protected readonly dduBinaryLookup: Map<string, number> = new Map();
   private readonly isPredefinedCharSet: boolean;
@@ -38,6 +41,7 @@ export class Ddu64 extends BaseDdu {
     this.charLength = normalized.charLength;
     this.isPredefinedCharSet = normalized.isPredefined;
     this.encoding = dduOptions?.encoding ?? this.defaultEncoding;
+    this.defaultCompress = dduOptions?.compress ?? false;
 
     const dduLength = this.dduChar.length;
     this.usePowerOfTwo = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
@@ -74,26 +78,53 @@ export class Ddu64 extends BaseDdu {
     }
   }
 
-  /** Encode data to DDU format string. */
-  encode(input: Buffer | string, _options?: DduOptions): string {
-    const bufferInput = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
+  /** Encode data to DDU format string. Use { compress: true } for smaller output. */
+  encode(input: Buffer | string, options?: DduOptions): string {
+    const shouldCompress = options?.compress ?? this.defaultCompress;
+    const originalBuffer = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
+    
+    if (!shouldCompress) {
+      return this.effectiveBitLength <= MAX_FAST_BITS
+        ? this.encodeFast(originalBuffer, false)
+        : this.encodeBigInt(originalBuffer, false);
+    }
+    
+    // 압축 시도: 버퍼 크기로 먼저 비교 (인코딩 전 조기 판단)
+    const compressedBuffer = deflateSync(originalBuffer, { level: 9 });
+    
+    // 압축된 버퍼가 원본보다 크거나 같으면 비압축 인코딩만 수행
+    if (compressedBuffer.length >= originalBuffer.length) {
+      return this.effectiveBitLength <= MAX_FAST_BITS
+        ? this.encodeFast(originalBuffer, false)
+        : this.encodeBigInt(originalBuffer, false);
+    }
+    
+    // 압축된 버퍼가 더 작으면 압축 인코딩만 수행
     return this.effectiveBitLength <= MAX_FAST_BITS
-      ? this.encodeFast(bufferInput)
-      : this.encodeBigInt(bufferInput);
+      ? this.encodeFast(compressedBuffer, true)
+      : this.encodeBigInt(compressedBuffer, true);
   }
 
   /** Decode DDU format string to Buffer. */
   decodeToBuffer(input: string, _options?: DduOptions): Buffer {
-    return this.effectiveBitLength <= MAX_FAST_BITS
-      ? this.decodeFast(input)
-      : this.decodeBigInt(input);
+    const { isCompressed, cleanedInput } = this.parseCompressMarker(input);
+    
+    const decoded = this.effectiveBitLength <= MAX_FAST_BITS
+      ? this.decodeFast(cleanedInput)
+      : this.decodeBigInt(cleanedInput);
+    
+    if (isCompressed) {
+      return inflateSync(decoded);
+    }
+    return decoded;
   }
 
   /** Decode DDU format string to string. */
-  decode(input: string, _options?: DduOptions): string {
-    return this.decodeToBuffer(input, _options).toString(this.encoding);
+  decode(input: string, options?: DduOptions): string {
+    return this.decodeToBuffer(input, options).toString(this.encoding);
   }
 
+  /** Get charset configuration info. */
   /** Get charset configuration info. */
   getCharSetInfo() {
     return {
@@ -103,10 +134,27 @@ export class Ddu64 extends BaseDdu {
       bitLength: this.bitLength,
       usePowerOfTwo: this.usePowerOfTwo,
       encoding: this.encoding,
+      defaultCompress: this.defaultCompress,
     };
   }
 
-  private encodeFast(bufferInput: Buffer): string {
+  private parseCompressMarker(input: string): { isCompressed: boolean, cleanedInput: string } {
+    const padIdx = input.lastIndexOf(this.paddingChar);
+    if (padIdx < 0) return { isCompressed: false, cleanedInput: input };
+    
+    const paddingSection = input.slice(padIdx + this.paddingChar.length);
+    if (paddingSection.startsWith(COMPRESS_MARKER)) {
+      const newPadding = paddingSection.slice(COMPRESS_MARKER.length);
+      return {
+        isCompressed: true,
+        cleanedInput: input.substring(0, padIdx) + this.paddingChar + newPadding,
+      };
+    }
+    
+    return { isCompressed: false, cleanedInput: input };
+  }
+
+  private encodeFast(bufferInput: Buffer, compress?: boolean): string {
     const inputLen = bufferInput.length;
     if (inputLen === 0) return "";
 
@@ -115,7 +163,7 @@ export class Ddu64 extends BaseDdu {
     
     const totalBits = inputLen * BYTE_BITS;
     const estimatedChunks = Math.ceil(totalBits / bitLength);
-    const resultParts: string[] = new Array(estimatedChunks + 2);
+    const resultParts: string[] = new Array(estimatedChunks + 3);
     let resultIdx = 0;
     
     let accumulator = 0;
@@ -161,7 +209,10 @@ export class Ddu64 extends BaseDdu {
         resultParts[resultIdx++] = dduChar[index - div * dduLength];
       }
       resultParts[resultIdx++] = paddingChar;
-      resultParts[resultIdx++] = paddingBits.toString();
+      resultParts[resultIdx++] = compress ? COMPRESS_MARKER + paddingBits.toString() : paddingBits.toString();
+    } else if (compress) {
+      resultParts[resultIdx++] = paddingChar;
+      resultParts[resultIdx++] = COMPRESS_MARKER + "0";
     }
 
     return resultParts.slice(0, resultIdx).join("");
@@ -274,7 +325,7 @@ export class Ddu64 extends BaseDdu {
     return Buffer.from(buffer.subarray(0, bufIdx));
   }
 
-  private encodeBigInt(bufferInput: Buffer): string {
+  private encodeBigInt(bufferInput: Buffer, compress?: boolean): string {
     const inputLen = bufferInput.length;
     if (inputLen === 0) return "";
 
@@ -283,7 +334,7 @@ export class Ddu64 extends BaseDdu {
     const bigBitLength = BigInt(bitLength);
     
     const estimatedChunks = Math.ceil((inputLen * BYTE_BITS) / bitLength);
-    const resultParts: string[] = new Array(estimatedChunks + 2);
+    const resultParts: string[] = new Array(estimatedChunks + 3);
     let resultIdx = 0;
     
     let accumulator = 0n;
@@ -330,7 +381,10 @@ export class Ddu64 extends BaseDdu {
         resultParts[resultIdx++] = dduChar[index - div * dduLength];
       }
       resultParts[resultIdx++] = this.paddingChar;
-      resultParts[resultIdx++] = paddingBits.toString();
+      resultParts[resultIdx++] = compress ? COMPRESS_MARKER + paddingBits.toString() : paddingBits.toString();
+    } else if (compress) {
+      resultParts[resultIdx++] = this.paddingChar;
+      resultParts[resultIdx++] = COMPRESS_MARKER + "0";
     }
 
     return resultParts.slice(0, resultIdx).join("");
@@ -425,9 +479,13 @@ export class Ddu64 extends BaseDdu {
 
     const padIdx = input.lastIndexOf(this.paddingChar);
     if (padIdx >= 0 && padIdx % this.charLength === 0 && padIdx + padLen <= inputLen) {
-      const paddingSection = input.slice(padIdx + padLen);
+      let paddingSection = input.slice(padIdx + padLen);
       if (!paddingSection) {
         throw new Error(`[Ddu64 decode] Invalid padding format. Missing padding length`);
+      }
+      
+      if (paddingSection.startsWith(COMPRESS_MARKER)) {
+        paddingSection = paddingSection.slice(COMPRESS_MARKER.length);
       }
       
       const paddingBits = parseInt(paddingSection, 10);
