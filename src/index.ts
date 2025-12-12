@@ -1,7 +1,6 @@
 // Export types
 export type {
   DduOptions,
-  BufferToDduBinaryResult,
   DduConstructorOptions,
 } from "./types";
 

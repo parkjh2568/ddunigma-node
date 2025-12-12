@@ -125,7 +125,6 @@ export class Ddu64 extends BaseDdu {
   }
 
   /** Get charset configuration info. */
-  /** Get charset configuration info. */
   getCharSetInfo() {
     return {
       charSet: [...this.dduChar],
@@ -215,7 +214,8 @@ export class Ddu64 extends BaseDdu {
       resultParts[resultIdx++] = COMPRESS_MARKER + "0";
     }
 
-    return resultParts.slice(0, resultIdx).join("");
+    resultParts.length = resultIdx;
+    return resultParts.join("");
   }
 
   private decodeFast(input: string): Buffer {
@@ -331,7 +331,6 @@ export class Ddu64 extends BaseDdu {
 
     const { dduChar, effectiveBitLength: bitLength } = this;
     const dduLength = dduChar.length;
-    const bigBitLength = BigInt(bitLength);
     
     const estimatedChunks = Math.ceil((inputLen * BYTE_BITS) / bitLength);
     const resultParts: string[] = new Array(estimatedChunks + 3);
@@ -387,7 +386,8 @@ export class Ddu64 extends BaseDdu {
       resultParts[resultIdx++] = COMPRESS_MARKER + "0";
     }
 
-    return resultParts.slice(0, resultIdx).join("");
+    resultParts.length = resultIdx;
+    return resultParts.join("");
   }
 
   private decodeBigInt(input: string): Buffer {
