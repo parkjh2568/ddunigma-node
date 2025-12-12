@@ -127,19 +127,6 @@ export class Ddu64 extends BaseDdu {
     };
   }
 
-  /**
-   * Footer format:
-   * - No padding: <data>
-   * - Padding only: <data> + paddingChar + <paddingBits decimal>
-   * - Compressed: <data> + paddingChar + COMPRESS_MARKER + <paddingBits decimal>
-   *
-   * IMPORTANT:
-   * - paddingChar itself can be a digit (e.g. "1"), so we cannot use a single lastIndexOf()
-   *   and assume it's the true delimiter.
-   * - We first parse a trailing decimal number suffix, then validate that it is preceded by
-   *   (paddingChar) or (paddingChar + COMPRESS_MARKER). This is robust even when paddingChar
-   *   appears inside the decimal suffix itself (e.g., paddingChar="1", suffix="10").
-   */
   private parseFooter(input: string): { cleanedInput: string; paddingBits: number; isCompressed: boolean } {
     const inputLen = input.length;
     const pad = this.paddingChar;
@@ -147,8 +134,6 @@ export class Ddu64 extends BaseDdu {
 
     if (inputLen < padLen) return { cleanedInput: input, paddingBits: 0, isCompressed: false };
 
-    // 1) Try to parse a valid footer by testing possible digit lengths.
-    // paddingBits is always < effectiveBitLength, so digit length is bounded.
     const markerLen = COMPRESS_MARKER.length;
     const maxPaddingBits = Math.max(0, this.effectiveBitLength - 1);
     const maxDigits = maxPaddingBits.toString().length; // >= 1
@@ -159,7 +144,6 @@ export class Ddu64 extends BaseDdu {
       const firstCode = input.charCodeAt(digitsStart);
       if (!isDigitCode(firstCode)) continue;
 
-      // Ensure all are digits
       let allDigits = true;
       for (let i = digitsStart + 1; i < inputLen; i++) {
         if (!isDigitCode(input.charCodeAt(i))) {
@@ -203,9 +187,6 @@ export class Ddu64 extends BaseDdu {
       }
     }
 
-    // 3) Compatibility behavior:
-    // If the last occurrence of paddingChar "looks like" a footer delimiter but the suffix is invalid,
-    // throw Invalid padding (matches prior behavior), while still avoiding digit-suffix collisions.
     const lastPadIdx = input.lastIndexOf(pad);
     if (lastPadIdx >= 0 && lastPadIdx % this.charLength === 0) {
       let tail = input.slice(lastPadIdx + padLen);
@@ -230,7 +211,6 @@ export class Ddu64 extends BaseDdu {
         throw new Error(`[Ddu64 decode] Invalid padding format. Got: "${tail}"`);
       }
 
-      // If it is actually valid, accept it even if it didn't match the digit-suffix fast path.
       const isCompressed = input.slice(lastPadIdx + padLen).startsWith(COMPRESS_MARKER);
       return { cleanedInput: input.substring(0, lastPadIdx), paddingBits, isCompressed };
     }
