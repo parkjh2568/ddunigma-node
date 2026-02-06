@@ -209,31 +209,6 @@ const encoder = new Ddu64(undefined, undefined, {
 
 ---
 
-## Ddu32 (Base32)
-
-대소문자 구분이 없는 환경(DNS, 파일명 등)에서 사용하기 적합한 32개 문자 인코더입니다.
-
-```typescript
-import { Ddu32 } from "@ddunigma/node";
-
-// RFC 4648 Base32
-const encoder1 = Ddu32.rfc4648();
-
-// Crockford's Base32 (혼동 문자 제외)
-const encoder2 = Ddu32.crockford();
-
-// z-base-32 (발음하기 쉬운 문자)
-const encoder3 = Ddu32.zbase32();
-
-// 한글 Base32
-const encoder4 = Ddu32.hangul();
-
-const encoded = encoder1.encode("Hello World!");
-const decoded = encoder1.decode(encoded);
-```
-
----
-
 ## CharsetBuilder
 
 커스텀 charset을 쉽게 생성할 수 있는 빌더 유틸리티입니다.
@@ -321,28 +296,28 @@ fs.createReadStream("output.txt")
 
 **Parameters:**
 
-| Parameter     | Type               | Description            |
-| ------------- | ------------------ | ---------------------- |
-| `dduChar`     | `string \| string[]` | charset 문자열 또는 배열 |
-| `paddingChar` | `string`           | 패딩 문자              |
-| `options`     | `DduConstructorOptions` | 옵션 객체          |
+| Parameter     | Type                    | Description              |
+| ------------- | ----------------------- | ------------------------ |
+| `dduChar`     | `string \| string[]`    | charset 문자열 또는 배열 |
+| `paddingChar` | `string`                | 패딩 문자                |
+| `options`     | `DduConstructorOptions` | 옵션 객체                |
 
 **DduConstructorOptions:**
 
-| Option                  | Type            | Default      | Description                    |
-| ----------------------- | --------------- | ------------ | ------------------------------ |
-| `dduSetSymbol`          | `DduSetSymbol`  | `DDU`        | 미리 정의된 charset 심볼       |
-| `encoding`              | `BufferEncoding`| `'utf-8'`    | 문자열 인코딩                  |
-| `usePowerOfTwo`         | `boolean`       | `true`       | 2의 제곱수 강제 여부           |
-| `useBuildErrorReturn`   | `boolean`       | `false`      | 에러 발생 시 throw 여부        |
-| `compress`              | `boolean`       | `false`      | 기본 압축 활성화               |
-| `maxDecodedBytes`       | `number`        | `67108864`   | 최대 디코딩 바이트 (64MB)      |
-| `maxDecompressedBytes`  | `number`        | `67108864`   | 최대 압축해제 바이트 (64MB)    |
-| `urlSafe`               | `boolean`       | `false`      | URL-Safe 모드                  |
-| `encryptionKey`         | `string`        | `undefined`  | AES-256-GCM 암호화 키          |
-| `checksum`              | `boolean`       | `false`      | CRC32 체크섬 활성화            |
-| `chunkSize`             | `number`        | `undefined`  | 청크 분할 크기                 |
-| `chunkSeparator`        | `string`        | `'\n'`       | 청크 구분자                    |
+| Option                 | Type             | Default     | Description                 |
+| ---------------------- | ---------------- | ----------- | --------------------------- |
+| `dduSetSymbol`         | `DduSetSymbol`   | `DDU`       | 미리 정의된 charset 심볼    |
+| `encoding`             | `BufferEncoding` | `'utf-8'`   | 문자열 인코딩               |
+| `usePowerOfTwo`        | `boolean`        | `true`      | 2의 제곱수 강제 여부        |
+| `useBuildErrorReturn`  | `boolean`        | `false`     | 에러 발생 시 throw 여부     |
+| `compress`             | `boolean`        | `false`     | 기본 압축 활성화            |
+| `maxDecodedBytes`      | `number`         | `67108864`  | 최대 디코딩 바이트 (64MB)   |
+| `maxDecompressedBytes` | `number`         | `67108864`  | 최대 압축해제 바이트 (64MB) |
+| `urlSafe`              | `boolean`        | `false`     | URL-Safe 모드               |
+| `encryptionKey`        | `string`         | `undefined` | AES-256-GCM 암호화 키       |
+| `checksum`             | `boolean`        | `false`     | CRC32 체크섬 활성화         |
+| `chunkSize`            | `number`         | `undefined` | 청크 분할 크기              |
+| `chunkSeparator`       | `string`         | `'\n'`      | 청크 구분자                 |
 
 ### `encode(data, options?): string`
 
@@ -350,13 +325,13 @@ fs.createReadStream("output.txt")
 
 **DduOptions:**
 
-| Option              | Type       | Description              |
-| ------------------- | ---------- | ------------------------ |
-| `compress`          | `boolean`  | 압축 사용 여부           |
-| `checksum`          | `boolean`  | 체크섬 추가 여부         |
-| `chunkSize`         | `number`   | 청크 분할 크기           |
-| `chunkSeparator`    | `string`   | 청크 구분자              |
-| `onProgress`        | `function` | 진행률 콜백              |
+| Option           | Type       | Description      |
+| ---------------- | ---------- | ---------------- |
+| `compress`       | `boolean`  | 압축 사용 여부   |
+| `checksum`       | `boolean`  | 체크섬 추가 여부 |
+| `chunkSize`      | `number`   | 청크 분할 크기   |
+| `chunkSeparator` | `string`   | 청크 구분자      |
+| `onProgress`     | `function` | 진행률 콜백      |
 
 ### `decode(encoded, options?): string`
 
@@ -402,12 +377,12 @@ fs.createReadStream("output.txt")
 
 ## DduSetSymbol
 
-| Symbol         | 문자 수 | 비트 길이 | 설명                       |
-| -------------- | ------- | --------- | -------------------------- |
-| `DDU`          | 8       | 3         | 한글 + 특수문자 기본 세트  |
-| `ONECHARSET`   | 64      | 6         | 영문 + 숫자 + 특수문자     |
-| `TWOCHARSET`   | 1024    | 10        | 2글자 조합 세트            |
-| `THREECHARSET` | 32768   | 15        | 3글자 조합 세트            |
+| Symbol         | 문자 수 | 비트 길이 | 설명                      |
+| -------------- | ------- | --------- | ------------------------- |
+| `DDU`          | 8       | 3         | 한글 + 특수문자 기본 세트 |
+| `ONECHARSET`   | 64      | 6         | 영문 + 숫자 + 특수문자    |
+| `TWOCHARSET`   | 1024    | 10        | 2글자 조합 세트           |
+| `THREECHARSET` | 32768   | 15        | 3글자 조합 세트           |
 
 ---
 
