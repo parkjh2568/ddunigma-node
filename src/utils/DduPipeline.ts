@@ -8,7 +8,7 @@ import { DduConstructorOptions } from "../types";
  */
 type PipelineStep =
   | { type: "compress"; level?: number }
-  | { type: "decompress" }
+  | { type: "decompress"; maxDecompressedBytes?: number }
   | { type: "encrypt"; key: string }
   | { type: "decrypt"; key: string }
   | { type: "encode"; encoder: Ddu64 }
@@ -43,9 +43,11 @@ export class DduPipeline {
 
   /**
    * 압축 해제 단계를 추가합니다.
+   *
+   * @param maxDecompressedBytes - 최대 압축해제 바이트 수 (Zip Bomb 방어용)
    */
-  decompress(): DduPipeline {
-    this.steps.push({ type: "decompress" });
+  decompress(maxDecompressedBytes?: number): DduPipeline {
+    this.steps.push({ type: "decompress", maxDecompressedBytes });
     return this;
   }
 
@@ -197,7 +199,7 @@ export class DduPipeline {
       case "compress":
         return this.compressData(this.toBuffer(data), step.level ?? 9);
       case "decompress":
-        return this.decompressData(this.toBuffer(data));
+        return this.decompressData(this.toBuffer(data), step.maxDecompressedBytes);
       case "encrypt":
         return this.encryptData(this.toBuffer(data), step.key);
       case "decrypt":
@@ -225,8 +227,44 @@ export class DduPipeline {
     return deflateSync(data, { level });
   }
 
-  private decompressData(data: Buffer): Buffer {
-    return inflateSync(data);
+  private decompressData(data: Buffer, maxBytes?: number): Buffer {
+    if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
+      return inflateSync(data);
+    }
+
+    try {
+      return inflateSync(data, { maxOutputLength: maxBytes } as any);
+    } catch (e: any) {
+      const msg = String(e?.message ?? "");
+      const code = String(e?.code ?? "");
+
+      // maxOutputLength 미지원 시 fallback
+      if (
+        msg.toLowerCase().includes("maxoutputlength") ||
+        msg.toLowerCase().includes("unknown option") ||
+        code === "ERR_INVALID_ARG_VALUE"
+      ) {
+        const inflated = inflateSync(data);
+        if (inflated.length > maxBytes) {
+          throw new Error(
+            `[DduPipeline decompress] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`
+          );
+        }
+        return inflated;
+      }
+
+      // 출력 제한 초과
+      if (
+        code === "ERR_BUFFER_TOO_LARGE" ||
+        msg.toLowerCase().includes("output length") ||
+        msg.toLowerCase().includes("buffer too large")
+      ) {
+        throw new Error(
+          `[DduPipeline decompress] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`
+        );
+      }
+      throw e;
+    }
   }
 
   private encryptData(data: Buffer, key: string): Buffer {
