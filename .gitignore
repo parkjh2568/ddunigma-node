@@ -2,3 +2,5 @@
 package-lock.json
 **dist
 ./claude
+./serena
+./agent
