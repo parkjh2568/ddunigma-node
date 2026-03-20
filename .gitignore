@@ -1,6 +1,6 @@
 **node_modules
 package-lock.json
 **dist
-./claude
-./serena
-./agent
+.claude
+.serena
+.agent
