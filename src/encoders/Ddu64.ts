@@ -1,4 +1,4 @@
-import { deflateSync, inflateSync } from "zlib";
+import { deflateSync, inflateSync, ZlibOptions } from "zlib";
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
 import { BaseDdu } from "../base/BaseDdu";
 import {
@@ -140,7 +140,7 @@ export class Ddu64 extends BaseDdu {
   private readonly useAsciiLookup: boolean = false;
 
   /** URL-Safe 모드 여부 */
-  private readonly urlSafe: boolean;
+  private urlSafe: boolean;
 
   /** 암호화 키 */
   private readonly encryptionKey: string | undefined;
@@ -851,10 +851,11 @@ export class Ddu64 extends BaseDdu {
     if (maxBytes === Number.POSITIVE_INFINITY) return inflateSync(data);
 
     try {
-      return inflateSync(data, { maxOutputLength: maxBytes } as any);
-    } catch (e: any) {
-      const msg = String(e?.message ?? "");
-      const code = String(e?.code ?? "");
+      return inflateSync(data, { maxOutputLength: maxBytes } as ZlibOptions);
+    } catch (e: unknown) {
+      const err = e as { message?: string; code?: string };
+      const msg = String(err?.message ?? "");
+      const code = String(err?.code ?? "");
 
       // maxOutputLength 미지원 시 fallback
       if (
@@ -883,6 +884,16 @@ export class Ddu64 extends BaseDdu {
       }
       throw e;
     }
+  }
+
+  /**
+   * 인코딩 푸터에 사용할 마커 문자열을 생성합니다.
+   */
+  private buildMarker(bits: number, compress?: boolean, encrypt?: boolean): string {
+    let marker = "";
+    if (compress) marker += COMPRESS_MARKER;
+    if (encrypt) marker += ENCRYPT_MARKER;
+    return marker + bits.toString();
   }
 
   // --------------------------------------------------------------------------
@@ -1036,13 +1047,6 @@ export class Ddu64 extends BaseDdu {
     }
 
     // 남은 비트 처리 (패딩)
-    const buildMarker = (bits: number) => {
-      let marker = "";
-      if (compress) marker += COMPRESS_MARKER;
-      if (encrypt) marker += ENCRYPT_MARKER;
-      return marker + bits.toString();
-    };
-
     if (accumulatorBits > 0) {
       const paddingBits = bitLength - accumulatorBits;
       const index = accumulator << paddingBits;
@@ -1055,10 +1059,10 @@ export class Ddu64 extends BaseDdu {
         resultParts[resultIdx++] = dduChar[index - div * dduLength];
       }
       resultParts[resultIdx++] = paddingChar;
-      resultParts[resultIdx++] = buildMarker(paddingBits);
+      resultParts[resultIdx++] = this.buildMarker(paddingBits, compress, encrypt);
     } else if (compress || encrypt) {
       resultParts[resultIdx++] = paddingChar;
-      resultParts[resultIdx++] = buildMarker(0);
+      resultParts[resultIdx++] = this.buildMarker(0, compress, encrypt);
     }
 
     resultParts.length = resultIdx;
@@ -1244,13 +1248,6 @@ export class Ddu64 extends BaseDdu {
     }
 
     // 남은 비트 처리 (패딩)
-    const buildMarker = (bits: number) => {
-      let marker = "";
-      if (compress) marker += COMPRESS_MARKER;
-      if (encrypt) marker += ENCRYPT_MARKER;
-      return marker + bits.toString();
-    };
-
     if (accumulatorBits > 0) {
       const paddingBits = bitLength - accumulatorBits;
       const index = Number(accumulator << BigInt(paddingBits));
@@ -1263,10 +1260,10 @@ export class Ddu64 extends BaseDdu {
         resultParts[resultIdx++] = dduChar[index - div * dduLength];
       }
       resultParts[resultIdx++] = this.paddingChar;
-      resultParts[resultIdx++] = buildMarker(paddingBits);
+      resultParts[resultIdx++] = this.buildMarker(paddingBits, compress, encrypt);
     } else if (compress || encrypt) {
       resultParts[resultIdx++] = this.paddingChar;
-      resultParts[resultIdx++] = buildMarker(0);
+      resultParts[resultIdx++] = this.buildMarker(0, compress, encrypt);
     }
 
     resultParts.length = resultIdx;
@@ -1468,8 +1465,8 @@ export class Ddu64 extends BaseDdu {
           charLength,
           isPredefined: state.isPredefined,
         };
-      } catch (e: any) {
-        if (shouldThrow && !e.message.includes("internal retry")) throw e;
+      } catch (e: unknown) {
+        if (shouldThrow && !(e instanceof Error && e.message.includes("internal retry"))) throw e;
         state = this.getFallbackCharSet(dduOptions);
         retryCount++;
       }
@@ -1623,7 +1620,7 @@ export class Ddu64 extends BaseDdu {
           const msg = `[Ddu64 Constructor] URL-Safe mode conflict: charset character "${c}" contains "${ch}" which would be transformed to "${URL_SAFE_REVERSE_MAP[ch]}" during decoding.`;
           if (shouldThrow) throw new Error(msg);
           // shouldThrow가 아닌 경우 urlSafe를 비활성화
-          (this as any).urlSafe = false;
+          this.urlSafe = false;
           return;
         }
       }
@@ -1631,7 +1628,7 @@ export class Ddu64 extends BaseDdu {
       if (paddingChar.includes(ch)) {
         const msg = `[Ddu64 Constructor] URL-Safe mode conflict: padding character "${paddingChar}" contains "${ch}" which would be transformed to "${URL_SAFE_REVERSE_MAP[ch]}" during decoding.`;
         if (shouldThrow) throw new Error(msg);
-        (this as any).urlSafe = false;
+        this.urlSafe = false;
         return;
       }
     }

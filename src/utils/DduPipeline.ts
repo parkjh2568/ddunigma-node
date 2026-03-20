@@ -1,4 +1,4 @@
-import { deflateSync, inflateSync } from "zlib";
+import { deflateSync, inflateSync, ZlibOptions } from "zlib";
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
 import { Ddu64 } from "../encoders/Ddu64";
 import { DduConstructorOptions } from "../types";
@@ -233,10 +233,11 @@ export class DduPipeline {
     }
 
     try {
-      return inflateSync(data, { maxOutputLength: maxBytes } as any);
-    } catch (e: any) {
-      const msg = String(e?.message ?? "");
-      const code = String(e?.code ?? "");
+      return inflateSync(data, { maxOutputLength: maxBytes } as ZlibOptions);
+    } catch (e: unknown) {
+      const err = e as { message?: string; code?: string };
+      const msg = String(err?.message ?? "");
+      const code = String(err?.code ?? "");
 
       // maxOutputLength 미지원 시 fallback
       if (

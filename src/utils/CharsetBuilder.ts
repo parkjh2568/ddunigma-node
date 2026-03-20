@@ -171,13 +171,15 @@ export class CharsetBuilder {
   }
 
   /**
-   * 시드 기반 난수 생성기
+   * 시드 기반 난수 생성기 (xorshift32)
    */
   private seededRandom(seed: number): () => number {
-    let s = seed;
+    let s = seed | 0 || 1; // 0 방지
     return () => {
-      s = Math.sin(s) * 10000;
-      return s - Math.floor(s);
+      s ^= s << 13;
+      s ^= s >> 17;
+      s ^= s << 5;
+      return ((s >>> 0) / 0x100000000);
     };
   }
 
@@ -195,7 +197,7 @@ export class CharsetBuilder {
   limitToPowerOfTwo(): CharsetBuilder {
     const len = this.chars.length;
     if (len === 0) return this;
-    const pow2 = Math.pow(2, Math.floor(Math.log2(len)));
+    const pow2 = 1 << Math.floor(Math.log2(len));
     this.chars = this.chars.slice(0, pow2);
     return this;
   }

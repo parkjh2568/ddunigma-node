@@ -92,13 +92,8 @@ export class DduEncodeStream extends Transform {
     }
   }
 
-  private encodeChunk(data: Buffer, isLast: boolean): string {
-    // 이미 options에서 compress: false로 강제되어 있음
-    // 마지막 청크에만 패딩 정보가 포함됨
-    if (isLast) {
-      return this.encoder.encode(data, this.options);
-    }
-    // 중간 청크는 인코딩만 수행
+  private encodeChunk(data: Buffer, _isLast: boolean): string {
+    // options에서 compress: false로 강제되어 있으므로 모든 청크 동일 처리
     return this.encoder.encode(data, this.options);
   }
 }
@@ -137,13 +132,12 @@ export class DduDecodeStream extends Transform {
     const info = encoder.getCharSetInfo();
     this.charLength = info.charLength;
     // 디코딩 청크 크기
-    this.chunkSize = this.calculateChunkSize(info.bitLength, info.charLength);
+    this.chunkSize = this.calculateChunkSize(info.charLength);
   }
 
-  private calculateChunkSize(bitLength: number, charLength: number): number {
+  private calculateChunkSize(charLength: number): number {
     // 문자 길이의 배수로 설정
-    const baseSize = charLength * 1024;
-    return baseSize;
+    return charLength * 1024;
   }
 
   _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
