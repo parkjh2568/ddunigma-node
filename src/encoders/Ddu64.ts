@@ -1,5 +1,4 @@
-import { deflateSync, inflateSync, ZlibOptions } from "zlib";
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
+import { deflateSync } from "zlib";
 import { BaseDdu } from "../base/BaseDdu";
 import {
   DduConstructorOptions,
@@ -10,6 +9,12 @@ import {
   dduDefaultConstructorOptions,
 } from "../types";
 import { getCharSet } from "../charSets";
+import {
+  deriveKey,
+  encryptAes256Gcm,
+  decryptAes256Gcm,
+  inflateWithLimit as inflateWithLimitUtil,
+} from "../utils/crypto";
 
 // ============================================================================
 // 상수 정의
@@ -162,8 +167,8 @@ export class Ddu64 extends BaseDdu {
   /** URL-Safe 모드 여부 */
   private readonly urlSafe: boolean;
 
-  /** 암호화 키 */
-  private readonly encryptionKey: string | undefined;
+  /** 암호화 키 해시 (AES-256용 32바이트) */
+  private readonly encryptionKeyHash: Buffer | undefined;
 
   /** 기본 체크섬 사용 여부 */
   private readonly defaultChecksum: boolean;
@@ -293,7 +298,9 @@ export class Ddu64 extends BaseDdu {
     this.urlSafe = requestUrlSafe
       ? this.isUrlSafeCompatible(this.dduChar, this.paddingChar, shouldThrow)
       : false;
-    this.encryptionKey = dduOptions?.encryptionKey;
+    this.encryptionKeyHash = dduOptions?.encryptionKey
+      ? deriveKey(dduOptions.encryptionKey)
+      : undefined;
     this.defaultChecksum = dduOptions?.checksum ?? false;
     this.defaultChunkSize = dduOptions?.chunkSize;
     this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
@@ -350,7 +357,7 @@ export class Ddu64 extends BaseDdu {
 
     // 암호화 처리
     let isEncrypted = false;
-    if (this.encryptionKey) {
+    if (this.encryptionKeyHash) {
       workingBuffer = this.encryptData(workingBuffer);
       isEncrypted = true;
       if (onProgress) {
@@ -517,7 +524,7 @@ export class Ddu64 extends BaseDdu {
     }
 
     // 복호화
-    if (isEncrypted && this.encryptionKey) {
+    if (isEncrypted && this.encryptionKeyHash) {
       if (onProgress) {
         onProgress({ processedBytes: Math.floor(inputLength * 0.85), totalBytes: inputLength, percent: DECODE_PROGRESS.DECRYPT, stage: "decrypt" });
       }
@@ -562,7 +569,7 @@ export class Ddu64 extends BaseDdu {
       defaultMaxDecodedBytes: this.defaultMaxDecodedBytes,
       defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
       urlSafe: this.urlSafe,
-      hasEncryptionKey: !!this.encryptionKey,
+      hasEncryptionKey: !!this.encryptionKeyHash,
       defaultChecksum: this.defaultChecksum,
       defaultChunkSize: this.defaultChunkSize,
     };
@@ -764,43 +771,20 @@ export class Ddu64 extends BaseDdu {
    * 데이터를 AES-256-GCM으로 암호화합니다.
    */
   private encryptData(data: Buffer): Buffer {
-    if (!this.encryptionKey) {
+    if (!this.encryptionKeyHash) {
       throw new Error("[Ddu64 encrypt] Encryption key is not set");
     }
-
-    // 키를 32바이트로 해시
-    const key = createHash("sha256").update(this.encryptionKey).digest();
-    const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", key, iv);
-
-    const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
-    const authTag = cipher.getAuthTag();
-
-    // iv (12) + authTag (16) + encrypted
-    return Buffer.concat([iv, authTag, encrypted]);
+    return encryptAes256Gcm(data, this.encryptionKeyHash);
   }
 
   /**
    * AES-256-GCM으로 암호화된 데이터를 복호화합니다.
    */
   private decryptData(data: Buffer): Buffer {
-    if (!this.encryptionKey) {
+    if (!this.encryptionKeyHash) {
       throw new Error("[Ddu64 decrypt] Encryption key is not set");
     }
-
-    if (data.length < 28) {
-      throw new Error("[Ddu64 decrypt] Invalid encrypted data");
-    }
-
-    const key = createHash("sha256").update(this.encryptionKey).digest();
-    const iv = data.subarray(0, 12);
-    const authTag = data.subarray(12, 28);
-    const encrypted = data.subarray(28);
-
-    const decipher = createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(authTag);
-
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return decryptAes256Gcm(data, this.encryptionKeyHash);
   }
 
   // --------------------------------------------------------------------------
@@ -872,42 +856,7 @@ export class Ddu64 extends BaseDdu {
    * 크기 제한을 적용하여 압축을 해제합니다.
    */
   private inflateWithLimit(data: Buffer, maxBytes: number): Buffer {
-    if (maxBytes === Number.POSITIVE_INFINITY) return inflateSync(data);
-
-    try {
-      return inflateSync(data, { maxOutputLength: maxBytes } as ZlibOptions);
-    } catch (e: unknown) {
-      const err = e as { message?: string; code?: string };
-      const msg = String(err?.message ?? "");
-      const code = String(err?.code ?? "");
-
-      // maxOutputLength 미지원 시 fallback
-      if (
-        msg.toLowerCase().includes("maxoutputlength") ||
-        msg.toLowerCase().includes("unknown option") ||
-        code === "ERR_INVALID_ARG_VALUE"
-      ) {
-        const inflated = inflateSync(data);
-        if (inflated.length > maxBytes) {
-          throw new Error(
-            `[Ddu64 decode] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`
-          );
-        }
-        return inflated;
-      }
-
-      // 출력 제한 초과
-      if (
-        code === "ERR_BUFFER_TOO_LARGE" ||
-        msg.toLowerCase().includes("output length") ||
-        msg.toLowerCase().includes("buffer too large")
-      ) {
-        throw new Error(
-          `[Ddu64 decode] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`
-        );
-      }
-      throw e;
-    }
+    return inflateWithLimitUtil(data, maxBytes, "Ddu64 decode");
   }
 
   // --------------------------------------------------------------------------
@@ -1165,8 +1114,46 @@ export class Ddu64 extends BaseDdu {
           }
         }
       }
+    } else if (this.useAsciiLookup && this.fastAsciiLookup && charLength === 1) {
+      // 가변 길이 charset - ASCII 최적화 경로
+      const asciiLookup = this.fastAsciiLookup;
+      const maxVal = this.maxBinaryValue;
+      for (let i = 0; i < inputLen; i += chunkSize) {
+        const code1 = cleanedInput.charCodeAt(i);
+        const code2 = cleanedInput.charCodeAt(i + 1);
+        const v1 = code1 < 128 ? asciiLookup[code1] : -1;
+        const v2 = code2 < 128 ? asciiLookup[code2] : -1;
+
+        if (v1 < 0) {
+          throw new Error(`[Ddu64 decode] Invalid character "${cleanedInput[i]}" at ${i}`);
+        }
+        if (v2 < 0) {
+          throw new Error(
+            `[Ddu64 decode] Invalid character "${cleanedInput[i + 1]}" at ${i + charLength}`
+          );
+        }
+
+        const value = v1 * dduLength + v2;
+        if (value >= maxVal) {
+          throw new Error(`[Ddu64 decode] Value ${value} exceeds range`);
+        }
+
+        accumulator = (accumulator << bitLength) | value;
+        accumulatorBits += bitLength;
+
+        if (i + chunkSize >= inputLen && paddingBits > 0) {
+          accumulator >>= paddingBits;
+          accumulatorBits -= paddingBits;
+        }
+
+        while (accumulatorBits >= BYTE_BITS) {
+          accumulatorBits -= BYTE_BITS;
+          buffer[bufIdx++] = (accumulator >> accumulatorBits) & BYTE_MASK;
+          accumulator &= (1 << accumulatorBits) - 1;
+        }
+      }
     } else {
-      // 가변 길이 charset
+      // 가변 길이 charset - 일반 룩업 경로
       const lookup = this.dduBinaryLookup;
       for (let i = 0; i < inputLen; i += chunkSize) {
         const c1 = cleanedInput.slice(i, i + charLength);

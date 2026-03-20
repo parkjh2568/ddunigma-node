@@ -1,7 +1,41 @@
-import { Transform, TransformCallback, TransformOptions } from "stream";
+import { Transform, TransformCallback, TransformOptions, PassThrough } from "stream";
 import { createDeflate, createInflate } from "zlib";
 import { Ddu64 } from "../encoders/Ddu64";
 import { DduOptions } from "../types";
+
+/**
+ * 두 스트림을 하나의 ReadWrite 스트림으로 결합합니다.
+ * write는 input에, read는 output에서 수행됩니다.
+ */
+function combineStreams(input: NodeJS.WritableStream, output: NodeJS.ReadableStream): NodeJS.ReadWriteStream {
+  const combined = new PassThrough();
+
+  // write 방향: combined → input
+  const origWrite = combined.write.bind(combined);
+  combined.write = function (chunk: any, encodingOrCb?: any, cb?: any): boolean {
+    if (typeof encodingOrCb === "function") {
+      return (input as any).write(chunk, encodingOrCb);
+    }
+    return (input as any).write(chunk, encodingOrCb, cb);
+  } as any;
+  combined.end = function (chunk?: any, encodingOrCb?: any, cb?: any): any {
+    if (typeof chunk === "function") {
+      return (input as any).end(chunk);
+    }
+    if (typeof encodingOrCb === "function") {
+      return (input as any).end(chunk, encodingOrCb);
+    }
+    return (input as any).end(chunk, encodingOrCb, cb);
+  } as any;
+
+  // read 방향: output → combined (push)
+  (output as any).on("data", (data: any) => origWrite(data));
+  (output as any).on("end", () => combined.push(null));
+  (output as any).on("error", (err: Error) => combined.destroy(err));
+  (input as any).on("error", (err: Error) => combined.destroy(err));
+
+  return combined;
+}
 
 /**
  * Ddu64 인코딩을 위한 Transform 스트림
@@ -194,48 +228,13 @@ export function createEncodeStream(
   options?: DduOptions & TransformOptions
 ): NodeJS.ReadWriteStream {
   const encodeStream = new DduEncodeStream(encoder, options);
-  
+
   if (options?.compress) {
     const deflate = createDeflate({ level: 9 });
-    // deflate 스트림의 출력을 encodeStream으로 파이프
     deflate.pipe(encodeStream);
-    // 외부에는 첫 파이프라인(여기서는 deflate)을 반환하여
-    // 사용자가 deflate 스트림에 write하도록 함.
-    // 하지만 NodeJS 파이프라인 구조를 고려할 때, Duplex 스트림을
-    // 만들거나, 반환된 객체가 체인의 앞부분이 되게 함.
-    // 여기서는 간단히 deflate 스트림의 반환을 수정하기 위해 
-    // 사용하기 편하게 stream.pipeline 처럼 동작을 원할 수 있으나,
-    // 단일 인터페이스로는 pipe 체인을 외부로 노출하는 것이 좋음.
-    
-    // 이를 더 쉽게 다루기 위해 커스텀 Duplex 혹은 Transform을 만들기보다,
-    // 파이핑된 마지막 스트림에서 읽고, 앞 단에 쓰는 형태로 구성이 필요하지만,
-    // 가장 흔한 패턴은 "write는 deflate에, read는 encodeStream에서" 임.
-    // 타입 호환과 안전한 사용을 위해 Transform을 감싼 형태로 리턴하는 것이 좋다.
-    
-    // 단순 파이프 구현 (내부 클래스는 Transform을 감싸지 않고 바로 리턴하면 파이프 인터페이스와 불일치 발생 가능성)
-    // 따라서 임시적으로 파이프라인을 캡슐화한 Transform 반환
-    
-    const combined = new Transform({
-      transform(chunk, encoding, callback) {
-        if (!deflate.write(chunk, encoding)) {
-          deflate.once('drain', callback);
-        } else {
-          callback();
-        }
-      },
-      flush(callback) {
-        deflate.end(() => callback());
-      }
-    });
-    
-    encodeStream.on('data', (data) => combined.push(data));
-    encodeStream.on('end', () => combined.push(null));
-    encodeStream.on('error', (err) => combined.emit('error', err));
-    deflate.on('error', (err) => combined.emit('error', err));
-    
-    return combined;
+    return combineStreams(deflate, encodeStream);
   }
-  
+
   return encodeStream;
 }
 
@@ -248,31 +247,11 @@ export function createDecodeStream(
   options?: DduOptions & TransformOptions
 ): NodeJS.ReadWriteStream {
   const decodeStream = new DduDecodeStream(encoder, options);
-  
+
   if (options?.compress) {
     const inflate = createInflate();
-    // decodeStream -> inflate 순으로 파이프
     decodeStream.pipe(inflate);
-    
-    const combined = new Transform({
-      transform(chunk, encoding, callback) {
-        if (!decodeStream.write(chunk, encoding)) {
-          decodeStream.once('drain', callback);
-        } else {
-          callback();
-        }
-      },
-      flush(callback) {
-        decodeStream.end(() => callback());
-      }
-    });
-    
-    inflate.on('data', (data) => combined.push(data));
-    inflate.on('end', () => combined.push(null));
-    inflate.on('error', (err) => combined.emit('error', err));
-    decodeStream.on('error', (err) => combined.emit('error', err));
-    
-    return combined;
+    return combineStreams(decodeStream, inflate);
   }
 
   return decodeStream;

@@ -1,7 +1,12 @@
-import { deflateSync, inflateSync, ZlibOptions } from "zlib";
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
+import { deflateSync } from "zlib";
 import { Ddu64 } from "../encoders/Ddu64";
 import { DduConstructorOptions } from "../types";
+import {
+  deriveKey,
+  encryptAes256Gcm,
+  decryptAes256Gcm,
+  inflateWithLimit,
+} from "./crypto";
 
 /**
  * 파이프라인 단계 타입
@@ -149,9 +154,11 @@ export class DduPipeline {
             return { type: "decode", encoder: step.encoder };
           case "decode":
             return { type: "encode", encoder: step.encoder };
-          default:
-            // transform은 역방향 지원 안함
-            return step;
+          case "transform":
+          case "transformString":
+            throw new Error(
+              `[DduPipeline reverse] Cannot reverse "${step.type}" step. Custom transform functions are not reversible. Use explicit encode/decode pairs instead.`
+            );
         }
       });
     return reversed;
@@ -228,66 +235,19 @@ export class DduPipeline {
   }
 
   private decompressData(data: Buffer, maxBytes?: number): Buffer {
-    if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
-      return inflateSync(data);
-    }
-
-    try {
-      return inflateSync(data, { maxOutputLength: maxBytes } as ZlibOptions);
-    } catch (e: unknown) {
-      const err = e as { message?: string; code?: string };
-      const msg = String(err?.message ?? "");
-      const code = String(err?.code ?? "");
-
-      // maxOutputLength 미지원 시 fallback
-      if (
-        msg.toLowerCase().includes("maxoutputlength") ||
-        msg.toLowerCase().includes("unknown option") ||
-        code === "ERR_INVALID_ARG_VALUE"
-      ) {
-        const inflated = inflateSync(data);
-        if (inflated.length > maxBytes) {
-          throw new Error(
-            `[DduPipeline decompress] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`
-          );
-        }
-        return inflated;
-      }
-
-      // 출력 제한 초과
-      if (
-        code === "ERR_BUFFER_TOO_LARGE" ||
-        msg.toLowerCase().includes("output length") ||
-        msg.toLowerCase().includes("buffer too large")
-      ) {
-        throw new Error(
-          `[DduPipeline decompress] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`
-        );
-      }
-      throw e;
-    }
+    return inflateWithLimit(
+      data,
+      maxBytes ?? Number.POSITIVE_INFINITY,
+      "DduPipeline decompress"
+    );
   }
 
   private encryptData(data: Buffer, key: string): Buffer {
-    const keyHash = createHash("sha256").update(key).digest();
-    const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", keyHash, iv);
-    const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
-    const authTag = cipher.getAuthTag();
-    return Buffer.concat([iv, authTag, encrypted]);
+    return encryptAes256Gcm(data, deriveKey(key));
   }
 
   private decryptData(data: Buffer, key: string): Buffer {
-    if (data.length < 28) {
-      throw new Error("[DduPipeline decrypt] Invalid encrypted data");
-    }
-    const keyHash = createHash("sha256").update(key).digest();
-    const iv = data.subarray(0, 12);
-    const authTag = data.subarray(12, 28);
-    const encrypted = data.subarray(28);
-    const decipher = createDecipheriv("aes-256-gcm", keyHash, iv);
-    decipher.setAuthTag(authTag);
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return decryptAes256Gcm(data, deriveKey(key));
   }
 
   /**
