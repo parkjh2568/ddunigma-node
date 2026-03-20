@@ -9,7 +9,8 @@
     "build": "rm -rf dist/* && tsc -p tsconfig.json && tsc -p tsconfig-cjs.json && sh postProcess.sh",
     "test": "tsx ./src/test/test-quick.ts",
     "test:comprehensive": "tsx ./src/test/test-comprehensive.ts",
-    "test:all": "tsx ./src/test/test-all-integrated.ts",
+    "test:compat": "tsx ./src/test/test-compat.ts",
+    "test:all": "tsx ./src/test/test-quick.ts && tsx ./src/test/test-comprehensive.ts && tsx ./src/test/test-compat.ts",
     "dev": "tsx ./src/test/test-quick.ts"
   },
   "exports": {
