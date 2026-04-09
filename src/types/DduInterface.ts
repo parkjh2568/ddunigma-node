@@ -43,6 +43,41 @@ export interface DduEncodeStats {
   bitLength: number;
 }
 
+export interface CharSetInfo {
+  /** 인코딩에 사용할 문자 배열 */
+  charSet: string[];
+  /** 패딩 문자 */
+  paddingChar: string;
+  /** 각 charset 문자의 길이 */
+  charLength: number;
+  /** 비트 길이 */
+  bitLength: number;
+  /** 2의 제곱수 charset 여부 */
+  usePowerOfTwo: boolean;
+  /** 문자열 인코딩 방식 */
+  encoding: BufferEncoding;
+  /** 기본 압축 사용 여부 */
+  defaultCompress: boolean;
+  /** 기본 최대 디코딩 바이트 수 */
+  defaultMaxDecodedBytes: number;
+  /** 기본 최대 압축해제 바이트 수 */
+  defaultMaxDecompressedBytes: number;
+  /** URL-Safe 모드 여부 */
+  urlSafe: boolean;
+  /** 암호화 키 보유 여부 */
+  hasEncryptionKey: boolean;
+  /** 기본 체크섬 사용 여부 */
+  defaultChecksum: boolean;
+  /** 기본 청크 크기 */
+  defaultChunkSize: number | undefined;
+  /** 기본 청크 구분자 */
+  defaultChunkSeparator: string;
+  /** 기본 압축 레벨 */
+  defaultCompressionLevel: number;
+  /** 기본 압축 알고리즘 */
+  defaultCompressionAlgorithm: "deflate" | "brotli";
+}
+
 export interface DduOptions {
   /** 압축 사용 여부 (zlib deflate 또는 brotli) */
   compress?: boolean;

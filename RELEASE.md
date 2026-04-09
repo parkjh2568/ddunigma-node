@@ -26,6 +26,7 @@ pnpm bench
 5. 배포 산출물 확인을 위해 `pnpm pack:check` 또는 `npm pack` 결과를 점검합니다.
 
 현재 CI 기본 검증도 같은 순서로 `pnpm lint`, `pnpm build`, `pnpm test`, `pnpm pack:check`를 실행합니다.
+자동 수정이 필요할 때만 별도로 `pnpm lint:fix`를 사용합니다.
 
 ## Recommended Pack Check
 
@@ -44,8 +45,17 @@ npm pack --dry-run
 ## Publish
 
 ```bash
+npm whoami
 npm publish
 ```
+
+첫 scoped public 배포이거나 권한이 애매하면 아래도 함께 확인합니다.
+
+```bash
+npm access ls-packages $(npm whoami)
+```
+
+`package.json`의 `publishConfig.access=public`이 기본 공개 배포를 강제합니다. 그래도 `404 Not Found`가 나면 보통 패키지 이름 문제보다는 scope 권한/소유권 문제일 가능성이 큽니다.
 
 배포 후 확인:
 

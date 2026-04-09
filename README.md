@@ -438,6 +438,28 @@ pnpm bench
 ### `getCharSetInfo(): CharSetInfo`
 
 현재 인코더의 charset 정보를 반환합니다.
+이 타입은 패키지에서 직접 export됩니다.
+
+```typescript
+interface CharSetInfo {
+  charSet: string[];
+  paddingChar: string;
+  charLength: number;
+  bitLength: number;
+  usePowerOfTwo: boolean;
+  encoding: BufferEncoding;
+  defaultCompress: boolean;
+  defaultMaxDecodedBytes: number;
+  defaultMaxDecompressedBytes: number;
+  urlSafe: boolean;
+  hasEncryptionKey: boolean;
+  defaultChecksum: boolean;
+  defaultChunkSize?: number;
+  defaultChunkSeparator: string;
+  defaultCompressionLevel: number;
+  defaultCompressionAlgorithm: "deflate" | "brotli";
+}
+```
 
 ---
 

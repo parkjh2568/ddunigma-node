@@ -17,11 +17,15 @@
 ### Changed
 
 - 문서 구성을 `README`, `RELEASE`, `CHANGELOG` 중심으로 단순화하고 불필요한 내부 상태 문서를 제거
+- 릴리즈 가이드와 패키지 설정에 scoped public 배포 기본값 및 권한 확인 절차를 반영
+- `lint`를 검증 전용으로 두고 자동 수정은 `lint:fix`로 분리
+- `getCharSetInfo()` 반환 타입 `CharSetInfo`를 공개 타입으로 export
 
 ### Fixed
 
 - 암호화된 payload를 키 없이 디코드할 때 일반 decode와 공개 decode stream이 즉시 에러를 반환하도록 보강
 - 공개 stream encode 경로가 생성자 기본 `compressionLevel`과 `0` 레벨 값을 올바르게 반영하도록 수정
+- `DduPipeline.compress(0)`이 deflate level `0`을 `1`로 강제하던 문제 수정
 - 위 회귀를 막기 위한 암호화 무키 실패 및 stream 압축 레벨 테스트 추가
 
 ## [2.1.1] - 2026-04-09

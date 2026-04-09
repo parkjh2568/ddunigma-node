@@ -1,4 +1,4 @@
-import { DduOptions } from "../types";
+import { CharSetInfo, DduOptions } from "../types";
 
 export abstract class BaseDdu {
   protected readonly defaultEncoding: BufferEncoding = "utf-8";
@@ -53,12 +53,5 @@ export abstract class BaseDdu {
    * 현재 인코더의 charset 정보를 반환합니다.
    * @returns charset 설정 정보 객체
    */
-  abstract getCharSetInfo(): {
-    charSet: string[];
-    paddingChar: string;
-    charLength: number;
-    bitLength: number;
-    usePowerOfTwo: boolean;
-    encoding: BufferEncoding;
-  };
+  abstract getCharSetInfo(): CharSetInfo;
 }

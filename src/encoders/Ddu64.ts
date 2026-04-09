@@ -6,6 +6,7 @@ import {
   DduOptions,
   DduSetSymbol,
   DduEncodeStats,
+  CharSetInfo,
   dduDefaultConstructorOptions,
 } from "../types";
 import { getCharSet } from "../charSets";
@@ -707,7 +708,7 @@ export class Ddu64 extends BaseDdu {
    *
    * @returns charset 설정 정보 객체
    */
-  getCharSetInfo() {
+  getCharSetInfo(): CharSetInfo {
     return {
       charSet: [...this.dduChar],
       paddingChar: this.paddingChar,

@@ -255,7 +255,7 @@ export class DduPipeline {
         },
       });
     }
-    return deflateSync(data, { level: Math.min(9, Math.max(1, level)) });
+    return deflateSync(data, { level: Math.min(9, Math.max(0, level)) });
   }
 
   private decompressData(

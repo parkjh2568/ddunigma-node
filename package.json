@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src benchmarks eslint.config.mjs tsup.config.ts --fix",
+    "lint": "eslint src benchmarks eslint.config.mjs tsup.config.ts",
+    "lint:fix": "eslint src benchmarks eslint.config.mjs tsup.config.ts --fix",
     "format": "prettier --write src/",
     "test:all": "vitest run"
   },
@@ -37,7 +38,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/parkjh2568/ddunigma-node.git"
+    "url": "git+https://github.com/parkjh2568/ddunigma-node.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "author": "",
   "license": "BSD-2-Clause",

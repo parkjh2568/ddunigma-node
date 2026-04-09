@@ -172,6 +172,18 @@ describe("Negative / Exception Test Suite for Coverage", () => {
       const output = pipeline.processToBuffer(data);
       expect(output.equals(data)).toBe(true);
     });
+
+    it("should preserve deflate level 0 instead of coercing it to level 1", () => {
+      const data = Buffer.from("a".repeat(200));
+      const pipeline = new DduPipeline().compress(0);
+
+      const output = pipeline.processToBuffer(data);
+      const expected = deflateSync(data, { level: 0 });
+      const levelOne = deflateSync(data, { level: 1 });
+
+      expect(output.equals(expected)).toBe(true);
+      expect(output.equals(levelOne)).toBe(false);
+    });
   });
 
   describe("URL-safe Transport Safety", () => {
