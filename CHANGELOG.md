@@ -16,7 +16,13 @@
 
 ### Changed
 
-- 문서 역할을 `README`, `PROJECT_STATUS`, `RELEASE`, `CHANGELOG` 기준으로 다시 정리하고 검증 명령 표기를 현재 상태에 맞게 동기화
+- 문서 구성을 `README`, `RELEASE`, `CHANGELOG` 중심으로 단순화하고 불필요한 내부 상태 문서를 제거
+
+### Fixed
+
+- 암호화된 payload를 키 없이 디코드할 때 일반 decode와 공개 decode stream이 즉시 에러를 반환하도록 보강
+- 공개 stream encode 경로가 생성자 기본 `compressionLevel`과 `0` 레벨 값을 올바르게 반영하도록 수정
+- 위 회귀를 막기 위한 암호화 무키 실패 및 stream 압축 레벨 테스트 추가
 
 ## [2.1.1] - 2026-04-09
 
@@ -26,7 +32,6 @@
 - decode stream footer auto-detect 지원 추가
 - DDU/Korean text, TWOCHARSET mixed text, incompressible binary를 포함한 benchmark 시나리오 추가
 - GitHub Actions CI(`lint`, `build`, `test`, `pack:check`) 추가
-- `PROJECT_STATUS.md` 기반의 내부 상태 문서 체계 정리
 
 ### Changed
 

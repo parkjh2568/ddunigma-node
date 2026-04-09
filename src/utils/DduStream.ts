@@ -11,6 +11,21 @@ type StreamHeaderMeta = {
   encrypted: boolean;
 };
 
+function normalizeCompressionLevel(
+  value: number | undefined,
+  algorithm: "deflate" | "brotli"
+): number {
+  const fallback = 6;
+  const normalized =
+    value === undefined || !Number.isFinite(value)
+      ? fallback
+      : Math.floor(value);
+
+  return algorithm === "brotli"
+    ? Math.min(11, Math.max(0, normalized))
+    : Math.min(9, Math.max(0, normalized));
+}
+
 function getStreamHeaderLength(paddingChar: string): number {
   return paddingChar.length * 2 + STREAM_HEADER_MAGIC.length + 2;
 }
@@ -528,6 +543,10 @@ class DduAutoDetectDecodeStream extends Transform {
   }
 
   private initializeInnerPipeline(header: StreamHeaderMeta): void {
+    if (header.encrypted && !this.encoder.getCharSetInfo().hasEncryptionKey) {
+      throw new Error("[DduStream decode] Encrypted stream requires an encryptionKey");
+    }
+
     const stream = createDecodeStream(this.encoder, {
       ...this.options,
       streamAutoDetect: false,
@@ -609,11 +628,16 @@ export function createEncodeStream(
   const pipeline: Transform[] = [];
 
   if (shouldCompress) {
-    const isBrotli = compressionAlgorithm === "brotli";
-    const level = options?.compressionLevel || 6;
+    const activeCompressionAlgorithm =
+      compressionAlgorithm ?? info.defaultCompressionAlgorithm;
+    const isBrotli = activeCompressionAlgorithm === "brotli";
+    const level = normalizeCompressionLevel(
+      options?.compressionLevel ?? info.defaultCompressionLevel,
+      activeCompressionAlgorithm
+    );
     const compressor = isBrotli
       ? createBrotliCompress({ params: { [constants.BROTLI_PARAM_QUALITY]: Math.min(11, Math.max(0, level)) } })
-      : createDeflate({ level: Math.min(9, Math.max(1, level)) }) as Transform;
+      : createDeflate({ level: Math.min(9, Math.max(0, level)) }) as Transform;
     pipeline.push(compressor);
   }
 

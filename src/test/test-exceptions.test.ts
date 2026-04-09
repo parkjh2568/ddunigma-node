@@ -83,6 +83,18 @@ describe("Negative / Exception Test Suite for Coverage", () => {
       });
       expect(encoder.decode(encoded, { chunkSeparator: "--" })).toBe("hello world");
     });
+
+    it("should throw when decoding encrypted payload without an encryption key", () => {
+      const base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("");
+      const encodeEncoder = new Ddu64(base64, "=", {
+        encryptionKey: "secret-key",
+        throwOnError: true,
+      });
+      const decodeEncoder = new Ddu64(base64, "=", { throwOnError: true });
+      const encoded = encodeEncoder.encode("secret payload");
+
+      expect(() => decodeEncoder.decode(encoded)).toThrow(/encryptionKey/i);
+    });
   });
 
   describe("Crypto Limits (Zip Bomb Defense)", () => {

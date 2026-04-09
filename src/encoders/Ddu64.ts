@@ -289,8 +289,11 @@ export class Ddu64 extends BaseDdu {
     this.defaultChecksum = dduOptions?.checksum ?? false;
     this.defaultChunkSize = dduOptions?.chunkSize;
     this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
-    this.defaultCompressionLevel = Math.max(1, Math.floor(dduOptions?.compressionLevel ?? 6));
     this.defaultCompressionAlgorithm = dduOptions?.compressionAlgorithm ?? "deflate";
+    this.defaultCompressionLevel = this.normalizeCompressionLevel(
+      dduOptions?.compressionLevel,
+      this.defaultCompressionAlgorithm
+    );
   }
 
   // --------------------------------------------------------------------------
@@ -374,10 +377,13 @@ export class Ddu64 extends BaseDdu {
       const compressionAlgorithm =
         options?.compressionAlgorithm ?? this.defaultCompressionAlgorithm;
       const isBrotli = compressionAlgorithm === "brotli";
-      const level = options?.compressionLevel ?? this.defaultCompressionLevel;
+      const level = this.normalizeCompressionLevel(
+        options?.compressionLevel ?? this.defaultCompressionLevel,
+        compressionAlgorithm
+      );
       const compressedBuffer = isBrotli 
         ? brotliCompressSync(workingBuffer, { params: { [constants.BROTLI_PARAM_QUALITY]: Math.min(11, Math.max(0, level)) } })
-        : deflateSync(workingBuffer, { level: Math.min(9, Math.max(1, level)) });
+        : deflateSync(workingBuffer, { level: Math.min(9, Math.max(0, level)) });
       
       compressedSize = compressedBuffer.length;
       if (compressedBuffer.length < workingBuffer.length) {
@@ -482,6 +488,10 @@ export class Ddu64 extends BaseDdu {
     }
 
     const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted } = this.parseFooter(workingInput);
+
+    if (isEncrypted && allowInternalDecrypt && !this.encryptionKeyHash) {
+      throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
+    }
 
     this.assertEncodedInputAligned(cleanedInput);
 
@@ -617,6 +627,10 @@ export class Ddu64 extends BaseDdu {
 
     const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted } = this.parseFooter(workingInput);
 
+    if (isEncrypted && allowInternalDecrypt && !this.encryptionKeyHash) {
+      throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
+    }
+
     this.assertEncodedInputAligned(cleanedInput);
 
     const maxDecodedBytes = this.normalizeLimit(
@@ -709,6 +723,7 @@ export class Ddu64 extends BaseDdu {
       defaultChecksum: this.defaultChecksum,
       defaultChunkSize: this.defaultChunkSize,
       defaultChunkSeparator: this.defaultChunkSeparator,
+      defaultCompressionLevel: this.defaultCompressionLevel,
       defaultCompressionAlgorithm: this.defaultCompressionAlgorithm,
     };
   }
@@ -1042,6 +1057,24 @@ export class Ddu64 extends BaseDdu {
       return fallback;
     }
     return Math.floor(value);
+  }
+
+  /**
+   * 압축 레벨을 알고리즘별 지원 범위에 맞춰 정규화합니다.
+   */
+  private normalizeCompressionLevel(
+    value: number | undefined,
+    algorithm: "deflate" | "brotli"
+  ): number {
+    const fallback = 6;
+    const normalized =
+      value === undefined || !Number.isFinite(value)
+        ? fallback
+        : Math.floor(value);
+
+    return algorithm === "brotli"
+      ? Math.min(11, Math.max(0, normalized))
+      : Math.min(9, Math.max(0, normalized));
   }
 
   /**

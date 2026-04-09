@@ -22,7 +22,7 @@ pnpm pack:check
 pnpm bench
 ```
 
-4. `README.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`가 현재 동작과 맞는지 확인합니다.
+4. `README.md`와 `CHANGELOG.md`가 현재 동작과 맞는지 확인합니다.
 5. 배포 산출물 확인을 위해 `pnpm pack:check` 또는 `npm pack` 결과를 점검합니다.
 
 현재 CI 기본 검증도 같은 순서로 `pnpm lint`, `pnpm build`, `pnpm test`, `pnpm pack:check`를 실행합니다.
@@ -64,4 +64,4 @@ git push origin v<version>
 ## Notes
 
 - benchmark는 성능 비교 참고용이며 배포 차단 기준은 아닙니다.
-- `PROJECT_STATUS.md`는 내부 상태 문서이므로, 릴리즈 노트의 원본은 항상 `CHANGELOG.md`를 기준으로 유지합니다.
+- 릴리즈 노트의 원본은 항상 `CHANGELOG.md`를 기준으로 유지합니다.

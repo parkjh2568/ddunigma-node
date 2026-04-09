@@ -142,6 +142,69 @@ describe("Stream Encryption Logic", () => {
     expect(Buffer.concat(decodedChunks).equals(input)).toBe(true);
   });
 
+  it("should reject auto-detected encrypted streams when decode key is missing", async () => {
+    const encodeEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
+      encryptionKey: "secret-key",
+      compress: true,
+      compressionAlgorithm: "brotli",
+    });
+    const decodeEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=");
+    const input = Buffer.from("stream-autodetect-encryption-missing-key::".repeat(4000));
+    const encodeStream = createEncodeStream(encodeEncoder);
+    const encodedChunks: string[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      Readable.from([input])
+        .pipe(encodeStream)
+        .on("data", (chunk: Buffer | string) => encodedChunks.push(chunk.toString()))
+        .on("end", resolve)
+        .on("error", reject);
+    });
+
+    const decodeStream = createDecodeStream(decodeEncoder);
+    await expect(
+      new Promise<void>((resolve, reject) => {
+        Readable.from([Buffer.from(encodedChunks.join(""), "utf-8")])
+          .pipe(decodeStream)
+          .on("data", () => {})
+          .on("end", resolve)
+          .on("error", reject);
+      })
+    ).rejects.toThrow(/encryptionKey/i);
+  });
+
+  it("should respect encoder default compression levels in public stream encode", async () => {
+    const input = Buffer.from(("abc123xyz-".repeat(2000) + "\n").repeat(200));
+    const lowEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
+      compress: true,
+      compressionAlgorithm: "brotli",
+      compressionLevel: 0,
+    });
+    const highEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
+      compress: true,
+      compressionAlgorithm: "brotli",
+      compressionLevel: 11,
+    });
+
+    const collect = async (encoder: Ddu64): Promise<string> => {
+      const chunks: string[] = [];
+      await new Promise<void>((resolve, reject) => {
+        Readable.from([input])
+          .pipe(createEncodeStream(encoder))
+          .on("data", (chunk: Buffer | string) => chunks.push(chunk.toString()))
+          .on("end", resolve)
+          .on("error", reject);
+      });
+      return chunks.join("");
+    };
+
+    const lowEncoded = await collect(lowEncoder);
+    const highEncoded = await collect(highEncoder);
+
+    expect(lowEncoded).not.toBe(highEncoded);
+    expect(highEncoded.length).toBeLessThan(lowEncoded.length);
+  });
+
   it("should emit decoded data before source end when stream header is present", async () => {
     const encoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
       compress: false,

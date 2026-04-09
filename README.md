@@ -8,12 +8,9 @@ Node.js implementation of [ddunigma](https://github.com/i3l3/ddunigma) (Python o
 
 커스텀 charset을 사용하는 Base64 스타일 인코더/디코더 라이브러리입니다.
 
-현재 구현 상태와 검증 요약은 `PROJECT_STATUS.md`를 기준으로 관리합니다.
-
 ## Documents
 
 - `README.md`: 설치, 사용법, 공개 API 요약
-- `PROJECT_STATUS.md`: 현재 구현 상태, 검증 결과, 유지보수 메모
 - `CHANGELOG.md`: 공개 변경 이력
 - `RELEASE.md`: 배포 체크리스트와 릴리즈 기준
 
