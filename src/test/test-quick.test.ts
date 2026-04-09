@@ -1,3 +1,4 @@
+import { test, expect } from "vitest";
 import { Ddu64 } from "../index.js";
 
 console.log("╔════════════════════════════════════════════════════════════════════════════╗");
@@ -13,11 +14,18 @@ function reportTest(name: string, passed: boolean, details?: string) {
   totalTests++;
   if (passed) {
     passedTests++;
-    console.log(`  ✓ ${name}`);
   } else {
     failedTests++;
-    console.log(`  ✗ ${name}${details ? ` - ${details}` : ""}`);
   }
+
+  test(name, () => {
+    if (!passed) {
+      if (details) {
+        throw new Error(details);
+      }
+      expect(passed).toBe(true);
+    }
+  });
 }
 
 const BASE64_CHARS = [
@@ -418,7 +426,6 @@ if (failedTests === 0) {
   console.log("💡 호환성 테스트: npx tsx ./src/test/test-compat.ts\n");
 } else {
   console.log(`❌ ${failedTests}개 테스트 실패\n`);
-  process.exit(1);
 }
 
 console.log("╔════════════════════════════════════════════════════════════════════════════╗");

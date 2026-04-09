@@ -4,3 +4,9 @@ package-lock.json
 .claude
 .serena
 .agent
+.agents
+.codex
+.gemini
+.qwen
+coverage/
+test-decode.ts

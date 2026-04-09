@@ -1,11 +1,11 @@
-import { deflateSync } from "zlib";
+import { deflateSync, brotliCompressSync, brotliDecompressSync, constants } from "zlib";
+import { createDecipheriv } from "crypto";
 import { BaseDdu } from "../base/BaseDdu";
 import {
   DduConstructorOptions,
   DduOptions,
   DduSetSymbol,
   DduEncodeStats,
-  DduProgressInfo,
   dduDefaultConstructorOptions,
 } from "../types";
 import { getCharSet } from "../charSets";
@@ -14,7 +14,22 @@ import {
   encryptAes256Gcm,
   decryptAes256Gcm,
   inflateWithLimit as inflateWithLimitUtil,
+  GcmEncryptStream,
+  GcmDecryptStream,
 } from "../utils/crypto";
+import {
+  toUrlSafeFast,
+  fromUrlSafeFast,
+  splitIntoChunksFast,
+  removeChunksFast,
+  calculateCRC32,
+  extractChecksum,
+  URL_SAFE_REVERSE_MAP,
+  CHECKSUM_MARKER,
+  COMPRESS_MARKER,
+  BROTLI_MARKER,
+  ENCRYPT_MARKER
+} from "../utils/codecUtils";
 
 // ============================================================================
 // 상수 정의
@@ -29,14 +44,7 @@ const MAX_FAST_BITS = 16;
 /** 바이트 마스크 (0xFF) */
 const BYTE_MASK = 0xff;
 
-/** 압축 데이터 식별 마커 */
-const COMPRESS_MARKER = "ELYSIA";
 
-/** 체크섬 마커 */
-const CHECKSUM_MARKER = "CHK";
-
-/** 암호화 마커 */
-const ENCRYPT_MARKER = "ENC";
 
 /** 기본 최대 디코딩 바이트 수 (64MB) */
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
@@ -44,32 +52,6 @@ const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 /** 기본 최대 압축해제 바이트 수 (64MB) */
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 
-/** CRC32 룩업 테이블 (바이트 단위 연산으로 비트 루프 대비 4~8배 빠름) */
-const CRC32_TABLE: Uint32Array = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let crc = i;
-    for (let j = 0; j < 8; j++) {
-      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-    }
-    table[i] = crc;
-  }
-  return table;
-})();
-
-/** URL-Safe 문자 매핑 */
-const URL_SAFE_MAP: Record<string, string> = {
-  "+": "-",
-  "/": "_",
-  "=": ".",
-};
-
-/** URL-Safe 역방향 매핑 */
-const URL_SAFE_REVERSE_MAP: Record<string, string> = {
-  "-": "+",
-  "_": "/",
-  ".": "=",
-};
 
 /** 인코딩 진행률 단계별 퍼센트 */
 const ENCODE_PROGRESS = {
@@ -181,6 +163,9 @@ export class Ddu64 extends BaseDdu {
 
   /** 기본 압축 레벨 (1~9) */
   private readonly defaultCompressionLevel: number;
+
+  /** 기본 압축 알고리즘 */
+  private readonly defaultCompressionAlgorithm: "deflate" | "brotli";
 
   // --------------------------------------------------------------------------
   // 생성자
@@ -304,7 +289,8 @@ export class Ddu64 extends BaseDdu {
     this.defaultChecksum = dduOptions?.checksum ?? false;
     this.defaultChunkSize = dduOptions?.chunkSize;
     this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
-    this.defaultCompressionLevel = Math.min(9, Math.max(1, Math.floor(dduOptions?.compressionLevel ?? 6)));
+    this.defaultCompressionLevel = Math.max(1, Math.floor(dduOptions?.compressionLevel ?? 6));
+    this.defaultCompressionAlgorithm = dduOptions?.compressionAlgorithm ?? "deflate";
   }
 
   // --------------------------------------------------------------------------
@@ -342,9 +328,16 @@ export class Ddu64 extends BaseDdu {
   ): { encoded: string; compressedSize?: number } {
     const shouldCompress = options?.compress ?? this.defaultCompress;
     const shouldChecksum = options?.checksum ?? this.defaultChecksum;
+    const shouldEncrypt = (options?.encrypt ?? true) && !!this.encryptionKeyHash;
+    const omitFooter = options?.omitFooter ?? false;
     const chunkSize = options?.chunkSize ?? this.defaultChunkSize;
     const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
     const onProgress = options?.onProgress;
+    const useInlineChunking =
+      !!chunkSize &&
+      chunkSize > 0 &&
+      !shouldChecksum &&
+      !this.urlSafe;
 
     let workingBuffer =
       typeof input === "string" ? Buffer.from(input, this.encoding) : input;
@@ -357,7 +350,7 @@ export class Ddu64 extends BaseDdu {
 
     // 암호화 처리
     let isEncrypted = false;
-    if (this.encryptionKeyHash) {
+    if (shouldEncrypt) {
       workingBuffer = this.encryptData(workingBuffer);
       isEncrypted = true;
       if (onProgress) {
@@ -368,22 +361,28 @@ export class Ddu64 extends BaseDdu {
     // 체크섬 계산
     let checksum = "";
     if (shouldChecksum) {
-      checksum = this.calculateCRC32(workingBuffer);
+      checksum = calculateCRC32(workingBuffer);
       if (onProgress) {
         onProgress({ processedBytes: 0, totalBytes, percent: ENCODE_PROGRESS.CHECKSUM, stage: "checksum" });
       }
     }
 
     // 압축 처리
-    let useCompression = false;
+    let compressionMarker = "";
     let compressedSize: number | undefined;
     if (shouldCompress) {
+      const compressionAlgorithm =
+        options?.compressionAlgorithm ?? this.defaultCompressionAlgorithm;
+      const isBrotli = compressionAlgorithm === "brotli";
       const level = options?.compressionLevel ?? this.defaultCompressionLevel;
-      const compressedBuffer = deflateSync(workingBuffer, { level: Math.min(9, Math.max(1, level)) });
+      const compressedBuffer = isBrotli 
+        ? brotliCompressSync(workingBuffer, { params: { [constants.BROTLI_PARAM_QUALITY]: Math.min(11, Math.max(0, level)) } })
+        : deflateSync(workingBuffer, { level: Math.min(9, Math.max(1, level)) });
+      
       compressedSize = compressedBuffer.length;
       if (compressedBuffer.length < workingBuffer.length) {
         workingBuffer = compressedBuffer;
-        useCompression = true;
+        compressionMarker = isBrotli ? BROTLI_MARKER : COMPRESS_MARKER;
       }
       if (onProgress) {
         onProgress({ processedBytes: Math.floor(totalBytes * 0.4), totalBytes, percent: ENCODE_PROGRESS.COMPRESS, stage: "compress" });
@@ -396,8 +395,22 @@ export class Ddu64 extends BaseDdu {
     }
 
     let result = this.effectiveBitLength <= MAX_FAST_BITS
-      ? this.encodeFast(workingBuffer, useCompression, isEncrypted)
-      : this.encodeBigInt(workingBuffer, useCompression, isEncrypted);
+      ? this.encodeFast(
+          workingBuffer,
+          compressionMarker,
+          isEncrypted,
+          omitFooter,
+          useInlineChunking ? chunkSize : undefined,
+          useInlineChunking ? chunkSeparator : undefined
+        )
+      : this.encodeBigInt(
+          workingBuffer,
+          compressionMarker,
+          isEncrypted,
+          omitFooter,
+          useInlineChunking ? chunkSize : undefined,
+          useInlineChunking ? chunkSeparator : undefined
+        );
 
     // 체크섬 추가
     if (shouldChecksum && checksum) {
@@ -406,12 +419,12 @@ export class Ddu64 extends BaseDdu {
 
     // URL-Safe 변환
     if (this.urlSafe) {
-      result = this.toUrlSafe(result);
+      result = toUrlSafeFast(result);
     }
 
     // 청크 분할
-    if (chunkSize && chunkSize > 0) {
-      result = this.splitIntoChunks(result, chunkSize, chunkSeparator);
+    if (!useInlineChunking && chunkSize && chunkSize > 0) {
+      result = splitIntoChunksFast(result, chunkSize, chunkSeparator);
     }
 
     // 진행률 콜백 호출 (완료)
@@ -439,6 +452,9 @@ export class Ddu64 extends BaseDdu {
    */
   decodeToBuffer(input: string, options?: DduOptions): Buffer {
     const shouldChecksum = options?.checksum ?? this.defaultChecksum;
+    const allowInternalDecompress = options?.compress !== false;
+    const allowInternalDecrypt = options?.encrypt !== false;
+    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
     const onProgress = options?.onProgress;
     let workingInput = input;
 
@@ -450,22 +466,22 @@ export class Ddu64 extends BaseDdu {
     }
 
     // 청크 제거 (줄바꿈 등 구분자 제거)
-    workingInput = this.removeChunks(workingInput);
+    workingInput = removeChunksFast(workingInput, chunkSeparator);
 
     // URL-Safe 역변환
     if (this.urlSafe) {
-      workingInput = this.fromUrlSafe(workingInput);
+      workingInput = fromUrlSafeFast(workingInput);
     }
 
     // 체크섬 추출 (체크섬이 활성화된 경우에만 수행하여 오탐지 방지)
     let extractedChecksum: string | null = null;
     if (shouldChecksum) {
-      const result = this.extractChecksum(workingInput);
+      const result = extractChecksum(workingInput);
       extractedChecksum = result.checksum;
       workingInput = result.data;
     }
 
-    const { cleanedInput, paddingBits, isCompressed, isEncrypted } = this.parseFooter(workingInput);
+    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted } = this.parseFooter(workingInput);
 
     this.assertEncodedInputAligned(cleanedInput);
 
@@ -497,7 +513,7 @@ export class Ddu64 extends BaseDdu {
         : this.decodeBigInt(cleanedInput, paddingBits);
 
     // 압축 해제
-    if (isCompressed) {
+    if (compressionAlgorithm && allowInternalDecompress) {
       if (onProgress) {
         onProgress({ processedBytes: Math.floor(inputLength * 0.5), totalBytes: inputLength, percent: DECODE_PROGRESS.DECOMPRESS, stage: "decompress" });
       }
@@ -507,7 +523,43 @@ export class Ddu64 extends BaseDdu {
         true,
         "maxDecompressedBytes"
       );
-      decoded = this.inflateWithLimit(decoded, maxDecompressedBytes);
+      // Footer 마커로 감지된 알고리즘 우선, 없으면 옵션 참조
+      const isBrotli =
+        compressionAlgorithm === "brotli" ||
+        options?.compressionAlgorithm === "brotli" ||
+        (!options?.compressionAlgorithm && this.defaultCompressionAlgorithm === "brotli");
+      if (isBrotli) {
+        try {
+          const inflated = brotliDecompressSync(decoded, {
+            maxOutputLength: maxDecompressedBytes,
+          });
+          if (inflated.length > maxDecompressedBytes) {
+            throw new Error(
+              `[Ddu64 decode] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxDecompressedBytes} bytes`
+            );
+          }
+          decoded = inflated;
+        } catch (e: unknown) {
+          const err = e as { message?: string; code?: string };
+          const msg = String(err?.message ?? "").toLowerCase();
+          const code = String(err?.code ?? "");
+
+          if (
+            code === "ERR_BUFFER_TOO_LARGE" ||
+            msg.includes("cannot create a buffer larger") ||
+            msg.includes("buffer larger than") ||
+            msg.includes("output length")
+          ) {
+            throw new Error(
+              `[Ddu64 decode] Decompressed data exceeds limit. Limit: ${maxDecompressedBytes} bytes`,
+              { cause: e }
+            );
+          }
+          throw e;
+        }
+      } else {
+        decoded = this.inflateWithLimit(decoded, maxDecompressedBytes);
+      }
     }
 
     // 체크섬 검증
@@ -515,7 +567,7 @@ export class Ddu64 extends BaseDdu {
       if (onProgress) {
         onProgress({ processedBytes: Math.floor(inputLength * 0.7), totalBytes: inputLength, percent: DECODE_PROGRESS.CHECKSUM, stage: "checksum" });
       }
-      const calculatedChecksum = this.calculateCRC32(decoded);
+      const calculatedChecksum = calculateCRC32(decoded);
       if (calculatedChecksum !== extractedChecksum) {
         throw new Error(
           `[Ddu64 decode] Checksum mismatch. Expected: ${extractedChecksum}, Got: ${calculatedChecksum}`
@@ -524,7 +576,7 @@ export class Ddu64 extends BaseDdu {
     }
 
     // 복호화
-    if (isEncrypted && this.encryptionKeyHash) {
+    if (isEncrypted && this.encryptionKeyHash && allowInternalDecrypt) {
       if (onProgress) {
         onProgress({ processedBytes: Math.floor(inputLength * 0.85), totalBytes: inputLength, percent: DECODE_PROGRESS.DECRYPT, stage: "decrypt" });
       }
@@ -553,6 +605,90 @@ export class Ddu64 extends BaseDdu {
   }
 
   /**
+   * 공개 스트림 API의 auto-detect 경로에서 사용하는 전용 디코더입니다.
+   * 스트림 인코딩은 compress -> encrypt -> encode 순서를 사용하므로,
+   * 복원은 decode -> decrypt -> decompress 순서로 수행합니다.
+   */
+  decodeStreamToBuffer(input: string, options?: DduOptions): Buffer {
+    const allowInternalDecompress = options?.compress !== false;
+    const allowInternalDecrypt = options?.encrypt !== false;
+    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
+    const workingInput = removeChunksFast(input, chunkSeparator);
+
+    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted } = this.parseFooter(workingInput);
+
+    this.assertEncodedInputAligned(cleanedInput);
+
+    const maxDecodedBytes = this.normalizeLimit(
+      options?.maxDecodedBytes,
+      this.defaultMaxDecodedBytes,
+      true,
+      "maxDecodedBytes"
+    );
+    const estimatedDecodedBytes = this.estimateDecodedBytes(
+      cleanedInput.length,
+      paddingBits
+    );
+    if (estimatedDecodedBytes > maxDecodedBytes) {
+      throw new Error(
+        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`
+      );
+    }
+
+    let decoded =
+      this.effectiveBitLength <= MAX_FAST_BITS
+        ? this.decodeFast(cleanedInput, paddingBits)
+        : this.decodeBigInt(cleanedInput, paddingBits);
+
+    if (isEncrypted && this.encryptionKeyHash && allowInternalDecrypt) {
+      decoded = this.decryptStreamData(decoded);
+    }
+
+    if (compressionAlgorithm && allowInternalDecompress) {
+      const maxDecompressedBytes = this.normalizeLimit(
+        options?.maxDecompressedBytes,
+        this.defaultMaxDecompressedBytes,
+        true,
+        "maxDecompressedBytes"
+      );
+      if (compressionAlgorithm === "brotli") {
+        try {
+          const inflated = brotliDecompressSync(decoded, {
+            maxOutputLength: maxDecompressedBytes,
+          });
+          if (inflated.length > maxDecompressedBytes) {
+            throw new Error(
+              `[Ddu64 decode] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxDecompressedBytes} bytes`
+            );
+          }
+          decoded = inflated;
+        } catch (e: unknown) {
+          const err = e as { message?: string; code?: string };
+          const msg = String(err?.message ?? "").toLowerCase();
+          const code = String(err?.code ?? "");
+
+          if (
+            code === "ERR_BUFFER_TOO_LARGE" ||
+            msg.includes("cannot create a buffer larger") ||
+            msg.includes("buffer larger than") ||
+            msg.includes("output length")
+          ) {
+            throw new Error(
+              `[Ddu64 decode] Decompressed data exceeds limit. Limit: ${maxDecompressedBytes} bytes`,
+              { cause: e }
+            );
+          }
+          throw e;
+        }
+      } else {
+        decoded = this.inflateWithLimit(decoded, maxDecompressedBytes);
+      }
+    }
+
+    return decoded;
+  }
+
+  /**
    * 현재 인코더의 charset 정보를 반환합니다.
    *
    * @returns charset 설정 정보 객체
@@ -572,7 +708,33 @@ export class Ddu64 extends BaseDdu {
       hasEncryptionKey: !!this.encryptionKeyHash,
       defaultChecksum: this.defaultChecksum,
       defaultChunkSize: this.defaultChunkSize,
+      defaultChunkSeparator: this.defaultChunkSeparator,
+      defaultCompressionAlgorithm: this.defaultCompressionAlgorithm,
     };
+  }
+
+  /**
+   * 외부 스트림 파이프라인에서 전처리된 Buffer를 그대로 인코딩합니다.
+   * 압축/암호화는 수행하지 않고, 마지막 푸터에만 메타데이터를 반영합니다.
+   */
+  encodeRawBuffer(
+    input: Buffer,
+    options?: {
+      compressionAlgorithm?: "deflate" | "brotli";
+      encrypted?: boolean;
+      omitFooter?: boolean;
+    }
+  ): string {
+    const compressionMarker =
+      options?.compressionAlgorithm === "brotli"
+        ? BROTLI_MARKER
+        : options?.compressionAlgorithm === "deflate"
+          ? COMPRESS_MARKER
+          : "";
+
+    return this.effectiveBitLength <= MAX_FAST_BITS
+      ? this.encodeFast(input, compressionMarker, options?.encrypted, options?.omitFooter)
+      : this.encodeBigInt(input, compressionMarker, options?.encrypted, options?.omitFooter);
   }
 
   /**
@@ -612,156 +774,186 @@ export class Ddu64 extends BaseDdu {
   /**
    * 비동기 인코딩을 수행합니다.
    *
-   * 내부적으로 동기 encode()를 setImmediate로 이벤트 루프에 양보한 뒤 실행합니다.
-   * 호출자가 즉시 블로킹되지 않도록 보장하지만, 인코딩 자체는 단일 동기 작업으로
-   * 수행되므로 대용량 데이터(수 MB 이상) 처리 시 이벤트 루프가 블로킹될 수 있습니다.
-   * 대용량 처리가 필요한 경우 스트림 API(createEncodeStream) 사용을 권장합니다.
+   * 가능한 경우 청크 단위로 Event Loop를 양보(Yield)하여 스타베이션을 줄입니다.
+   * 다만 압축, 체크섬, 암호화, URL-safe가 개입되는 큰 입력은 정확성을 위해
+   * 안전한 단일 페이로드 경로로 fallback 됩니다.
    *
    * @param input - 인코딩할 데이터
    * @param options - 인코딩 옵션
    * @returns 인코딩된 문자열 Promise
    */
   async encodeAsync(input: Buffer | string, options?: DduOptions): Promise<string> {
-    return new Promise((resolve, reject) => {
-      setImmediate(() => {
-        try {
-          resolve(this.encode(input, options));
-        } catch (e) {
-          reject(e);
-        }
+    const workingBuffer = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
+    const CHUNK_SIZE = 64 * 1024; // 64KB
+    const shouldCompress = options?.compress ?? this.defaultCompress;
+    const shouldChecksum = options?.checksum ?? this.defaultChecksum;
+    const shouldEncrypt = (options?.encrypt ?? true) && !!this.encryptionKeyHash;
+    
+    // 크기가 충분히 작으면 즉시 setImmediate 동기 처리로 오버헤드 최소화
+    if (workingBuffer.length <= CHUNK_SIZE) {
+      return new Promise<string>((resolve, reject) => {
+        setImmediate(() => {
+          try {
+            resolve(this.encode(workingBuffer, options));
+          } catch (e) {
+            reject(e);
+          }
+        });
       });
+    }
+
+    // footer/암호화/압축/체크섬이 개입되면 전체 페이로드 단위 처리가 더 안전합니다.
+    if (shouldCompress || shouldChecksum || shouldEncrypt || this.urlSafe) {
+      return new Promise<string>((resolve, reject) => {
+        setImmediate(() => {
+          try {
+            resolve(this.encode(workingBuffer, options));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+    }
+
+    // 대용량의 경우 Stream으로 쪼개서 이벤트 루프를 양보하며 쓰기
+    const { createEncodeStream } = await import("../utils/DduStream");
+    return new Promise((resolve, reject) => {
+      const stream = createEncodeStream(this, options);
+      const chunks: string[] = [];
+      stream.on("data", (chunk: Buffer | string) => chunks.push(chunk.toString()));
+      stream.on("end", () => resolve(chunks.join("")));
+      stream.on("error", reject);
+
+      let offset = 0;
+      function pump() {
+        try {
+          while (offset < workingBuffer.length) {
+            const end = Math.min(offset + CHUNK_SIZE, workingBuffer.length);
+            const slice = workingBuffer.subarray(offset, end);
+            offset = end;
+            const canContinue = stream.write(slice);
+            if (!canContinue) {
+              stream.once("drain", pump);
+              return;
+            }
+            // 1MB 단위로 이벤트 루프 양보
+            if (offset % (CHUNK_SIZE * 16) === 0) {
+              setImmediate(pump);
+              return;
+            }
+          }
+          stream.end();
+        } catch (e) {
+          (stream as any).destroy(e as Error);
+        }
+      }
+      pump();
     });
   }
 
   /**
    * 비동기 디코딩을 수행합니다.
    *
-   * 내부적으로 동기 decode()를 setImmediate로 이벤트 루프에 양보한 뒤 실행합니다.
-   * 대용량 처리가 필요한 경우 스트림 API(createDecodeStream) 사용을 권장합니다.
+   * 대용량 데이터를 처리할 때 Event Loop를 양보하여 블로킹을 방지합니다.
    *
    * @param input - 디코딩할 인코딩된 문자열
    * @param options - 디코딩 옵션
    * @returns 디코딩된 문자열 Promise
    */
   async decodeAsync(input: string, options?: DduOptions): Promise<string> {
-    return new Promise((resolve, reject) => {
-      setImmediate(() => {
-        try {
-          resolve(this.decode(input, options));
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
+    const buffer = await this.decodeToBufferAsync(input, options);
+    return buffer.toString(this.encoding);
   }
 
   /**
    * 비동기 디코딩을 Buffer로 수행합니다.
    *
-   * 내부적으로 동기 decodeToBuffer()를 setImmediate로 이벤트 루프에 양보한 뒤 실행합니다.
-   * 대용량 처리가 필요한 경우 스트림 API(createDecodeStream) 사용을 권장합니다.
-   *
    * @param input - 디코딩할 인코딩된 문자열
    * @param options - 디코딩 옵션
    * @returns 디코딩된 Buffer Promise
+   *
+   * @description
+   * 큰 입력 중에서도 압축, 암호화, 체크섬, 청크 구분자 해석이 필요한 경우에는
+   * 안전성을 위해 내부적으로 전체 페이로드 단위 디코딩으로 fallback 될 수 있습니다.
    */
   async decodeToBufferAsync(input: string, options?: DduOptions): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      setImmediate(() => {
-        try {
-          resolve(this.decodeToBuffer(input, options));
-        } catch (e) {
-          reject(e);
-        }
+    const CHUNK_SIZE = this.charLength * 1024 * 64; // ~64KB
+    const shouldChecksum = options?.checksum ?? this.defaultChecksum;
+    const needsSafeFallback =
+      shouldChecksum ||
+      this.urlSafe ||
+      !!this.defaultChunkSize ||
+      !!options?.chunkSize;
+
+    if (input.length <= CHUNK_SIZE) {
+      return new Promise<Buffer>((resolve, reject) => {
+        setImmediate(() => {
+          try {
+            resolve(this.decodeToBuffer(input, options));
+          } catch (e) {
+            reject(e);
+          }
+        });
       });
+    }
+
+    const asyncFooterState = needsSafeFallback ? null : this.parseFooter(input);
+    const shouldCompress =
+      (options?.compress ?? this.defaultCompress) ||
+      !!asyncFooterState?.compressionAlgorithm;
+    const shouldEncrypt =
+      ((options?.encrypt ?? true) && !!this.encryptionKeyHash) ||
+      !!asyncFooterState?.isEncrypted;
+
+    if (needsSafeFallback || shouldCompress || shouldEncrypt) {
+      return new Promise<Buffer>((resolve, reject) => {
+        setImmediate(() => {
+          try {
+            resolve(this.decodeToBuffer(input, options));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+    }
+
+    const { createDecodeStream } = await import("../utils/DduStream");
+    return new Promise((resolve, reject) => {
+      const stream = createDecodeStream(this, options);
+      const chunks: Buffer[] = [];
+      stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+      stream.on("end", () => resolve(Buffer.concat(chunks)));
+      stream.on("error", reject);
+
+      let offset = 0;
+      function pump() {
+        try {
+          while (offset < input.length) {
+            const end = Math.min(offset + CHUNK_SIZE, input.length);
+            const slice = input.slice(offset, end);
+            offset = end;
+            const canContinue = stream.write(slice);
+            if (!canContinue) {
+              stream.once("drain", pump);
+              return;
+            }
+            if (offset % (CHUNK_SIZE * 16) === 0) {
+              setImmediate(pump);
+              return;
+            }
+          }
+          stream.end();
+        } catch (e) {
+          (stream as any).destroy(e as Error);
+        }
+      }
+      pump();
     });
   }
 
   // --------------------------------------------------------------------------
-  // URL-Safe 메서드
+  // 공백 (리팩토링으로 제거됨)
   // --------------------------------------------------------------------------
-
-  /**
-   * 문자열을 URL-Safe 형식으로 변환합니다.
-   * 단일 정규식 패스로 처리하여 split/join 3회 반복 대비 메모리/속도 개선
-   */
-  private toUrlSafe(input: string): string {
-    return input.replace(/[+/=]/g, (c) => URL_SAFE_MAP[c]);
-  }
-
-  /**
-   * URL-Safe 형식에서 원래 형식으로 복원합니다.
-   */
-  private fromUrlSafe(input: string): string {
-    return input.replace(/[-_.]/g, (c) => URL_SAFE_REVERSE_MAP[c]);
-  }
-
-  // --------------------------------------------------------------------------
-  // 체크섬 메서드
-  // --------------------------------------------------------------------------
-
-  /**
-   * CRC32 체크섬을 계산합니다. (룩업 테이블 사용)
-   */
-  private calculateCRC32(data: Buffer): string {
-    let crc = 0xffffffff;
-    for (let i = 0; i < data.length; i++) {
-      crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ data[i]) & 0xff];
-    }
-    return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, "0");
-  }
-
-  /**
-   * 인코딩된 문자열에서 체크섬을 추출합니다.
-   */
-  private extractChecksum(input: string): { data: string; checksum: string | null } {
-    const markerIndex = input.lastIndexOf(CHECKSUM_MARKER);
-    if (markerIndex === -1) {
-      return { data: input, checksum: null };
-    }
-    const checksum = input.slice(markerIndex + CHECKSUM_MARKER.length);
-    if (checksum.length !== 8 || !/^[0-9a-f]+$/i.test(checksum)) {
-      return { data: input, checksum: null };
-    }
-    return {
-      data: input.slice(0, markerIndex),
-      checksum: checksum.toLowerCase(),
-    };
-  }
-
-  // --------------------------------------------------------------------------
-  // 청크 분할 메서드
-  // --------------------------------------------------------------------------
-
-  /**
-   * 문자열을 청크로 분할합니다.
-   */
-  private splitIntoChunks(input: string, chunkSize: number, separator: string): string {
-    if (chunkSize <= 0) return input;
-    const chunks: string[] = [];
-    for (let i = 0; i < input.length; i += chunkSize) {
-      chunks.push(input.slice(i, i + chunkSize));
-    }
-    return chunks.join(separator);
-  }
-
-  /**
-   * 청크 구분자를 제거합니다.
-   * 줄바꿈(\r, \n)과 인스턴스에 설정된 청크 구분자만 제거합니다.
-   * 공백/탭 등은 charset에 포함될 수 있으므로 제거하지 않습니다.
-   */
-  private removeChunks(input: string): string {
-    // 줄바꿈 문자(\r, \n)는 항상 제거 (기본 구분자 및 일반적 라인 구분)
-    let result = input.replace(/[\r\n]/g, "");
-
-    // 커스텀 구분자가 줄바꿈이 아닌 경우 추가로 제거
-    const sep = this.defaultChunkSeparator;
-    if (sep && sep !== "\n" && sep !== "\r\n" && sep !== "\r") {
-      result = result.split(sep).join("");
-    }
-
-    return result;
-  }
 
   // --------------------------------------------------------------------------
   // 암호화 메서드
@@ -785,6 +977,45 @@ export class Ddu64 extends BaseDdu {
       throw new Error("[Ddu64 decrypt] Encryption key is not set");
     }
     return decryptAes256Gcm(data, this.encryptionKeyHash);
+  }
+
+  /**
+   * 공개 스트림 API의 암호화 포맷(iv + encrypted + authTag)을 복호화합니다.
+   */
+  private decryptStreamData(data: Buffer): Buffer {
+    if (!this.encryptionKeyHash) {
+      throw new Error("[Ddu64 decrypt] Encryption key is not set");
+    }
+    if (data.length < 28) {
+      throw new Error("[Ddu64 decrypt] Invalid encrypted stream data: too short");
+    }
+
+    const iv = data.subarray(0, 12);
+    const authTag = data.subarray(data.length - 16);
+    const encrypted = data.subarray(12, data.length - 16);
+    const decipher = createDecipheriv("aes-256-gcm", this.encryptionKeyHash, iv);
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  }
+
+  /**
+   * 공개 스트림 API에서 사용할 암호화 Transform을 생성합니다.
+   */
+  createEncryptionStream(): GcmEncryptStream | undefined {
+    if (!this.encryptionKeyHash) {
+      return undefined;
+    }
+    return new GcmEncryptStream(this.encryptionKeyHash);
+  }
+
+  /**
+   * 공개 스트림 API에서 사용할 복호화 Transform을 생성합니다.
+   */
+  createDecryptionStream(): GcmDecryptStream | undefined {
+    if (!this.encryptionKeyHash) {
+      return undefined;
+    }
+    return new GcmDecryptStream(this.encryptionKeyHash);
   }
 
   // --------------------------------------------------------------------------
@@ -872,13 +1103,13 @@ export class Ddu64 extends BaseDdu {
   private parseFooter(input: string): {
     cleanedInput: string;
     paddingBits: number;
-    isCompressed: boolean;
+    compressionAlgorithm?: "deflate" | "brotli";
     isEncrypted: boolean;
   } {
     const inputLen = input.length;
     const pad = this.paddingChar;
     const padLen = pad.length;
-    const noFooter = { cleanedInput: input, paddingBits: 0, isCompressed: false, isEncrypted: false };
+    const noFooter = { cleanedInput: input, paddingBits: 0, isEncrypted: false };
 
     if (inputLen < padLen) return noFooter;
 
@@ -909,7 +1140,7 @@ export class Ddu64 extends BaseDdu {
       // 2) digits 앞에서 마커들 역순 확인
       let pos = digitsStart;
       let isEncrypted = false;
-      let isCompressed = false;
+      let compressionAlgorithm: "deflate" | "brotli" | undefined;
 
       if (pos >= ENCRYPT_MARKER.length && input.substring(pos - ENCRYPT_MARKER.length, pos) === ENCRYPT_MARKER) {
         isEncrypted = true;
@@ -917,22 +1148,23 @@ export class Ddu64 extends BaseDdu {
       }
 
       if (pos >= COMPRESS_MARKER.length && input.substring(pos - COMPRESS_MARKER.length, pos) === COMPRESS_MARKER) {
-        isCompressed = true;
+        compressionAlgorithm = "deflate";
         pos -= COMPRESS_MARKER.length;
+      } else if (pos >= BROTLI_MARKER.length && input.substring(pos - BROTLI_MARKER.length, pos) === BROTLI_MARKER) {
+        compressionAlgorithm = "brotli";
+        pos -= BROTLI_MARKER.length;
       }
 
       // 3) 마커 앞에서 padding 문자 확인
       const padStart = pos - padLen;
       if (padStart >= 0 && input.substring(padStart, pos) === pad) {
         if (padStart % this.charLength !== 0) {
-          throw new Error(
-            `[Ddu64 decode] Invalid padding format. Misaligned padding marker`
-          );
+          continue; // 우연히 데이터 경계에 걸쳐 형성된 경우, 푸터가 아닌 순수 데이터로 취급
         }
         return {
           cleanedInput: input.substring(0, padStart),
           paddingBits,
-          isCompressed,
+          compressionAlgorithm,
           isEncrypted,
         };
       }
@@ -962,7 +1194,14 @@ export class Ddu64 extends BaseDdu {
   /**
    * 일반 정수 연산을 사용한 빠른 인코딩
    */
-  private encodeFast(bufferInput: Buffer, compress?: boolean, encrypt?: boolean): string {
+  private encodeFast(
+    bufferInput: Buffer,
+    compressionMarker: string,
+    encrypt?: boolean,
+    omitFooter: boolean = false,
+    chunkSize?: number,
+    chunkSeparator?: string
+  ): string {
     const inputLen = bufferInput.length;
     if (inputLen === 0) return "";
 
@@ -1021,15 +1260,17 @@ export class Ddu64 extends BaseDdu {
         resultParts[resultIdx++] = dduChar[div];
         resultParts[resultIdx++] = dduChar[index - div * dduLength];
       }
+      if (omitFooter) {
+        throw new Error("[Ddu64 encode] Cannot omit footer when padding bits remain");
+      }
       resultParts[resultIdx++] = paddingChar;
-      resultParts[resultIdx++] = (compress ? COMPRESS_MARKER : "") + (encrypt ? ENCRYPT_MARKER : "") + paddingBits.toString();
-    } else if (compress || encrypt) {
+      resultParts[resultIdx++] = compressionMarker + (encrypt ? ENCRYPT_MARKER : "") + paddingBits.toString();
+    } else if (!omitFooter && (compressionMarker || encrypt)) {
       resultParts[resultIdx++] = paddingChar;
-      resultParts[resultIdx++] = (compress ? COMPRESS_MARKER : "") + (encrypt ? ENCRYPT_MARKER : "") + "0";
+      resultParts[resultIdx++] = compressionMarker + (encrypt ? ENCRYPT_MARKER : "") + "0";
     }
 
-    resultParts.length = resultIdx;
-    return resultParts.join("");
+    return this.serializeEncodedParts(resultParts, resultIdx, chunkSize, chunkSeparator);
   }
 
   // --------------------------------------------------------------------------
@@ -1201,7 +1442,14 @@ export class Ddu64 extends BaseDdu {
   /**
    * BigInt를 사용한 대형 비트 인코딩
    */
-  private encodeBigInt(bufferInput: Buffer, compress?: boolean, encrypt?: boolean): string {
+  private encodeBigInt(
+    bufferInput: Buffer,
+    compressionMarker: string,
+    encrypt?: boolean,
+    omitFooter: boolean = false,
+    chunkSize?: number,
+    chunkSeparator?: string
+  ): string {
     const inputLen = bufferInput.length;
     if (inputLen === 0) return "";
 
@@ -1260,15 +1508,58 @@ export class Ddu64 extends BaseDdu {
         resultParts[resultIdx++] = dduChar[div];
         resultParts[resultIdx++] = dduChar[index - div * dduLength];
       }
+      if (omitFooter) {
+        throw new Error("[Ddu64 encode] Cannot omit footer when padding bits remain");
+      }
       resultParts[resultIdx++] = this.paddingChar;
-      resultParts[resultIdx++] = (compress ? COMPRESS_MARKER : "") + (encrypt ? ENCRYPT_MARKER : "") + paddingBits.toString();
-    } else if (compress || encrypt) {
+      resultParts[resultIdx++] = compressionMarker + (encrypt ? ENCRYPT_MARKER : "") + paddingBits.toString();
+    } else if (!omitFooter && (compressionMarker || encrypt)) {
       resultParts[resultIdx++] = this.paddingChar;
-      resultParts[resultIdx++] = (compress ? COMPRESS_MARKER : "") + (encrypt ? ENCRYPT_MARKER : "") + "0";
+      resultParts[resultIdx++] = compressionMarker + (encrypt ? ENCRYPT_MARKER : "") + "0";
     }
 
-    resultParts.length = resultIdx;
-    return resultParts.join("");
+    return this.serializeEncodedParts(resultParts, resultIdx, chunkSize, chunkSeparator);
+  }
+
+  /**
+   * 인코딩 파트 배열을 최종 문자열로 직렬화합니다.
+   * 청크 옵션이 있으면 join 후 split하는 대신 한 번에 separator를 삽입합니다.
+   */
+  private serializeEncodedParts(
+    parts: string[],
+    partCount: number,
+    chunkSize?: number,
+    chunkSeparator?: string
+  ): string {
+    parts.length = partCount;
+
+    if (!chunkSize || chunkSize <= 0) {
+      return parts.join("");
+    }
+
+    const separator = chunkSeparator ?? this.defaultChunkSeparator;
+    const outputParts: string[] = [];
+    let currentChunkLength = 0;
+
+    for (let i = 0; i < partCount; i++) {
+      const part = parts[i];
+      let offset = 0;
+
+      while (offset < part.length) {
+        const remaining = chunkSize - currentChunkLength;
+        const sliceLength = Math.min(remaining, part.length - offset);
+        outputParts.push(part.slice(offset, offset + sliceLength));
+        offset += sliceLength;
+        currentChunkLength += sliceLength;
+
+        if (currentChunkLength === chunkSize && (offset < part.length || i < partCount - 1)) {
+          outputParts.push(separator);
+          currentChunkLength = 0;
+        }
+      }
+    }
+
+    return outputParts.join("");
   }
 
   // --------------------------------------------------------------------------
@@ -1456,6 +1747,19 @@ export class Ddu64 extends BaseDdu {
             );
           }
           charSet = charSet.filter((c) => c !== state.padding);
+        }
+
+        for (const c of charSet) {
+          if (c.includes("\n") || c.includes("\r")) {
+            throw new Error(
+              `[Ddu64 normalizeCharSet] Newline and carriage return characters are reserved for chunk normalization and cannot be used in charset.`
+            );
+          }
+        }
+        if (state.padding.includes("\n") || state.padding.includes("\r")) {
+          throw new Error(
+            `[Ddu64 normalizeCharSet] Newline and carriage return characters are reserved for chunk normalization and cannot be used in padding.`
+          );
         }
 
         // 불필요한 배열 복사 방지

@@ -1,5 +1,12 @@
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
-import { inflateSync, ZlibOptions } from "zlib";
+import { createCipheriv, createDecipheriv, randomBytes, createHash, CipherGCM, DecipherGCM } from "crypto";
+import { Transform, TransformCallback } from "stream";
+import { inflateSync, deflate, inflate, brotliCompress, brotliDecompress, ZlibOptions } from "zlib";
+import { promisify } from "util";
+
+export const deflateAsync = promisify(deflate);
+export const inflateAsync = promisify(inflate);
+export const brotliCompressAsync = promisify(brotliCompress);
+export const brotliDecompressAsync = promisify(brotliDecompress);
 
 /**
  * 문자열 키를 AES-256용 32바이트 키로 변환합니다.
@@ -43,6 +50,7 @@ export function decryptAes256Gcm(data: Buffer, keyHash: Buffer): Buffer {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 }
 
+
 /**
  * 크기 제한을 적용하여 zlib 압축을 해제합니다.
  *
@@ -70,7 +78,8 @@ export function inflateWithLimit(data: Buffer, maxBytes: number, context: string
       const inflated = inflateSync(data);
       if (inflated.length > maxBytes) {
         throw new Error(
-          `[${context}] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`
+          `[${context}] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`,
+          { cause: e }
         );
       }
       return inflated;
@@ -83,9 +92,96 @@ export function inflateWithLimit(data: Buffer, maxBytes: number, context: string
       msg.toLowerCase().includes("buffer too large")
     ) {
       throw new Error(
-        `[${context}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`
+        `[${context}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`,
+        { cause: e }
       );
     }
     throw e;
+  }
+}
+
+
+/**
+ * AES-256-GCM 스트림 암호화 (Node.js Transform)
+ */
+export class GcmEncryptStream extends Transform {
+  private cipher: CipherGCM;
+
+  constructor(keyHash: Buffer) {
+    super();
+    const iv = randomBytes(12);
+    this.cipher = createCipheriv("aes-256-gcm", keyHash, iv);
+    this.push(iv);
+  }
+
+  _transform(chunk: Buffer, enc: BufferEncoding, cb: TransformCallback) {
+    const encrypted = this.cipher.update(chunk);
+    if (encrypted.length > 0) this.push(encrypted);
+    cb();
+  }
+
+  _flush(cb: TransformCallback) {
+    try {
+      const finalBuf = this.cipher.final();
+      if (finalBuf.length > 0) this.push(finalBuf);
+      this.push(this.cipher.getAuthTag());
+      cb();
+    } catch (err) {
+      cb(err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+}
+
+/**
+ * AES-256-GCM 스트림 복호화 (Node.js Transform)
+ */
+export class GcmDecryptStream extends Transform {
+  private keyHash: Buffer;
+  private iv: Buffer | null = null;
+  private decipher: DecipherGCM | null = null;
+  private tail: Buffer = Buffer.alloc(0);
+
+  constructor(keyHash: Buffer) {
+    super();
+    this.keyHash = keyHash;
+  }
+
+  _transform(chunk: Buffer, enc: BufferEncoding, cb: TransformCallback) {
+    this.tail = Buffer.concat([this.tail, chunk]);
+    
+    if (!this.iv && this.tail.length >= 12) {
+      this.iv = this.tail.subarray(0, 12);
+      this.decipher = createDecipheriv("aes-256-gcm", this.keyHash, this.iv);
+      this.tail = this.tail.subarray(12);
+    }
+    
+    if (this.decipher && this.tail.length > 16) {
+      const toProcess = this.tail.length - 16;
+      const processBuf = this.tail.subarray(0, toProcess);
+      this.tail = this.tail.subarray(toProcess);
+      
+      try {
+        const decrypted = this.decipher.update(processBuf);
+        if (decrypted.length > 0) this.push(decrypted);
+      } catch (err) {
+        return cb(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+    cb();
+  }
+
+  _flush(cb: TransformCallback) {
+    if (!this.decipher || this.tail.length !== 16) {
+      return cb(new Error("[GcmDecryptStream] Invalid encrypted data: too short or no auth tag"));
+    }
+    
+    try {
+      this.decipher.setAuthTag(this.tail);
+      const finalBuf = this.decipher.final();
+      if (finalBuf.length > 0) this.push(finalBuf);
+      cb();
+    } catch (err) {
+      cb(err instanceof Error ? err : new Error(String(err)));
+    }
   }
 }

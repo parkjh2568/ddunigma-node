@@ -1,3 +1,4 @@
+import { test, expect } from "vitest";
 import {
   Ddu64,
   DduSetSymbol,
@@ -21,11 +22,18 @@ function reportTest(name: string, passed: boolean, details?: string) {
   totalTests++;
   if (passed) {
     passedTests++;
-    console.log(`  ✓ ${name}`);
   } else {
     failedTests++;
-    console.log(`  ✗ ${name}${details ? ` - ${details}` : ""}`);
   }
+
+  test(name, () => {
+    if (!passed) {
+      if (details) {
+        throw new Error(details);
+      }
+      expect(passed).toBe(true);
+    }
+  });
 }
 
 const BASE64_CHARS = [
@@ -501,7 +509,7 @@ console.log("══════════════════════�
     const encoded = enc1.encode("Secret");
     enc2.decode(encoded);
     reportTest("다른 키로 복호화 실패", false, "에러가 발생해야 함");
-  } catch (err: any) {
+  } catch {
     reportTest("다른 키로 복호화 실패", true);
   }
 }
@@ -852,7 +860,6 @@ async function runAsyncTests() {
     console.log("✅ 모든 종합 테스트 통과!\n");
   } else {
     console.log(`❌ ${failedTests}개 테스트 실패\n`);
-    process.exit(1);
   }
 
   console.log("╔════════════════════════════════════════════════════════════════════════════╗");
@@ -860,4 +867,4 @@ async function runAsyncTests() {
   console.log("╚════════════════════════════════════════════════════════════════════════════╝");
 }
 
-runAsyncTests();
+await runAsyncTests();

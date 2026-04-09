@@ -44,9 +44,15 @@ export interface DduEncodeStats {
 }
 
 export interface DduOptions {
-  /** 압축 사용 여부 (zlib deflate) */
+  /** 압축 사용 여부 (zlib deflate 또는 brotli) */
   compress?: boolean;
-  /** 압축 레벨 (1~9, 기본값: 6). 1=빠름/낮은압축, 9=느림/최대압축 */
+  /** decode stream에서 footer 기반 자동 감지 사용 여부 (기본값: true) */
+  streamAutoDetect?: boolean;
+  /** 내부 암/복호화 사용 여부 (기본값: true, 스트림 파이프라인 내부 제어용) */
+  encrypt?: boolean;
+  /** 압축 알고리즘 (기본값: "deflate") */
+  compressionAlgorithm?: "deflate" | "brotli";
+  /** 압축 레벨 (deflate 기본값: 6, brotli도 기본값 6을 사용하며 전달값은 0~11 범위로 보정) */
   compressionLevel?: number;
   /** 최대 디코딩 바이트 수 (Zip Bomb 방어) */
   maxDecodedBytes?: number;
@@ -58,6 +64,8 @@ export interface DduOptions {
   chunkSize?: number;
   /** 청크 구분자 (기본값: '\n') */
   chunkSeparator?: string;
+  /** 중간 스트림 청크처럼 푸터를 생략해야 할 때 사용 */
+  omitFooter?: boolean;
   /** 진행률 콜백 */
   onProgress?: (info: DduProgressInfo) => void;
 }

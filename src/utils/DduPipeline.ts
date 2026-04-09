@@ -1,4 +1,4 @@
-import { deflateSync } from "zlib";
+import { brotliCompressSync, brotliDecompressSync, constants, deflateSync } from "zlib";
 import { Ddu64 } from "../encoders/Ddu64";
 import { DduConstructorOptions } from "../types";
 import {
@@ -12,8 +12,8 @@ import {
  * 파이프라인 단계 타입
  */
 type PipelineStep =
-  | { type: "compress"; level?: number }
-  | { type: "decompress"; maxDecompressedBytes?: number }
+  | { type: "compress"; level?: number; algorithm?: "deflate" | "brotli" }
+  | { type: "decompress"; maxDecompressedBytes?: number; algorithm?: "deflate" | "brotli" }
   | { type: "encrypt"; key: string }
   | { type: "decrypt"; key: string }
   | { type: "encode"; encoder: Ddu64 }
@@ -40,9 +40,10 @@ export class DduPipeline {
    * 압축 단계를 추가합니다.
    *
    * @param level - 압축 레벨 (0-9, 기본값: 9)
+   * @param algorithm - 압축 알고리즘 (기본값: "deflate")
    */
-  compress(level: number = 9): DduPipeline {
-    this.steps.push({ type: "compress", level });
+  compress(level: number = 9, algorithm: "deflate" | "brotli" = "deflate"): DduPipeline {
+    this.steps.push({ type: "compress", level, algorithm });
     return this;
   }
 
@@ -50,9 +51,13 @@ export class DduPipeline {
    * 압축 해제 단계를 추가합니다.
    *
    * @param maxDecompressedBytes - 최대 압축해제 바이트 수 (Zip Bomb 방어용)
+   * @param algorithm - 압축 알고리즘 (기본값: "deflate")
    */
-  decompress(maxDecompressedBytes?: number): DduPipeline {
-    this.steps.push({ type: "decompress", maxDecompressedBytes });
+  decompress(
+    maxDecompressedBytes?: number,
+    algorithm: "deflate" | "brotli" = "deflate"
+  ): DduPipeline {
+    this.steps.push({ type: "decompress", maxDecompressedBytes, algorithm });
     return this;
   }
 
@@ -143,9 +148,9 @@ export class DduPipeline {
       .map((step): PipelineStep => {
         switch (step.type) {
           case "compress":
-            return { type: "decompress" };
+            return { type: "decompress", algorithm: step.algorithm };
           case "decompress":
-            return { type: "compress", level: 9 };
+            return { type: "compress", level: 9, algorithm: step.algorithm };
           case "encrypt":
             return { type: "decrypt", key: step.key };
           case "decrypt":
@@ -204,9 +209,17 @@ export class DduPipeline {
   private executeStep(step: PipelineStep, data: string | Buffer): string | Buffer {
     switch (step.type) {
       case "compress":
-        return this.compressData(this.toBuffer(data), step.level ?? 9);
+        return this.compressData(
+          this.toBuffer(data),
+          step.level ?? 9,
+          step.algorithm ?? "deflate"
+        );
       case "decompress":
-        return this.decompressData(this.toBuffer(data), step.maxDecompressedBytes);
+        return this.decompressData(
+          this.toBuffer(data),
+          step.maxDecompressedBytes,
+          step.algorithm ?? "deflate"
+        );
       case "encrypt":
         return this.encryptData(this.toBuffer(data), step.key);
       case "decrypt":
@@ -230,11 +243,59 @@ export class DduPipeline {
     return typeof data === "string" ? data : data.toString("utf-8");
   }
 
-  private compressData(data: Buffer, level: number): Buffer {
-    return deflateSync(data, { level });
+  private compressData(
+    data: Buffer,
+    level: number,
+    algorithm: "deflate" | "brotli"
+  ): Buffer {
+    if (algorithm === "brotli") {
+      return brotliCompressSync(data, {
+        params: {
+          [constants.BROTLI_PARAM_QUALITY]: Math.min(11, Math.max(0, level)),
+        },
+      });
+    }
+    return deflateSync(data, { level: Math.min(9, Math.max(1, level)) });
   }
 
-  private decompressData(data: Buffer, maxBytes?: number): Buffer {
+  private decompressData(
+    data: Buffer,
+    maxBytes?: number,
+    algorithm: "deflate" | "brotli" = "deflate"
+  ): Buffer {
+    if (algorithm === "brotli") {
+      const limit = maxBytes ?? Number.POSITIVE_INFINITY;
+      if (limit === Number.POSITIVE_INFINITY) {
+        return brotliDecompressSync(data);
+      }
+
+      try {
+        const inflated = brotliDecompressSync(data, { maxOutputLength: limit });
+        if (inflated.length > limit) {
+          throw new Error(
+            `[DduPipeline decompress] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${limit} bytes`
+          );
+        }
+        return inflated;
+      } catch (e: unknown) {
+        const err = e as { message?: string; code?: string };
+        const msg = String(err?.message ?? "").toLowerCase();
+        const code = String(err?.code ?? "");
+        if (
+          code === "ERR_BUFFER_TOO_LARGE" ||
+          msg.includes("cannot create a buffer larger") ||
+          msg.includes("buffer larger than") ||
+          msg.includes("output length")
+        ) {
+          throw new Error(
+            `[DduPipeline decompress] Decompressed data exceeds limit. Limit: ${limit} bytes`,
+            { cause: e }
+          );
+        }
+        throw e;
+      }
+    }
+
     return inflateWithLimit(
       data,
       maxBytes ?? Number.POSITIVE_INFINITY,
@@ -274,4 +335,3 @@ export class DduPipeline {
     return this;
   }
 }
-
