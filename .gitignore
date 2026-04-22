@@ -8,5 +8,10 @@ package-lock.json
 .codex
 .gemini
 .qwen
+.cursor
+.github
 coverage/
 test-decode.ts
+AGENTS.md
+CLAUDE.md
+GEMINI.md

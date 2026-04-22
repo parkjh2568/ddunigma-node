@@ -144,6 +144,9 @@ If you already depend on current stream helpers with `Ddu64`, you can continue u
 
 For new work, prefer the instance-bound stream API on `DduCodec`.
 
+`DduCodec` now emits and parses native `DDS3` stream headers on its own path.
+Legacy stream payloads can still be decoded through the configured compatibility policy.
+
 ## Wire Format Guidance
 
 - `Ddu64` remains the compatibility path for legacy payload behavior
