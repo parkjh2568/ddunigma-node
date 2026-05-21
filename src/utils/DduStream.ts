@@ -316,7 +316,6 @@ export class DduDecodeStream extends Transform {
   private encoder: Ddu64;
   private options: DduOptions;
   private normalizedBuffer: string;
-  private charLength: number;
   private chunkSize: number;
   private chunkSeparator: string;
   private separatorTail: string;
@@ -332,16 +331,10 @@ export class DduDecodeStream extends Transform {
     this.options = { ...options, compress: false, checksum: false, encrypt: false };
     this.normalizedBuffer = "";
     const info = encoder.getCharSetInfo();
-    this.charLength = info.charLength;
     this.chunkSeparator = options?.chunkSeparator ?? info.defaultChunkSeparator;
     this.separatorTail = "";
     // 디코딩 청크 크기
-    this.chunkSize = this.calculateChunkSize(info.charLength);
-  }
-
-  private calculateChunkSize(charLength: number): number {
-    // 문자 길이의 배수로 설정
-    return charLength * 1024;
+    this.chunkSize = 1024;
   }
 
   _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {

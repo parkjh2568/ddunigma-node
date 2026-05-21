@@ -11,8 +11,6 @@ Node.js implementation of [ddunigma](https://github.com/i3l3/ddunigma) (Python o
 ## Documents
 
 - `README.md`: 설치, 사용법, 공개 API 요약
-- `CHANGELOG.md`: 공개 변경 이력
-- `RELEASE.md`: 배포 체크리스트와 릴리즈 기준
 
 ### Credits
 
@@ -63,16 +61,6 @@ const encoder1 = new Ddu64(undefined, undefined, {
 // DDU (8개 문자)
 const encoder2 = new Ddu64(undefined, undefined, {
   dduSetSymbol: DduSetSymbol.DDU,
-});
-
-// TWOCHARSET (1024개 문자)
-const encoder3 = new Ddu64(undefined, undefined, {
-  dduSetSymbol: DduSetSymbol.TWOCHARSET,
-});
-
-// THREECHARSET (32768개 문자)
-const encoder4 = new Ddu64(undefined, undefined, {
-  dduSetSymbol: DduSetSymbol.THREECHARSET,
 });
 
 const text = "안녕하세요";
@@ -264,10 +252,7 @@ import { DduPipeline, Ddu64 } from "@ddunigma/node";
 const encoder = new Ddu64();
 
 // 압축 → 암호화 → 인코딩 파이프라인
-const pipeline = new DduPipeline()
-  .compress(6, "brotli")
-  .encrypt("my-secret-key")
-  .encode(encoder);
+const pipeline = new DduPipeline().compress(6, "brotli").encrypt("my-secret-key").encode(encoder);
 
 const encoded = pipeline.processToString("Hello World!");
 
@@ -358,23 +343,23 @@ pnpm bench
 
 **DduConstructorOptions:**
 
-| Option                 | Type             | Default     | Description                 |
-| ---------------------- | ---------------- | ----------- | --------------------------- |
-| `dduSetSymbol`         | `DduSetSymbol`   | `DDU`       | 미리 정의된 charset 심볼    |
-| `encoding`             | `BufferEncoding` | `'utf-8'`   | 문자열 인코딩               |
-| `usePowerOfTwo`        | `boolean`        | `true`      | 2의 제곱수 강제 여부        |
-| `useBuildErrorReturn`  | `boolean`        | `false`     | 에러 발생 시 throw 여부     |
-| `throwOnError`         | `boolean`        | `false`     | 초기화 오류 시 throw 여부   |
-| `compress`             | `boolean`        | `false`     | 기본 압축 활성화            |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | `'deflate'` | 기본 압축 알고리즘 |
-| `compressionLevel`     | `number`         | `6`         | 압축 레벨                   |
-| `maxDecodedBytes`      | `number`         | `67108864`  | 최대 디코딩 바이트 (64MB)   |
-| `maxDecompressedBytes` | `number`         | `67108864`  | 최대 압축해제 바이트 (64MB) |
-| `urlSafe`              | `boolean`        | `false`     | URL-Safe 모드               |
-| `encryptionKey`        | `string`         | `undefined` | AES-256-GCM 암호화 키       |
-| `checksum`             | `boolean`        | `false`     | CRC32 체크섬 활성화         |
-| `chunkSize`            | `number`         | `undefined` | 청크 분할 크기              |
-| `chunkSeparator`       | `string`         | `'\n'`      | 청크 구분자                 |
+| Option                 | Type                    | Default     | Description                 |
+| ---------------------- | ----------------------- | ----------- | --------------------------- |
+| `dduSetSymbol`         | `DduSetSymbol`          | `DDU`       | 미리 정의된 charset 심볼    |
+| `encoding`             | `BufferEncoding`        | `'utf-8'`   | 문자열 인코딩               |
+| `usePowerOfTwo`        | `boolean`               | `true`      | 2의 제곱수 강제 여부        |
+| `useBuildErrorReturn`  | `boolean`               | `false`     | 에러 발생 시 throw 여부     |
+| `throwOnError`         | `boolean`               | `false`     | 초기화 오류 시 throw 여부   |
+| `compress`             | `boolean`               | `false`     | 기본 압축 활성화            |
+| `compressionAlgorithm` | `"deflate" \| "brotli"` | `'deflate'` | 기본 압축 알고리즘          |
+| `compressionLevel`     | `number`                | `6`         | 압축 레벨                   |
+| `maxDecodedBytes`      | `number`                | `67108864`  | 최대 디코딩 바이트 (64MB)   |
+| `maxDecompressedBytes` | `number`                | `67108864`  | 최대 압축해제 바이트 (64MB) |
+| `urlSafe`              | `boolean`               | `false`     | URL-Safe 모드               |
+| `encryptionKey`        | `string`                | `undefined` | AES-256-GCM 암호화 키       |
+| `checksum`             | `boolean`               | `false`     | CRC32 체크섬 활성화         |
+| `chunkSize`            | `number`                | `undefined` | 청크 분할 크기              |
+| `chunkSeparator`       | `string`                | `'\n'`      | 청크 구분자                 |
 
 `urlSafe` 는 charset/padding이 `-`, `_`, `.` 를 포함하지 않을 때만 켜집니다. 기본 chunk 정규화와 충돌하므로 custom `charset` 과 `paddingChar` 에는 `\r`, `\n` 을 사용할 수 없습니다.
 
@@ -384,18 +369,18 @@ pnpm bench
 
 **DduOptions:**
 
-| Option | Type | Description |
-| ------ | ---- | ----------- |
-| `compress` | `boolean` | 압축 사용 여부 |
-| `streamAutoDetect` | `boolean` | 기본 스트림 헤더 기반 auto-detect 사용 여부 (`false`이면 footer-only 명시 설정 모드) |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | 압축 알고리즘 |
-| `compressionLevel` | `number` | 압축 레벨 |
-| `checksum` | `boolean` | 체크섬 추가 여부 |
-| `maxDecodedBytes` | `number` | 최대 디코딩 바이트 |
-| `maxDecompressedBytes` | `number` | 최대 압축해제 바이트 |
-| `chunkSize` | `number` | 청크 분할 크기 |
-| `chunkSeparator` | `string`   | 청크 구분자      |
-| `onProgress`     | `function` | 진행률 콜백      |
+| Option                 | Type                    | Description                                                                          |
+| ---------------------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| `compress`             | `boolean`               | 압축 사용 여부                                                                       |
+| `streamAutoDetect`     | `boolean`               | 기본 스트림 헤더 기반 auto-detect 사용 여부 (`false`이면 footer-only 명시 설정 모드) |
+| `compressionAlgorithm` | `"deflate" \| "brotli"` | 압축 알고리즘                                                                        |
+| `compressionLevel`     | `number`                | 압축 레벨                                                                            |
+| `checksum`             | `boolean`               | 체크섬 추가 여부                                                                     |
+| `maxDecodedBytes`      | `number`                | 최대 디코딩 바이트                                                                   |
+| `maxDecompressedBytes` | `number`                | 최대 압축해제 바이트                                                                 |
+| `chunkSize`            | `number`                | 청크 분할 크기                                                                       |
+| `chunkSeparator`       | `string`                | 청크 구분자                                                                          |
+| `onProgress`           | `function`              | 진행률 콜백                                                                          |
 
 `encrypt` 와 `omitFooter` 는 스트림 내부 파이프라인 제어용 옵션이며 일반적인 공개 사용 시에는 직접 지정할 필요가 없습니다.
 
@@ -444,7 +429,6 @@ pnpm bench
 interface CharSetInfo {
   charSet: string[];
   paddingChar: string;
-  charLength: number;
   bitLength: number;
   usePowerOfTwo: boolean;
   encoding: BufferEncoding;
@@ -465,12 +449,12 @@ interface CharSetInfo {
 
 ## DduSetSymbol
 
-| Symbol         | 문자 수 | 비트 길이 | 설명                      |
-| -------------- | ------- | --------- | ------------------------- |
-| `DDU`          | 8       | 3         | 한글 + 특수문자 기본 세트 |
-| `ONECHARSET`   | 64      | 6         | 영문 + 숫자 + 특수문자    |
-| `TWOCHARSET`   | 1024    | 10        | 2글자 조합 세트           |
-| `THREECHARSET` | 32768   | 15        | 3글자 조합 세트           |
+| Symbol       | 문자 수 | 비트 길이 | 설명                      |
+| ------------ | ------- | --------- | ------------------------- |
+| `DDU`        | 8       | 3         | 한글 + 특수문자 기본 세트 |
+| `ONECHARSET` | 64      | 6         | 영문 + 숫자 + 특수문자    |
+
+> **참고:** Charset은 최대 65536자까지 지원되며, 각 문자는 반드시 단일 문자(1글자)여야 합니다. 다중 문자 심볼(2글자, 3글자 조합)은 더 이상 지원되지 않습니다.
 
 ---
 

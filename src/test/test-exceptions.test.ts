@@ -48,8 +48,6 @@ describe("Negative / Exception Test Suite for Coverage", () => {
 
     it("should throw on gracefully parsing invalid footer formats", () => {
       expect(() => dduPow.decodeToBuffer("AAX_wrong_format")).toThrow(/Invalid padding format/i);
-      const dduMisaligned = new Ddu64(["AA", "BB", "CC", "DD"], "XX", { throwOnError: true });
-      expect(() => dduMisaligned.decodeToBuffer("AABBAXX1")).toThrow(/Invalid character/i);
     });
 
     it("should cleanly reject async processing on invalid data", async () => {

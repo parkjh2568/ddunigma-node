@@ -80,8 +80,6 @@ const encoders = {
   "Ddu64 (우따야)": new Ddu64("우따야", "뭐"),
   "Ddu64 (DEFAULT)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.ONECHARSET }),
   "Ddu64 (DDU)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU }),
-  "Ddu64 (1024)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.TWOCHARSET }),
-  "Ddu64 (32768)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.THREECHARSET }),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -226,7 +224,6 @@ console.log("══════════════════════�
   const latin1Encoders = {
     "Ddu64 (DEFAULT)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.ONECHARSET, encoding: 'latin1' }),
     "Ddu64 (DDU)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU, encoding: 'latin1' }),
-    "Ddu64 (1024)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.TWOCHARSET, encoding: 'latin1' }),
   };
 
   let totalBitTests = 0;

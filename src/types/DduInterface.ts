@@ -48,8 +48,6 @@ export interface CharSetInfo {
   charSet: string[];
   /** 패딩 문자 */
   paddingChar: string;
-  /** 각 charset 문자의 길이 */
-  charLength: number;
   /** 비트 길이 */
   bitLength: number;
   /** 2의 제곱수 charset 여부 */

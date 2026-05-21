@@ -1,12 +1,7 @@
 **node_modules
 package-lock.json
 **dist
-.claude
-.serena
-.agent
-.agents
-.codex
-.gemini
-.qwen
+.kiro
 coverage/
 test-decode.ts
+muyaho

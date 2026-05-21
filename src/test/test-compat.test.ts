@@ -186,36 +186,9 @@ console.log("══════════════════════�
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-console.log("[ 5. TWOCHARSET 프리셋 고정값 검증 ]");
-console.log("═══════════════════════════════════════════════════════════════════════════════\n");
-
-{
-  const two = new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.TWOCHARSET });
-
-  runFixedValueTests("TWOCHARSET", two, [
-    { name: "Hello", original: "Hello", encoded: "B0St3Qwj" },
-    { name: "안녕하세요", original: "안녕하세요", encoded: "p8qdZCpW_XwUKLZ7Zcb9XI3T" },
-    { name: "Test123!@#", original: "Test123!@#", encoded: "Zz_XbcM2ar8ROz54" },
-    { name: "A x50", original: "A".repeat(50), encoded: "h01IOzu7h01IOzu7h01IOzu7h01IOzu7h01IOzu7h01IOzu7h01IOzu7h01IOzu7h01IOzu7h01IOzu7" },
-  ]);
-}
-
+// TWOCHARSET and THREECHARSET presets have been removed.
+// See test-charset-optimization.test.ts for removal validation tests.
 // ═══════════════════════════════════════════════════════════════════════════════
-console.log("\n═══════════════════════════════════════════════════════════════════════════════");
-console.log("[ 6. THREECHARSET 프리셋 고정값 검증 ]");
-console.log("═══════════════════════════════════════════════════════════════════════════════\n");
-
-{
-  const three = new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.THREECHARSET });
-
-  runFixedValueTests("THREECHARSET", three, [
-    { name: "Hello", original: "Hello", encoded: "TO3P_bKOIELE5" },
-    { name: "안녕하세요", original: "안녕하세요", encoded: "iLTyPLRzYFmFpw768WP35IX5" },
-    { name: "Test123!@#", original: "Test123!@#", encoded: "HsZ6JkdhB-8qYrAvdZELE10" },
-    { name: "A x50", original: "A".repeat(50), encoded: "q_qyoUYrN3XqT1FBKtuy8NV7q_qyoUYrN3XqT1FBKtuy8NV7q_qyoUYrN3XqT1FBKtuy8NV7q_qyoUwV-ELE5" },
-  ]);
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 console.log("\n═══════════════════════════════════════════════════════════════════════════════");
@@ -383,8 +356,6 @@ console.log("══════════════════════�
   const symbols = [
     { name: "ONECHARSET", symbol: DduSetSymbol.ONECHARSET },
     { name: "DDU", symbol: DduSetSymbol.DDU },
-    { name: "TWOCHARSET", symbol: DduSetSymbol.TWOCHARSET },
-    { name: "THREECHARSET", symbol: DduSetSymbol.THREECHARSET },
   ];
 
   const testStrings = [
@@ -437,10 +408,8 @@ console.log("══════════════════════�
 
 {
   const presetFingerprints = [
-    { name: "DDU", symbol: DduSetSymbol.DDU, sha256: "936aca6b5fe8d318d2e53f9182577b555f43668c62772f0d190c6acf40e92546" },
-    { name: "ONECHARSET", symbol: DduSetSymbol.ONECHARSET, sha256: "d2becd25877816098156c5ba32b4b5b0be23ff21716b1cbab54c3cf0a49df782" },
-    { name: "TWOCHARSET", symbol: DduSetSymbol.TWOCHARSET, sha256: "ce8124bd20b9f5cddbea2cc8209c97cd160fec979eb3735fd07ba2d6f50619a6" },
-    { name: "THREECHARSET", symbol: DduSetSymbol.THREECHARSET, sha256: "5a774e228b3e9d33a95c1191069aaa6c587d1ae0b13b3e80b4be963893728af1" },
+    { name: "DDU", symbol: DduSetSymbol.DDU, sha256: "1b97a1e46501c368c1bfc9c7598ade9a73f0952c087dcfb77642eeafcf298bad" },
+    { name: "ONECHARSET", symbol: DduSetSymbol.ONECHARSET, sha256: "4ec78da248ad30f1232bd8cf2adb839ecf5e32b7c16951f098bffe110f6544cd" },
   ];
 
   presetFingerprints.forEach(({ name, symbol, sha256 }) => {
@@ -453,7 +422,6 @@ console.log("══════════════════════�
             charSet: info.charSet,
             paddingChar: info.paddingChar,
             bitLength: info.bitLength,
-            charLength: info.charLength,
             usePowerOfTwo: info.usePowerOfTwo,
           })
         )
