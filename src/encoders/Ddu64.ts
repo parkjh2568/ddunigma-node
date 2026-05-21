@@ -31,6 +31,7 @@ import {
   BROTLI_MARKER,
   ENCRYPT_MARKER,
   normalizeCompressionLevel,
+  buildCodaCharset,
 } from "../utils/codecUtils";
 
 // ============================================================================
@@ -46,14 +47,11 @@ const BYTE_MASK = 0xff;
 /** 최대 지원 charset 크기 (2^16) */
 const MAX_CHARSET_SIZE = 65536;
 
-
-
 /** 기본 최대 디코딩 바이트 수 (64MB) */
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 
 /** 기본 최대 압축해제 바이트 수 (64MB) */
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
-
 
 /** 인코딩 진행률 단계별 퍼센트 */
 const ENCODE_PROGRESS = {
@@ -110,8 +108,6 @@ export class Ddu64 {
 
   /** 패딩 문자 */
   protected readonly paddingChar: string;
-
-
 
   /** 비트 길이 (log2) */
   protected readonly bitLength: number;
@@ -170,6 +166,9 @@ export class Ddu64 {
   /** 기본 압축 알고리즘 */
   private readonly defaultCompressionAlgorithm: "deflate" | "brotli";
 
+  /** 패딩 문자 반복 방식 사용 여부 */
+  private readonly useRepeatPadding: boolean;
+
   // --------------------------------------------------------------------------
   // 생성자
   // --------------------------------------------------------------------------
@@ -195,18 +194,13 @@ export class Ddu64 {
   constructor(
     dduChar?: string[] | string,
     paddingChar?: string,
-    dduOptions?: DduConstructorOptions
+    dduOptions?: DduConstructorOptions,
   ) {
     // throwOnError 우선, useBuildErrorReturn은 하위 호환
     const shouldThrow = dduOptions?.throwOnError ?? dduOptions?.useBuildErrorReturn ?? false;
 
     // charset 초기화
-    const initial = this.resolveInitialCharSet(
-      dduChar,
-      paddingChar,
-      dduOptions,
-      shouldThrow
-    );
+    const initial = this.resolveInitialCharSet(dduChar, paddingChar, dduOptions, shouldThrow);
     const normalized = this.normalizeCharSet(initial, shouldThrow, dduOptions);
 
     this.dduChar = normalized.charSet;
@@ -220,27 +214,24 @@ export class Ddu64 {
       dduOptions?.maxDecodedBytes,
       DEFAULT_MAX_DECODED_BYTES,
       shouldThrow,
-      "maxDecodedBytes"
+      "maxDecodedBytes",
     );
     this.defaultMaxDecompressedBytes = this.normalizeLimit(
       dduOptions?.maxDecompressedBytes,
       DEFAULT_MAX_DECOMPRESSED_BYTES,
       shouldThrow,
-      "maxDecompressedBytes"
+      "maxDecompressedBytes",
     );
 
     // 비트 길이 계산
     const dduLength = this.dduChar.length;
-    this.usePowerOfTwo =
-      dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
+    this.usePowerOfTwo = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
 
     const computedBitLength = this.getBitLength(dduLength);
     this.bitLength = this.usePowerOfTwo
       ? this.getLargestPowerOfTwoExponent(dduLength)
       : computedBitLength;
-    this.effectiveBitLength = this.usePowerOfTwo
-      ? this.bitLength
-      : computedBitLength;
+    this.effectiveBitLength = this.usePowerOfTwo ? this.bitLength : computedBitLength;
     this.maxBinaryValue =
       this.effectiveBitLength < 31
         ? 1 << this.effectiveBitLength
@@ -272,11 +263,7 @@ export class Ddu64 {
 
     // 커스텀 charset 중복 조합 검증
     if (!this.isPredefinedCharSet) {
-      this.validateCombinationDuplicates(
-        this.dduChar,
-        this.paddingChar,
-        dduLength
-      );
+      this.validateCombinationDuplicates(this.dduChar, this.paddingChar, dduLength);
     }
 
     // 새로운 옵션들 초기화
@@ -293,8 +280,11 @@ export class Ddu64 {
     this.defaultCompressionAlgorithm = dduOptions?.compressionAlgorithm ?? "deflate";
     this.defaultCompressionLevel = normalizeCompressionLevel(
       dduOptions?.compressionLevel,
-      this.defaultCompressionAlgorithm
+      this.defaultCompressionAlgorithm,
     );
+
+    // V2 패딩 모드 결정: 프리셋에서 지정되었거나 옵션으로 명시된 경우
+    this.useRepeatPadding = dduOptions?.useRepeatPadding ?? initial.useRepeatPadding ?? false;
   }
 
   // --------------------------------------------------------------------------
@@ -328,7 +318,7 @@ export class Ddu64 {
    */
   private encodeInternal(
     input: Buffer | string,
-    options?: DduOptions
+    options?: DduOptions,
   ): { encoded: string; compressedSize?: number } {
     const shouldCompress = options?.compress ?? this.defaultCompress;
     const shouldChecksum = options?.checksum ?? this.defaultChecksum;
@@ -337,14 +327,9 @@ export class Ddu64 {
     const chunkSize = options?.chunkSize ?? this.defaultChunkSize;
     const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
     const onProgress = options?.onProgress;
-    const useInlineChunking =
-      !!chunkSize &&
-      chunkSize > 0 &&
-      !shouldChecksum &&
-      !this.urlSafe;
+    const useInlineChunking = !!chunkSize && chunkSize > 0 && !shouldChecksum && !this.urlSafe;
 
-    let workingBuffer =
-      typeof input === "string" ? Buffer.from(input, this.encoding) : input;
+    let workingBuffer = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
     const totalBytes = workingBuffer.length;
 
     // 진행률 콜백 호출 (시작)
@@ -358,7 +343,12 @@ export class Ddu64 {
       workingBuffer = this.encryptData(workingBuffer);
       isEncrypted = true;
       if (onProgress) {
-        onProgress({ processedBytes: 0, totalBytes, percent: ENCODE_PROGRESS.ENCRYPT, stage: "encrypt" });
+        onProgress({
+          processedBytes: 0,
+          totalBytes,
+          percent: ENCODE_PROGRESS.ENCRYPT,
+          stage: "encrypt",
+        });
       }
     }
 
@@ -367,7 +357,12 @@ export class Ddu64 {
     if (shouldChecksum) {
       checksum = calculateCRC32(workingBuffer);
       if (onProgress) {
-        onProgress({ processedBytes: 0, totalBytes, percent: ENCODE_PROGRESS.CHECKSUM, stage: "checksum" });
+        onProgress({
+          processedBytes: 0,
+          totalBytes,
+          percent: ENCODE_PROGRESS.CHECKSUM,
+          stage: "checksum",
+        });
       }
     }
 
@@ -380,35 +375,47 @@ export class Ddu64 {
       const isBrotli = compressionAlgorithm === "brotli";
       const level = normalizeCompressionLevel(
         options?.compressionLevel ?? this.defaultCompressionLevel,
-        compressionAlgorithm
+        compressionAlgorithm,
       );
-      const compressedBuffer = isBrotli 
-        ? brotliCompressSync(workingBuffer, { params: { [constants.BROTLI_PARAM_QUALITY]: Math.min(11, Math.max(0, level)) } })
+      const compressedBuffer = isBrotli
+        ? brotliCompressSync(workingBuffer, {
+            params: { [constants.BROTLI_PARAM_QUALITY]: Math.min(11, Math.max(0, level)) },
+          })
         : deflateSync(workingBuffer, { level: Math.min(9, Math.max(0, level)) });
-      
+
       compressedSize = compressedBuffer.length;
       if (compressedBuffer.length < workingBuffer.length) {
         workingBuffer = compressedBuffer;
         compressionMarker = isBrotli ? BROTLI_MARKER : COMPRESS_MARKER;
       }
       if (onProgress) {
-        onProgress({ processedBytes: Math.floor(totalBytes * 0.4), totalBytes, percent: ENCODE_PROGRESS.COMPRESS, stage: "compress" });
+        onProgress({
+          processedBytes: Math.floor(totalBytes * 0.4),
+          totalBytes,
+          percent: ENCODE_PROGRESS.COMPRESS,
+          stage: "compress",
+        });
       }
     }
 
     // 인코딩 수행
     if (onProgress) {
-      onProgress({ processedBytes: Math.floor(totalBytes * 0.5), totalBytes, percent: ENCODE_PROGRESS.ENCODE, stage: "encode" });
+      onProgress({
+        processedBytes: Math.floor(totalBytes * 0.5),
+        totalBytes,
+        percent: ENCODE_PROGRESS.ENCODE,
+        stage: "encode",
+      });
     }
 
     let result = this.encodeFast(
-          workingBuffer,
-          compressionMarker,
-          isEncrypted,
-          omitFooter,
-          useInlineChunking ? chunkSize : undefined,
-          useInlineChunking ? chunkSeparator : undefined
-        );
+      workingBuffer,
+      compressionMarker,
+      isEncrypted,
+      omitFooter,
+      useInlineChunking ? chunkSize : undefined,
+      useInlineChunking ? chunkSeparator : undefined,
+    );
 
     // 체크섬 추가
     if (shouldChecksum && checksum) {
@@ -427,7 +434,12 @@ export class Ddu64 {
 
     // 진행률 콜백 호출 (완료)
     if (onProgress) {
-      onProgress({ processedBytes: totalBytes, totalBytes, percent: ENCODE_PROGRESS.DONE, stage: "done" });
+      onProgress({
+        processedBytes: totalBytes,
+        totalBytes,
+        percent: ENCODE_PROGRESS.DONE,
+        stage: "done",
+      });
     }
 
     return { encoded: result, compressedSize };
@@ -452,7 +464,6 @@ export class Ddu64 {
     const shouldChecksum = options?.checksum ?? this.defaultChecksum;
     const allowInternalDecompress = options?.compress !== false;
     const allowInternalDecrypt = options?.encrypt !== false;
-    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
     const onProgress = options?.onProgress;
     let workingInput = input;
 
@@ -460,10 +471,16 @@ export class Ddu64 {
 
     // 진행률 콜백 호출 (시작)
     if (onProgress) {
-      onProgress({ processedBytes: 0, totalBytes: inputLength, percent: DECODE_PROGRESS.START, stage: "start" });
+      onProgress({
+        processedBytes: 0,
+        totalBytes: inputLength,
+        percent: DECODE_PROGRESS.START,
+        stage: "start",
+      });
     }
 
     // 청크 제거 (줄바꿈 등 구분자 제거)
+    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
     workingInput = removeChunksFast(workingInput, chunkSeparator);
 
     // URL-Safe 역변환
@@ -479,7 +496,8 @@ export class Ddu64 {
       workingInput = result.data;
     }
 
-    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted } = this.parseFooter(workingInput);
+    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted } =
+      this.parseFooter(workingInput);
 
     if (isEncrypted && allowInternalDecrypt && !this.encryptionKeyHash) {
       throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
@@ -492,21 +510,23 @@ export class Ddu64 {
       options?.maxDecodedBytes,
       this.defaultMaxDecodedBytes,
       true,
-      "maxDecodedBytes"
+      "maxDecodedBytes",
     );
-    const estimatedDecodedBytes = this.estimateDecodedBytes(
-      cleanedInput.length,
-      paddingBits
-    );
+    const estimatedDecodedBytes = this.estimateDecodedBytes(cleanedInput.length, paddingBits);
     if (estimatedDecodedBytes > maxDecodedBytes) {
       throw new Error(
-        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`
+        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`,
       );
     }
 
     // 디코딩 수행
     if (onProgress) {
-      onProgress({ processedBytes: Math.floor(inputLength * 0.2), totalBytes: inputLength, percent: DECODE_PROGRESS.DECODE, stage: "decode" });
+      onProgress({
+        processedBytes: Math.floor(inputLength * 0.2),
+        totalBytes: inputLength,
+        percent: DECODE_PROGRESS.DECODE,
+        stage: "decode",
+      });
     }
 
     let decoded = this.decodeFast(cleanedInput, paddingBits);
@@ -514,15 +534,19 @@ export class Ddu64 {
     // 압축 해제
     if (compressionAlgorithm && allowInternalDecompress) {
       if (onProgress) {
-        onProgress({ processedBytes: Math.floor(inputLength * 0.5), totalBytes: inputLength, percent: DECODE_PROGRESS.DECOMPRESS, stage: "decompress" });
+        onProgress({
+          processedBytes: Math.floor(inputLength * 0.5),
+          totalBytes: inputLength,
+          percent: DECODE_PROGRESS.DECOMPRESS,
+          stage: "decompress",
+        });
       }
       const maxDecompressedBytes = this.normalizeLimit(
         options?.maxDecompressedBytes,
         this.defaultMaxDecompressedBytes,
         true,
-        "maxDecompressedBytes"
+        "maxDecompressedBytes",
       );
-      // Footer 마커로 감지된 알고리즘 우선, 없으면 옵션 참조
       const isBrotli =
         compressionAlgorithm === "brotli" ||
         options?.compressionAlgorithm === "brotli" ||
@@ -537,12 +561,17 @@ export class Ddu64 {
     // 체크섬 검증
     if (extractedChecksum) {
       if (onProgress) {
-        onProgress({ processedBytes: Math.floor(inputLength * 0.7), totalBytes: inputLength, percent: DECODE_PROGRESS.CHECKSUM, stage: "checksum" });
+        onProgress({
+          processedBytes: Math.floor(inputLength * 0.7),
+          totalBytes: inputLength,
+          percent: DECODE_PROGRESS.CHECKSUM,
+          stage: "checksum",
+        });
       }
       const calculatedChecksum = calculateCRC32(decoded);
       if (calculatedChecksum !== extractedChecksum) {
         throw new Error(
-          `[Ddu64 decode] Checksum mismatch. Expected: ${extractedChecksum}, Got: ${calculatedChecksum}`
+          `[Ddu64 decode] Checksum mismatch. Expected: ${extractedChecksum}, Got: ${calculatedChecksum}`,
         );
       }
     }
@@ -550,14 +579,24 @@ export class Ddu64 {
     // 복호화
     if (isEncrypted && this.encryptionKeyHash && allowInternalDecrypt) {
       if (onProgress) {
-        onProgress({ processedBytes: Math.floor(inputLength * 0.85), totalBytes: inputLength, percent: DECODE_PROGRESS.DECRYPT, stage: "decrypt" });
+        onProgress({
+          processedBytes: Math.floor(inputLength * 0.85),
+          totalBytes: inputLength,
+          percent: DECODE_PROGRESS.DECRYPT,
+          stage: "decrypt",
+        });
       }
       decoded = this.decryptData(decoded);
     }
 
     // 진행률 콜백 호출 (완료)
     if (onProgress) {
-      onProgress({ processedBytes: inputLength, totalBytes: inputLength, percent: DECODE_PROGRESS.DONE, stage: "done" });
+      onProgress({
+        processedBytes: inputLength,
+        totalBytes: inputLength,
+        percent: DECODE_PROGRESS.DONE,
+        stage: "done",
+      });
     }
 
     return decoded;
@@ -585,12 +624,50 @@ export class Ddu64 {
   decodeStreamToBuffer(input: string, options?: DduOptions): Buffer {
     const allowInternalDecompress = options?.compress !== false;
     const allowInternalDecrypt = options?.encrypt !== false;
+
+    const { decoded, compressionAlgorithm, isEncrypted } = this.decodeRaw(input, options);
+    let result = decoded;
+
+    // 스트림 순서: decode → decrypt → decompress
+    if (isEncrypted && this.encryptionKeyHash && allowInternalDecrypt) {
+      result = this.decryptStreamData(result);
+    }
+
+    if (compressionAlgorithm && allowInternalDecompress) {
+      const maxDecompressedBytes = this.normalizeLimit(
+        options?.maxDecompressedBytes,
+        this.defaultMaxDecompressedBytes,
+        true,
+        "maxDecompressedBytes",
+      );
+      if (compressionAlgorithm === "brotli") {
+        result = brotliDecompressWithLimit(result, maxDecompressedBytes, "Ddu64 decode");
+      } else {
+        result = this.inflateWithLimit(result, maxDecompressedBytes);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 공통 디코딩 로직: footer 파싱 → 정렬 검증 → 크기 검증 → decodeFast
+   */
+  private decodeRaw(
+    input: string,
+    options?: DduOptions,
+  ): {
+    decoded: Buffer;
+    compressionAlgorithm?: "deflate" | "brotli";
+    isEncrypted: boolean;
+  } {
     const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
     const workingInput = removeChunksFast(input, chunkSeparator);
 
-    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted } = this.parseFooter(workingInput);
+    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted } =
+      this.parseFooter(workingInput);
 
-    if (isEncrypted && allowInternalDecrypt && !this.encryptionKeyHash) {
+    if (isEncrypted && options?.encrypt !== false && !this.encryptionKeyHash) {
       throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
     }
 
@@ -600,39 +677,17 @@ export class Ddu64 {
       options?.maxDecodedBytes,
       this.defaultMaxDecodedBytes,
       true,
-      "maxDecodedBytes"
+      "maxDecodedBytes",
     );
-    const estimatedDecodedBytes = this.estimateDecodedBytes(
-      cleanedInput.length,
-      paddingBits
-    );
+    const estimatedDecodedBytes = this.estimateDecodedBytes(cleanedInput.length, paddingBits);
     if (estimatedDecodedBytes > maxDecodedBytes) {
       throw new Error(
-        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`
+        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`,
       );
     }
 
-    let decoded = this.decodeFast(cleanedInput, paddingBits);
-
-    if (isEncrypted && this.encryptionKeyHash && allowInternalDecrypt) {
-      decoded = this.decryptStreamData(decoded);
-    }
-
-    if (compressionAlgorithm && allowInternalDecompress) {
-      const maxDecompressedBytes = this.normalizeLimit(
-        options?.maxDecompressedBytes,
-        this.defaultMaxDecompressedBytes,
-        true,
-        "maxDecompressedBytes"
-      );
-      if (compressionAlgorithm === "brotli") {
-        decoded = brotliDecompressWithLimit(decoded, maxDecompressedBytes, "Ddu64 decode");
-      } else {
-        decoded = this.inflateWithLimit(decoded, maxDecompressedBytes);
-      }
-    }
-
-    return decoded;
+    const decoded = this.decodeFast(cleanedInput, paddingBits);
+    return { decoded, compressionAlgorithm, isEncrypted };
   }
 
   /**
@@ -671,7 +726,7 @@ export class Ddu64 {
       compressionAlgorithm?: "deflate" | "brotli";
       encrypted?: boolean;
       omitFooter?: boolean;
-    }
+    },
   ): string {
     const compressionMarker =
       options?.compressionAlgorithm === "brotli"
@@ -692,8 +747,7 @@ export class Ddu64 {
    */
   getStats(input: Buffer | string, options?: DduOptions): DduEncodeStats {
     const shouldCompress = options?.compress ?? this.defaultCompress;
-    const originalBuffer =
-      typeof input === "string" ? Buffer.from(input, this.encoding) : input;
+    const originalBuffer = typeof input === "string" ? Buffer.from(input, this.encoding) : input;
     const originalSize = originalBuffer.length;
 
     // encodeInternal을 통해 인코딩과 압축 크기를 한 번에 얻어 중복 deflateSync 방지
@@ -734,22 +788,15 @@ export class Ddu64 {
     const shouldCompress = options?.compress ?? this.defaultCompress;
     const shouldChecksum = options?.checksum ?? this.defaultChecksum;
     const shouldEncrypt = (options?.encrypt ?? true) && !!this.encryptionKeyHash;
-    
-    // 크기가 충분히 작으면 즉시 setImmediate 동기 처리로 오버헤드 최소화
-    if (workingBuffer.length <= CHUNK_SIZE) {
-      return new Promise<string>((resolve, reject) => {
-        setImmediate(() => {
-          try {
-            resolve(this.encode(workingBuffer, options));
-          } catch (e) {
-            reject(e);
-          }
-        });
-      });
-    }
 
-    // footer/암호화/압축/체크섬이 개입되면 전체 페이로드 단위 처리가 더 안전합니다.
-    if (shouldCompress || shouldChecksum || shouldEncrypt || this.urlSafe) {
+    // 작은 입력이거나 복합 처리가 필요하면 단일 페이로드로 처리
+    if (
+      workingBuffer.length <= CHUNK_SIZE ||
+      shouldCompress ||
+      shouldChecksum ||
+      shouldEncrypt ||
+      this.urlSafe
+    ) {
       return new Promise<string>((resolve, reject) => {
         setImmediate(() => {
           try {
@@ -826,10 +873,7 @@ export class Ddu64 {
     const CHUNK_SIZE = 1024 * 64; // ~64KB
     const shouldChecksum = options?.checksum ?? this.defaultChecksum;
     const needsSafeFallback =
-      shouldChecksum ||
-      this.urlSafe ||
-      !!this.defaultChunkSize ||
-      !!options?.chunkSize;
+      shouldChecksum || this.urlSafe || !!this.defaultChunkSize || !!options?.chunkSize;
 
     if (input.length <= CHUNK_SIZE) {
       return new Promise<Buffer>((resolve, reject) => {
@@ -845,11 +889,9 @@ export class Ddu64 {
 
     const asyncFooterState = needsSafeFallback ? null : this.parseFooter(input);
     const shouldCompress =
-      (options?.compress ?? this.defaultCompress) ||
-      !!asyncFooterState?.compressionAlgorithm;
+      (options?.compress ?? this.defaultCompress) || !!asyncFooterState?.compressionAlgorithm;
     const shouldEncrypt =
-      ((options?.encrypt ?? true) && !!this.encryptionKeyHash) ||
-      !!asyncFooterState?.isEncrypted;
+      ((options?.encrypt ?? true) && !!this.encryptionKeyHash) || !!asyncFooterState?.isEncrypted;
 
     if (needsSafeFallback || shouldCompress || shouldEncrypt) {
       return new Promise<Buffer>((resolve, reject) => {
@@ -896,10 +938,6 @@ export class Ddu64 {
       pump();
     });
   }
-
-  // --------------------------------------------------------------------------
-  // 공백 (리팩토링으로 제거됨)
-  // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------
   // 암호화 메서드
@@ -982,14 +1020,14 @@ export class Ddu64 {
     value: number | undefined,
     fallback: number,
     shouldThrow: boolean,
-    name: string
+    name: string,
   ): number {
     if (value === undefined) return fallback;
     if (value === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY;
     if (!Number.isFinite(value) || value <= 0) {
       if (shouldThrow) {
         throw new Error(
-          `[Ddu64 options] Invalid ${name}. Must be a positive finite number or Infinity.`
+          `[Ddu64 options] Invalid ${name}. Must be a positive finite number or Infinity.`,
         );
       }
       return fallback;
@@ -1000,10 +1038,7 @@ export class Ddu64 {
   /**
    * 디코딩 결과 바이트 수를 추정합니다.
    */
-  private estimateDecodedBytes(
-    cleanedInputLen: number,
-    paddingBits: number
-  ): number {
+  private estimateDecodedBytes(cleanedInputLen: number, paddingBits: number): number {
     if (cleanedInputLen === 0) return 0;
     if (paddingBits < 0 || paddingBits >= this.effectiveBitLength) {
       throw new Error(`[Ddu64 decode] Invalid padding bits: ${paddingBits}`);
@@ -1023,7 +1058,7 @@ export class Ddu64 {
       const chunkSize = 2;
       if (cleanedInput.length % chunkSize !== 0) {
         throw new Error(
-          `[Ddu64 decode] Invalid encoded length for variable charset. Expected multiple of ${chunkSize}, got ${cleanedInput.length}`
+          `[Ddu64 decode] Invalid encoded length for variable charset. Expected multiple of ${chunkSize}, got ${cleanedInput.length}`,
         );
       }
     }
@@ -1062,15 +1097,18 @@ export class Ddu64 {
     const maxPaddingBits = Math.max(0, this.effectiveBitLength - 1);
     const maxDigits = maxPaddingBits.toString().length;
 
-    // 끝에서부터 역순 파싱: digits → ENC → ELYSIA → paddingChar
+    // 1단계: Node 방식 패딩 시도 (뭐 + markers + 숫자)
     for (let digitCount = Math.min(maxDigits, inputLen); digitCount >= 1; digitCount--) {
       const digitsStart = inputLen - digitCount;
 
-      // 1) trailing digits 확인
+      // trailing digits 확인
       let allDigits = true;
       for (let i = digitsStart; i < inputLen; i++) {
         const c = input.charCodeAt(i);
-        if (c < 48 || c > 57) { allDigits = false; break; }
+        if (c < 48 || c > 57) {
+          allDigits = false;
+          break;
+        }
       }
       if (!allDigits) continue;
 
@@ -1081,27 +1119,37 @@ export class Ddu64 {
         paddingBits < 0 ||
         paddingBits >= this.effectiveBitLength ||
         digitStr !== paddingBits.toString()
-      ) continue;
+      )
+        continue;
 
-      // 2) digits 앞에서 마커들 역순 확인
+      // digits 앞에서 마커들 역순 확인
       let pos = digitsStart;
       let isEncrypted = false;
       let compressionAlgorithm: "deflate" | "brotli" | undefined;
 
-      if (pos >= ENCRYPT_MARKER.length && input.substring(pos - ENCRYPT_MARKER.length, pos) === ENCRYPT_MARKER) {
+      if (
+        pos >= ENCRYPT_MARKER.length &&
+        input.substring(pos - ENCRYPT_MARKER.length, pos) === ENCRYPT_MARKER
+      ) {
         isEncrypted = true;
         pos -= ENCRYPT_MARKER.length;
       }
 
-      if (pos >= COMPRESS_MARKER.length && input.substring(pos - COMPRESS_MARKER.length, pos) === COMPRESS_MARKER) {
+      if (
+        pos >= COMPRESS_MARKER.length &&
+        input.substring(pos - COMPRESS_MARKER.length, pos) === COMPRESS_MARKER
+      ) {
         compressionAlgorithm = "deflate";
         pos -= COMPRESS_MARKER.length;
-      } else if (pos >= BROTLI_MARKER.length && input.substring(pos - BROTLI_MARKER.length, pos) === BROTLI_MARKER) {
+      } else if (
+        pos >= BROTLI_MARKER.length &&
+        input.substring(pos - BROTLI_MARKER.length, pos) === BROTLI_MARKER
+      ) {
         compressionAlgorithm = "brotli";
         pos -= BROTLI_MARKER.length;
       }
 
-      // 3) 마커 앞에서 padding 문자 확인
+      // 마커 앞에서 padding 문자 확인
       const padStart = pos - padLen;
       if (padStart >= 0 && input.substring(padStart, pos) === pad) {
         return {
@@ -1113,18 +1161,29 @@ export class Ddu64 {
       }
     }
 
-    // Fallback: 역순 탐색이 유효한 패딩을 찾지 못한 경우,
-    // padding 문자가 존재하지만 tail이 잘못된 형식인지 확인하여 에러 보고
-    const lastPadIdx = input.lastIndexOf(pad);
-    if (lastPadIdx >= 0) {
-      const tailStart = lastPadIdx + padLen;
-      if (tailStart >= inputLen) {
-        throw new Error(
-          `[Ddu64 decode] Invalid padding format. Missing padding length`
-        );
+    // 2단계: V2 반복 패딩 시도 (뭐 반복, 숫자 없음)
+    if (input.endsWith(pad)) {
+      let trailingPadCount = 0;
+      let pos = inputLen;
+      while (pos >= padLen) {
+        if (input.substring(pos - padLen, pos) === pad) {
+          trailingPadCount++;
+          pos -= padLen;
+        } else {
+          break;
+        }
       }
-      const tail = input.substring(tailStart);
-      throw new Error(`[Ddu64 decode] Invalid padding format. Got: "${tail}"`);
+
+      if (trailingPadCount > 0) {
+        const paddingBits = trailingPadCount * 2;
+        if (paddingBits < this.effectiveBitLength) {
+          return {
+            cleanedInput: input.substring(0, pos),
+            paddingBits,
+            isEncrypted: false,
+          };
+        }
+      }
     }
 
     return noFooter;
@@ -1143,7 +1202,7 @@ export class Ddu64 {
     encrypt?: boolean,
     omitFooter: boolean = false,
     chunkSize?: number,
-    chunkSeparator?: string
+    chunkSeparator?: string,
   ): string {
     const inputLen = bufferInput.length;
     if (inputLen === 0) return "";
@@ -1153,9 +1212,7 @@ export class Ddu64 {
 
     const totalBits = inputLen * BYTE_BITS;
     const estimatedChunks = Math.ceil(totalBits / bitLength);
-    const estimatedSymbols = this.usePowerOfTwo
-      ? estimatedChunks
-      : estimatedChunks * 2;
+    const estimatedSymbols = this.usePowerOfTwo ? estimatedChunks : estimatedChunks * 2;
     const resultParts: string[] = new Array(estimatedSymbols + 3);
     let resultIdx = 0;
 
@@ -1170,8 +1227,7 @@ export class Ddu64 {
 
         while (accumulatorBits >= bitLength) {
           accumulatorBits -= bitLength;
-          resultParts[resultIdx++] =
-            dduChar[(accumulator >> accumulatorBits) & mask];
+          resultParts[resultIdx++] = dduChar[(accumulator >> accumulatorBits) & mask];
           accumulator &= (1 << accumulatorBits) - 1;
         }
       }
@@ -1203,11 +1259,25 @@ export class Ddu64 {
         resultParts[resultIdx++] = dduChar[div];
         resultParts[resultIdx++] = dduChar[index - div * dduLength];
       }
-      if (omitFooter) {
-        throw new Error("[Ddu64 encode] Cannot omit footer when padding bits remain");
+
+      if (this.useRepeatPadding && !compressionMarker && !encrypt) {
+        // 패딩 문자를 paddingBits / 2 개 반복
+        // 압축/암호화가 없을 때만 사용 (마커를 넣을 공간이 없으므로)
+        if (!omitFooter) {
+          const repeatCount = paddingBits >> 1; // paddingBits / 2
+          for (let p = 0; p < repeatCount; p++) {
+            resultParts[resultIdx++] = paddingChar;
+          }
+        }
+      } else {
+        // Node 기존 패딩: paddingChar + markers + paddingBits 숫자
+        if (omitFooter) {
+          throw new Error("[Ddu64 encode] Cannot omit footer when padding bits remain");
+        }
+        resultParts[resultIdx++] = paddingChar;
+        resultParts[resultIdx++] =
+          compressionMarker + (encrypt ? ENCRYPT_MARKER : "") + paddingBits.toString();
       }
-      resultParts[resultIdx++] = paddingChar;
-      resultParts[resultIdx++] = compressionMarker + (encrypt ? ENCRYPT_MARKER : "") + paddingBits.toString();
     } else if (!omitFooter && (compressionMarker || encrypt)) {
       resultParts[resultIdx++] = paddingChar;
       resultParts[resultIdx++] = compressionMarker + (encrypt ? ENCRYPT_MARKER : "") + "0";
@@ -1233,9 +1303,7 @@ export class Ddu64 {
     const chunkSize = this.usePowerOfTwo ? 1 : 2;
 
     const numChunks = Math.ceil(inputLen / chunkSize);
-    const estimatedBytes = Math.ceil(
-      (numChunks * bitLength - paddingBits) / BYTE_BITS
-    );
+    const estimatedBytes = Math.ceil((numChunks * bitLength - paddingBits) / BYTE_BITS);
     const buffer = new Uint8Array(estimatedBytes + 1);
     let bufIdx = 0;
 
@@ -1251,9 +1319,7 @@ export class Ddu64 {
           const val = code < 128 ? lookup[code] : -1;
 
           if (val < 0) {
-            throw new Error(
-              `[Ddu64 decode] Invalid character "${cleanedInput[i]}" at ${i}`
-            );
+            throw new Error(`[Ddu64 decode] Invalid character "${cleanedInput[i]}" at ${i}`);
           }
 
           accumulator = (accumulator << bitLength) | val;
@@ -1278,9 +1344,7 @@ export class Ddu64 {
           const val = lookup.get(chunk);
 
           if (val === undefined) {
-            throw new Error(
-              `[Ddu64 decode] Invalid character "${chunk}" at ${i}`
-            );
+            throw new Error(`[Ddu64 decode] Invalid character "${chunk}" at ${i}`);
           }
 
           accumulator = (accumulator << bitLength) | val;
@@ -1312,9 +1376,7 @@ export class Ddu64 {
           throw new Error(`[Ddu64 decode] Invalid character "${cleanedInput[i]}" at ${i}`);
         }
         if (v2 < 0) {
-          throw new Error(
-            `[Ddu64 decode] Invalid character "${cleanedInput[i + 1]}" at ${i + 1}`
-          );
+          throw new Error(`[Ddu64 decode] Invalid character "${cleanedInput[i + 1]}" at ${i + 1}`);
         }
 
         const value = v1 * dduLength + v2;
@@ -1349,9 +1411,7 @@ export class Ddu64 {
           throw new Error(`[Ddu64 decode] Invalid character "${c1}" at ${i}`);
         }
         if (v2 === undefined) {
-          throw new Error(
-            `[Ddu64 decode] Invalid character "${c2}" at ${i + 1}`
-          );
+          throw new Error(`[Ddu64 decode] Invalid character "${c2}" at ${i + 1}`);
         }
 
         const value = v1 * dduLength + v2;
@@ -1386,7 +1446,7 @@ export class Ddu64 {
     parts: string[],
     partCount: number,
     chunkSize?: number,
-    chunkSeparator?: string
+    chunkSeparator?: string,
   ): string {
     parts.length = partCount;
 
@@ -1435,7 +1495,7 @@ export class Ddu64 {
       isPredefined: boolean;
     },
     shouldThrow: boolean,
-    dduOptions?: DduConstructorOptions
+    dduOptions?: DduConstructorOptions,
   ): {
     charSet: string[];
     padding: string;
@@ -1455,11 +1515,9 @@ export class Ddu64 {
         const uniqueChars = Array.from(new Set(charSet));
         if (uniqueChars.length !== charSet.length) {
           if (shouldThrow) {
-            const duplicates = charSet.filter(
-              (c, i) => charSet.indexOf(c) !== i
-            );
+            const duplicates = charSet.filter((c, i) => charSet.indexOf(c) !== i);
             throw new Error(
-              `[Ddu64 normalizeCharSet] Character set contains duplicate characters: [${[...new Set(duplicates)].join(", ")}]`
+              `[Ddu64 normalizeCharSet] Character set contains duplicate characters: [${[...new Set(duplicates)].join(", ")}]`,
             );
           }
           charSet = uniqueChars;
@@ -1469,13 +1527,11 @@ export class Ddu64 {
         // 문자 수 검증
         if (charSet.length < requiredLength) {
           throw new Error(
-            `[Ddu64 normalizeCharSet] Insufficient characters. Required: ${requiredLength}, Has: ${charSet.length}`
+            `[Ddu64 normalizeCharSet] Insufficient characters. Required: ${requiredLength}, Has: ${charSet.length}`,
           );
         }
         if (requiredLength < 2) {
-          throw new Error(
-            `[Ddu64 normalizeCharSet] At least 2 unique characters required.`
-          );
+          throw new Error(`[Ddu64 normalizeCharSet] At least 2 unique characters required.`);
         }
         if (charSet.length === 0) {
           throw new Error(`[Ddu64 normalizeCharSet] Empty charset.`);
@@ -1486,7 +1542,7 @@ export class Ddu64 {
         if (multiCharSymbol) {
           if (shouldThrow) {
             throw new Error(
-              `[Ddu64 normalizeCharSet] Multi-character symbols are not supported. All charset characters must have length 1.`
+              `[Ddu64 normalizeCharSet] Multi-character symbols are not supported. All charset characters must have length 1.`,
             );
           }
           continue; // fallback으로 재시도
@@ -1496,7 +1552,7 @@ export class Ddu64 {
         if (charSet.length > MAX_CHARSET_SIZE) {
           if (shouldThrow) {
             throw new Error(
-              `[Ddu64 normalizeCharSet] Charset size exceeds maximum supported size of 65536.`
+              `[Ddu64 normalizeCharSet] Charset size exceeds maximum supported size of 65536.`,
             );
           }
           continue; // fallback으로 재시도
@@ -1505,13 +1561,13 @@ export class Ddu64 {
         // 패딩 검증
         if (state.padding.length !== 1) {
           throw new Error(
-            `[Ddu64 normalizeCharSet] Padding length mismatch. Expected 1, got ${state.padding.length}`
+            `[Ddu64 normalizeCharSet] Padding length mismatch. Expected 1, got ${state.padding.length}`,
           );
         }
         if (charSet.includes(state.padding)) {
           if (shouldThrow) {
             throw new Error(
-              `[Ddu64 normalizeCharSet] Padding character "${state.padding}" conflicts with charset.`
+              `[Ddu64 normalizeCharSet] Padding character "${state.padding}" conflicts with charset.`,
             );
           }
           charSet = charSet.filter((c) => c !== state.padding);
@@ -1520,21 +1576,19 @@ export class Ddu64 {
         for (const c of charSet) {
           if (c.includes("\n") || c.includes("\r")) {
             throw new Error(
-              `[Ddu64 normalizeCharSet] Newline and carriage return characters are reserved for chunk normalization and cannot be used in charset.`
+              `[Ddu64 normalizeCharSet] Newline and carriage return characters are reserved for chunk normalization and cannot be used in charset.`,
             );
           }
         }
         if (state.padding.includes("\n") || state.padding.includes("\r")) {
           throw new Error(
-            `[Ddu64 normalizeCharSet] Newline and carriage return characters are reserved for chunk normalization and cannot be used in padding.`
+            `[Ddu64 normalizeCharSet] Newline and carriage return characters are reserved for chunk normalization and cannot be used in padding.`,
           );
         }
 
         // 불필요한 배열 복사 방지
         const finalSet =
-          charSet.length === requiredLength
-            ? charSet
-            : charSet.slice(0, requiredLength);
+          charSet.length === requiredLength ? charSet : charSet.slice(0, requiredLength);
 
         return {
           charSet: finalSet,
@@ -1563,13 +1617,14 @@ export class Ddu64 {
     dduChar: string[] | string | undefined,
     paddingChar: string | undefined,
     dduOptions: DduConstructorOptions | undefined,
-    shouldThrow: boolean
+    shouldThrow: boolean,
   ) {
     const buildMeta = (
       set: string[],
       padding: string,
       length: number,
-      isPredefined: boolean
+      isPredefined: boolean,
+      useRepeatPadding?: boolean,
     ) => {
       const usePow2 = this.shouldUsePowerOfTwo(length, dduOptions?.usePowerOfTwo);
       if (usePow2 && length > 0) {
@@ -1582,6 +1637,7 @@ export class Ddu64 {
           requiredLength: pow2Length,
           bitLength: exponent,
           isPredefined,
+          useRepeatPadding,
         };
       }
       const selected = set.length === length ? set : set.slice(0, length);
@@ -1591,6 +1647,7 @@ export class Ddu64 {
         requiredLength: length,
         bitLength: length > 0 ? this.getBitLength(length) : 0,
         isPredefined,
+        useRepeatPadding,
       };
     };
 
@@ -1600,21 +1657,24 @@ export class Ddu64 {
 
       if (finalDduChar) {
         if (!finalPadding) {
-          throw new Error(
-            `[Ddu64 Constructor] paddingChar is required when dduChar is provided.`
-          );
+          throw new Error(`[Ddu64 Constructor] paddingChar is required when dduChar is provided.`);
         }
 
-        const arr =
-          typeof finalDduChar === "string"
-            ? [...finalDduChar.trim()]
-            : [...finalDduChar];
+        let arr = typeof finalDduChar === "string" ? [...finalDduChar.trim()] : [...finalDduChar];
+
+        // codaChar가 제공되면 dduChar × codaChar 조합으로 charset 동적 생성
+        const codaChar = dduOptions?.codaChar;
+        const useRepeatPad = codaChar ? true : (dduOptions?.useRepeatPadding ?? false);
+        if (codaChar && codaChar.length > 0) {
+          arr = buildCodaCharset(arr, codaChar);
+        }
+
         if (shouldThrow) {
           const uniqueSize = new Set(arr).size;
           if (uniqueSize !== arr.length) {
             const duplicates = arr.filter((c, i) => arr.indexOf(c) !== i);
             throw new Error(
-              `[Ddu64 Constructor] Character set contains duplicate characters: [${[...new Set(duplicates)].join(", ")}]`
+              `[Ddu64 Constructor] Character set contains duplicate characters: [${[...new Set(duplicates)].join(", ")}]`,
             );
           }
         }
@@ -1624,15 +1684,20 @@ export class Ddu64 {
           throw new Error(`[Ddu64 Constructor] Insufficient characters.`);
         }
 
-        return buildMeta(arr, finalPadding, reqLen, false);
+        return buildMeta(arr, finalPadding, reqLen, false, useRepeatPad);
       }
 
       const symbol =
-        dduOptions?.dduSetSymbol ??
-        dduDefaultConstructorOptions.dduSetSymbol ??
-        DduSetSymbol.DDU;
+        dduOptions?.dduSetSymbol ?? dduDefaultConstructorOptions.dduSetSymbol ?? DduSetSymbol.DDU;
       const cs = this.getCharSetOrThrow(symbol);
-      return buildMeta(cs.charSet, cs.paddingChar, cs.maxRequiredLength, true);
+      const resolvedCharSet = cs.codaChar ? buildCodaCharset(cs.charSet, cs.codaChar) : cs.charSet;
+      return buildMeta(
+        resolvedCharSet,
+        cs.paddingChar,
+        cs.maxRequiredLength,
+        true,
+        cs.useRepeatPadding,
+      );
     } catch (error) {
       if (shouldThrow) throw error;
       return this.getFallbackCharSet(dduOptions);
@@ -1649,12 +1714,14 @@ export class Ddu64 {
       DduSetSymbol.ONECHARSET;
     const cs = getCharSet(symbol) ?? getCharSet(DduSetSymbol.ONECHARSET);
     if (!cs) throw new Error(`Critical: No fallback CharSet available`);
+    const charSet = cs.codaChar ? buildCodaCharset(cs.charSet, cs.codaChar) : cs.charSet;
     return {
-      charSet: cs.charSet,
+      charSet,
       padding: cs.paddingChar,
       requiredLength: cs.maxRequiredLength,
       bitLength: cs.bitLength,
       isPredefined: true,
+      useRepeatPadding: cs.useRepeatPadding,
     };
   }
 
@@ -1685,7 +1752,7 @@ export class Ddu64 {
   private isUrlSafeCompatible(
     charSet: string[],
     paddingChar: string,
-    shouldThrow: boolean
+    shouldThrow: boolean,
   ): boolean {
     const conflictChars = URL_SAFE_CONFLICT_CHARS;
 
@@ -1712,7 +1779,7 @@ export class Ddu64 {
   private validateCombinationDuplicates(
     charSet: string[],
     paddingChar: string,
-    requiredLength: number
+    requiredLength: number,
   ): void {
     if (requiredLength > 256) return;
 
@@ -1721,8 +1788,7 @@ export class Ddu64 {
     const combinations = new Set<string>();
 
     const add = (s: string, context: string) => {
-      if (combinations.has(s))
-        throw new Error(`Combination conflict: ${context}`);
+      if (combinations.has(s)) throw new Error(`Combination conflict: ${context}`);
       combinations.add(s);
     };
 

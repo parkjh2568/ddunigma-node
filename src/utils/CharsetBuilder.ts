@@ -89,7 +89,7 @@ export class CharsetBuilder {
     return builder
       .addUnicodeRange(0x1100, 0x1112) // 초성
       .addUnicodeRange(0x1161, 0x1175) // 중성
-      .addUnicodeRange(0x11A8, 0x11C2); // 종성
+      .addUnicodeRange(0x11a8, 0x11c2); // 종성
   }
 
   /**
@@ -179,7 +179,7 @@ export class CharsetBuilder {
       s ^= s << 13;
       s ^= s >> 17;
       s ^= s << 5;
-      return ((s >>> 0) / 0x100000000);
+      return (s >>> 0) / 0x100000000;
     };
   }
 
@@ -266,4 +266,3 @@ export class CharsetBuilder {
     return { charset, padding };
   }
 }
-

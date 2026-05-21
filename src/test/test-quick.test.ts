@@ -29,10 +29,70 @@ function reportTest(name: string, passed: boolean, details?: string) {
 }
 
 const BASE64_CHARS = [
-  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
-  "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "a", "b", "c", "d", "e", "f",
-  "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v",
-  "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "/",
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "H",
+  "I",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "P",
+  "Q",
+  "R",
+  "S",
+  "T",
+  "U",
+  "V",
+  "W",
+  "X",
+  "Y",
+  "Z",
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "w",
+  "x",
+  "y",
+  "z",
+  "0",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "+",
+  "/",
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -48,7 +108,7 @@ console.log("══════════════════════�
     { name: "혼합", data: "Hello안녕123!😀" },
   ];
 
-  testCases.forEach(test => {
+  testCases.forEach((test) => {
     try {
       const encoded = encoder.encode(test.data);
       const decoded = encoder.decode(encoded);
@@ -109,7 +169,10 @@ console.log("══════════════════════�
     encoder.decode("우따뭐-5");
     reportTest("음수 패딩 감지", false, "에러가 발생해야 함");
   } catch (err: any) {
-    reportTest("음수 패딩 감지", err.message.includes("Invalid padding"));
+    reportTest(
+      "음수 패딩 감지",
+      err.message.includes("Invalid padding") || err.message.includes("Invalid character"),
+    );
   }
 
   // 패딩 오탐 방지
@@ -144,7 +207,7 @@ console.log("══════════════════════�
 {
   // 2의 제곱수
   try {
-    const chars = Array.from({ length: 64 }, (_, i) => String.fromCharCode(0x4E00 + i));
+    const chars = Array.from({ length: 64 }, (_, i) => String.fromCharCode(0x4e00 + i));
     const encoder = new Ddu64(chars, "뭐");
     const testData = "64개 charset";
     const encoded = encoder.encode(testData);
@@ -173,10 +236,10 @@ console.log("[ 6. 바이너리 데이터 (decodeToBuffer) ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
 {
-  const encoder = new Ddu64(BASE64_CHARS, "=", { encoding: 'latin1' });
+  const encoder = new Ddu64(BASE64_CHARS, "=", { encoding: "latin1" });
 
   try {
-    const buffer = Buffer.alloc(50, 0xFF);
+    const buffer = Buffer.alloc(50, 0xff);
     const encoded = encoder.encode(buffer);
     const decodedBuffer = encoder.decodeToBuffer(encoded);
     reportTest("모든 0xFF 바이트", buffer.equals(decodedBuffer));
@@ -185,7 +248,7 @@ console.log("══════════════════════�
   }
 
   try {
-    const buffer = Buffer.from([0xAA, 0x55].flatMap(b => Array(25).fill(b)));
+    const buffer = Buffer.from([0xaa, 0x55].flatMap((b) => Array(25).fill(b)));
     const encoded = encoder.encode(buffer);
     const decodedBuffer = encoder.decodeToBuffer(encoded);
     reportTest("반복 패턴 (0xAA, 0x55)", buffer.equals(decodedBuffer));
@@ -270,7 +333,7 @@ console.log("══════════════════════�
     const testData = "Buffer 압축 테스트 데이터입니다.";
     const encoded = encoder.encode(testData, { compress: true });
     const decodedBuffer = encoder.decodeToBuffer(encoded);
-    reportTest("압축 decodeToBuffer 검증", testData === decodedBuffer.toString('utf-8'));
+    reportTest("압축 decodeToBuffer 검증", testData === decodedBuffer.toString("utf-8"));
   } catch (err: any) {
     reportTest("압축 decodeToBuffer 검증", false, err.message);
   }
@@ -306,8 +369,8 @@ console.log("══════════════════════�
 
   // 바이너리 데이터 압축
   try {
-    const binaryEncoder = new Ddu64(BASE64_CHARS, "=", { encoding: 'latin1' });
-    const buffer = Buffer.alloc(500, 0xAB);
+    const binaryEncoder = new Ddu64(BASE64_CHARS, "=", { encoding: "latin1" });
+    const buffer = Buffer.alloc(500, 0xab);
     const compressEncoded = binaryEncoder.encode(buffer, { compress: true });
     const decodedBuffer = binaryEncoder.decodeToBuffer(compressEncoded);
     reportTest("압축 (바이너리 데이터)", buffer.equals(decodedBuffer));
@@ -373,7 +436,8 @@ console.log("══════════════════════�
   } catch (err: any) {
     reportTest(
       "maxDecompressedBytes 제한",
-      String(err.message).includes("Decompressed data exceeds limit") || String(err.message).includes("exceeds limit")
+      String(err.message).includes("Decompressed data exceeds limit") ||
+        String(err.message).includes("exceeds limit"),
     );
   }
 }
@@ -401,7 +465,10 @@ console.log("══════════════════════�
     for (let i = 0; i < 100; i++) {
       const encoded = encoder.encode(testData);
       const decoded = encoder.decode(encoded);
-      if (decoded !== testData) { allPassed = false; break; }
+      if (decoded !== testData) {
+        allPassed = false;
+        break;
+      }
     }
     reportTest("100회 반복", allPassed);
   } catch (err: any) {

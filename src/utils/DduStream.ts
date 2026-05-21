@@ -1,5 +1,11 @@
 import { Transform, TransformCallback, TransformOptions, PassThrough } from "stream";
-import { createDeflate, createInflate, createBrotliCompress, createBrotliDecompress, constants } from "zlib";
+import {
+  createDeflate,
+  createInflate,
+  createBrotliCompress,
+  createBrotliDecompress,
+  constants,
+} from "zlib";
 import { Ddu64 } from "../encoders/Ddu64";
 import { DduOptions } from "../types/DduInterface";
 import { removeChunksFast, normalizeCompressionLevel } from "./codecUtils";
@@ -15,10 +21,7 @@ function getStreamHeaderLength(paddingChar: string): number {
   return paddingChar.length * 2 + STREAM_HEADER_MAGIC.length + 2;
 }
 
-function buildStreamHeader(
-  paddingChar: string,
-  meta: StreamHeaderMeta
-): string {
+function buildStreamHeader(paddingChar: string, meta: StreamHeaderMeta): string {
   const compressionCode =
     meta.compressionAlgorithm === "brotli"
       ? "B"
@@ -29,10 +32,7 @@ function buildStreamHeader(
   return `${paddingChar}${STREAM_HEADER_MAGIC}${compressionCode}${encryptionCode}${paddingChar}`;
 }
 
-function parseStreamHeader(
-  input: string,
-  paddingChar: string
-): StreamHeaderMeta | null {
+function parseStreamHeader(input: string, paddingChar: string): StreamHeaderMeta | null {
   const headerLength = getStreamHeaderLength(paddingChar);
   if (input.length < headerLength || !input.startsWith(paddingChar)) {
     return null;
@@ -100,7 +100,10 @@ class PrefixChunkTransform extends Transform {
  * 두 스트림을 하나의 ReadWrite 스트림으로 결합합니다.
  * write는 input에, read는 output에서 수행됩니다.
  */
-function combineStreams(input: NodeJS.WritableStream, output: NodeJS.ReadableStream): NodeJS.ReadWriteStream {
+function combineStreams(
+  input: NodeJS.WritableStream,
+  output: NodeJS.ReadableStream,
+): NodeJS.ReadWriteStream {
   const combined = new PassThrough();
 
   // write 방향: combined → input
@@ -184,7 +187,7 @@ export class DduEncodeStream extends Transform {
     this.bufferOffset = 0;
     this.totalLength = 0;
     this.footerCompressionAlgorithm =
-      options?.compress ?? info.defaultCompress
+      (options?.compress ?? info.defaultCompress)
         ? (options?.compressionAlgorithm ?? info.defaultCompressionAlgorithm)
         : undefined;
     this.footerEncrypted = (options?.encrypt ?? true) && info.hasEncryptionKey;
@@ -251,12 +254,7 @@ export class DduEncodeStream extends Transform {
     }
 
     const first = this.buffers[0];
-    if (
-      this.buffers.length === 1 &&
-      first &&
-      this.bufferOffset === 0 &&
-      first.length === size
-    ) {
+    if (this.buffers.length === 1 && first && this.bufferOffset === 0 && first.length === size) {
       this.buffers = [];
       this.totalLength = 0;
       return first;
@@ -346,10 +344,7 @@ export class DduDecodeStream extends Transform {
   _flush(callback: TransformCallback): void {
     try {
       if (this.separatorTail.length > 0) {
-        this.normalizedBuffer += removeChunksFast(
-          this.separatorTail,
-          this.chunkSeparator
-        );
+        this.normalizedBuffer += removeChunksFast(this.separatorTail, this.chunkSeparator);
         this.separatorTail = "";
       }
 
@@ -439,10 +434,7 @@ class DduAutoDetectDecodeStream extends Transform {
   _flush(callback: TransformCallback): void {
     try {
       if (this.separatorTail.length > 0) {
-        this.normalizedBuffer += removeChunksFast(
-          this.separatorTail,
-          this.chunkSeparator
-        );
+        this.normalizedBuffer += removeChunksFast(this.separatorTail, this.chunkSeparator);
         this.separatorTail = "";
       }
 
@@ -592,30 +584,30 @@ class DduAutoDetectDecodeStream extends Transform {
  */
 export function createEncodeStream(
   encoder: Ddu64,
-  options?: DduOptions & TransformOptions
+  options?: DduOptions & TransformOptions,
 ): NodeJS.ReadWriteStream {
   const info = encoder.getCharSetInfo();
   const shouldCompress = options?.compress ?? info.defaultCompress;
   const shouldEncrypt = (options?.encrypt ?? true) && info.hasEncryptionKey;
   const useStreamHeader = options?.streamAutoDetect !== false;
-  const compressionAlgorithm =
-    shouldCompress
-      ? (options?.compressionAlgorithm ?? info.defaultCompressionAlgorithm)
-      : undefined;
+  const compressionAlgorithm = shouldCompress
+    ? (options?.compressionAlgorithm ?? info.defaultCompressionAlgorithm)
+    : undefined;
   const encodeStream = new DduEncodeStream(encoder, options);
   const pipeline: Transform[] = [];
 
   if (shouldCompress) {
-    const activeCompressionAlgorithm =
-      compressionAlgorithm ?? info.defaultCompressionAlgorithm;
+    const activeCompressionAlgorithm = compressionAlgorithm ?? info.defaultCompressionAlgorithm;
     const isBrotli = activeCompressionAlgorithm === "brotli";
     const level = normalizeCompressionLevel(
       options?.compressionLevel ?? info.defaultCompressionLevel,
-      activeCompressionAlgorithm
+      activeCompressionAlgorithm,
     );
     const compressor = isBrotli
-      ? createBrotliCompress({ params: { [constants.BROTLI_PARAM_QUALITY]: Math.min(11, Math.max(0, level)) } })
-      : createDeflate({ level: Math.min(9, Math.max(0, level)) }) as Transform;
+      ? createBrotliCompress({
+          params: { [constants.BROTLI_PARAM_QUALITY]: Math.min(11, Math.max(0, level)) },
+        })
+      : (createDeflate({ level: Math.min(9, Math.max(0, level)) }) as Transform);
     pipeline.push(compressor);
   }
 
@@ -633,8 +625,8 @@ export function createEncodeStream(
         buildStreamHeader(info.paddingChar, {
           compressionAlgorithm,
           encrypted: shouldEncrypt,
-        })
-      )
+        }),
+      ),
     );
   }
   return pipeline.length === 1 ? encodeStream : combinePipeline(pipeline);
@@ -649,7 +641,7 @@ export function createEncodeStream(
  */
 export function createDecodeStream(
   encoder: Ddu64,
-  options?: DduOptions & TransformOptions
+  options?: DduOptions & TransformOptions,
 ): NodeJS.ReadWriteStream {
   const useAutoDetect = options?.streamAutoDetect ?? true;
   if (useAutoDetect) {
@@ -670,8 +662,7 @@ export function createDecodeStream(
   }
 
   if (shouldCompress) {
-    const compressionAlgorithm =
-      options?.compressionAlgorithm ?? info.defaultCompressionAlgorithm;
+    const compressionAlgorithm = options?.compressionAlgorithm ?? info.defaultCompressionAlgorithm;
     const isBrotli = compressionAlgorithm === "brotli";
     const decompressor = (isBrotli ? createBrotliDecompress() : createInflate()) as Transform;
     pipeline.push(decompressor);

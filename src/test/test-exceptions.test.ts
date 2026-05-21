@@ -16,7 +16,9 @@ describe("Negative / Exception Test Suite for Coverage", () => {
     });
 
     it("should throw if paddingChar is not provided alongside dduChar", () => {
-      expect(() => new Ddu64(["A", "B"], undefined, { throwOnError: true })).toThrow(/paddingChar is required/i);
+      expect(() => new Ddu64(["A", "B"], undefined, { throwOnError: true })).toThrow(
+        /paddingChar is required/i,
+      );
     });
 
     it("should throw if padding character is used inside charset", () => {
@@ -47,7 +49,9 @@ describe("Negative / Exception Test Suite for Coverage", () => {
     });
 
     it("should throw on gracefully parsing invalid footer formats", () => {
-      expect(() => dduPow.decodeToBuffer("AAX_wrong_format")).toThrow(/Invalid padding format/i);
+      expect(() => dduPow.decodeToBuffer("AAX_wrong_format")).toThrow(
+        /Invalid (padding format|character)/i,
+      );
     });
 
     it("should cleanly reject async processing on invalid data", async () => {
@@ -57,16 +61,16 @@ describe("Negative / Exception Test Suite for Coverage", () => {
 
     it("should treat GRISEO + digits suffix as pure data (No false positive) if not properly padded", () => {
       // charset contains 32 characters (power of 2) including G, R, I, S, E, O, 1
-      const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345".split('');
+      const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345".split("");
       const dduEdge = new Ddu64(charset, "-", { throwOnError: true });
-      
+
       // "GRISEO11" does not have the padding character '-' right before it,
       // so it should be treated as raw data symbols, NOT a brotli footer.
       // (Used length 8 string to align perfectly with charLength 1)
-      const rawPayload = "BGRISEO1"; 
+      const rawPayload = "BGRISEO1";
       const decodedBuf = dduEdge.decodeToBuffer(rawPayload);
       const encodedRe = dduEdge.encode(decodedBuf);
-      
+
       // Decoded buffer shouldn't be empty (which would happen if it was stripped as a footer),
       // and re-encoding should yield the pure data (no footprint loss).
       expect(encodedRe).toBe(rawPayload);
@@ -97,17 +101,17 @@ describe("Negative / Exception Test Suite for Coverage", () => {
 
   describe("Crypto Limits (Zip Bomb Defense)", () => {
     it("should throw Zip Bomb warning if deflated data expands past limits", () => {
-      const zeroBuffer = Buffer.alloc(5000, 0); 
+      const zeroBuffer = Buffer.alloc(5000, 0);
       const deflated = deflateSync(zeroBuffer);
       expect(() => inflateWithLimit(deflated, 1000, "Security")).toThrow(/exceeds limit/i);
     });
 
     it("should throw warning if brotli data expands past limits during decoding", () => {
       const zeroBuffer = Buffer.alloc(5000, 0);
-      const dduBrotli = new Ddu64(["A", "B", "C", "D"], "X", { 
-        compress: true, 
-        compressionAlgorithm: "brotli" ,
-        maxDecompressedBytes: 1000
+      const dduBrotli = new Ddu64(["A", "B", "C", "D"], "X", {
+        compress: true,
+        compressionAlgorithm: "brotli",
+        maxDecompressedBytes: 1000,
       });
       const encoded = dduBrotli.encode(zeroBuffer);
       // Because decoding 5000 bytes > 1000 limit, it natively blocks execution
@@ -117,25 +121,25 @@ describe("Negative / Exception Test Suite for Coverage", () => {
 
   describe("DduPipeline Non-Reversibility", () => {
     it("should throw if trying to reverse a custom mapped function step", () => {
-      const pipeline = new DduPipeline().transform(buf => buf);
+      const pipeline = new DduPipeline().transform((buf) => buf);
       expect(() => pipeline.reverse()).toThrow(/Cannot reverse/i);
     });
-    
+
     it("should throw if trying to reverse string transform step", () => {
-      const pipeline = new DduPipeline().transformString(s => s);
+      const pipeline = new DduPipeline().transformString((s) => s);
       expect(() => pipeline.reverse()).toThrow(/Cannot reverse/i);
     });
   });
-  
+
   describe("DduStream Exceptions", () => {
     it("should carry over destructive stream errors in pipeline", async () => {
       const ddu = new Ddu64(["A", "B"], "X", { throwOnError: true });
       const encodeStream = createEncodeStream(ddu) as any;
-      
+
       const errorBubble = new Promise((_, reject) => {
         encodeStream.on("error", reject);
       });
-      
+
       encodeStream.emit("error", new Error("Simulated Stream Destroyed"));
       await expect(errorBubble).rejects.toThrow(/Simulated Stream/i);
     });
@@ -144,7 +148,7 @@ describe("Negative / Exception Test Suite for Coverage", () => {
       const encoder = new Ddu64(
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ ",
         "=",
-        { throwOnError: true, usePowerOfTwo: false }
+        { throwOnError: true, usePowerOfTwo: false },
       );
       const original = "Whitespace charset payload";
       const encoded = encoder.encode(original);

@@ -1,4 +1,11 @@
-import { createCipheriv, createDecipheriv, randomBytes, createHash, CipherGCM, DecipherGCM } from "crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  createHash,
+  CipherGCM,
+  DecipherGCM,
+} from "crypto";
 import { Transform, TransformCallback } from "stream";
 import { inflateSync, brotliDecompressSync, ZlibOptions } from "zlib";
 
@@ -44,7 +51,6 @@ export function decryptAes256Gcm(data: Buffer, keyHash: Buffer): Buffer {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 }
 
-
 /**
  * AES-256-GCM 스트림 포맷(iv + encrypted + authTag)을 복호화합니다.
  * 스트림 포맷은 일반 포맷(iv + authTag + encrypted)과 바이트 순서가 다릅니다.
@@ -73,14 +79,18 @@ export function decryptAes256GcmStream(data: Buffer, keyHash: Buffer): Buffer {
  * @param context - 에러 메시지에 표시할 컨텍스트
  * @returns 압축 해제된 데이터
  */
-export function brotliDecompressWithLimit(data: Buffer, maxBytes: number, context: string = "brotli decompress"): Buffer {
+export function brotliDecompressWithLimit(
+  data: Buffer,
+  maxBytes: number,
+  context: string = "brotli decompress",
+): Buffer {
   if (maxBytes === Number.POSITIVE_INFINITY) return brotliDecompressSync(data);
 
   try {
     const inflated = brotliDecompressSync(data, { maxOutputLength: maxBytes });
     if (inflated.length > maxBytes) {
       throw new Error(
-        `[${context}] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`
+        `[${context}] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`,
       );
     }
     return inflated;
@@ -95,10 +105,9 @@ export function brotliDecompressWithLimit(data: Buffer, maxBytes: number, contex
       msg.includes("buffer larger than") ||
       msg.includes("output length")
     ) {
-      throw new Error(
-        `[${context}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`,
-        { cause: e }
-      );
+      throw new Error(`[${context}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`, {
+        cause: e,
+      });
     }
     throw e;
   }
@@ -112,7 +121,11 @@ export function brotliDecompressWithLimit(data: Buffer, maxBytes: number, contex
  * @param context - 에러 메시지에 표시할 컨텍스트 (예: "Ddu64 decode", "DduPipeline decompress")
  * @returns 압축 해제된 데이터
  */
-export function inflateWithLimit(data: Buffer, maxBytes: number, context: string = "inflate"): Buffer {
+export function inflateWithLimit(
+  data: Buffer,
+  maxBytes: number,
+  context: string = "inflate",
+): Buffer {
   if (maxBytes === Number.POSITIVE_INFINITY) return inflateSync(data);
 
   try {
@@ -132,7 +145,7 @@ export function inflateWithLimit(data: Buffer, maxBytes: number, context: string
       if (inflated.length > maxBytes) {
         throw new Error(
           `[${context}] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`,
-          { cause: e }
+          { cause: e },
         );
       }
       return inflated;
@@ -144,15 +157,13 @@ export function inflateWithLimit(data: Buffer, maxBytes: number, context: string
       msg.toLowerCase().includes("output length") ||
       msg.toLowerCase().includes("buffer too large")
     ) {
-      throw new Error(
-        `[${context}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`,
-        { cause: e }
-      );
+      throw new Error(`[${context}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`, {
+        cause: e,
+      });
     }
     throw e;
   }
 }
-
 
 /**
  * AES-256-GCM 스트림 암호화 (Node.js Transform)
@@ -201,18 +212,18 @@ export class GcmDecryptStream extends Transform {
 
   _transform(chunk: Buffer, enc: BufferEncoding, cb: TransformCallback) {
     this.tail = Buffer.concat([this.tail, chunk]);
-    
+
     if (!this.iv && this.tail.length >= 12) {
       this.iv = this.tail.subarray(0, 12);
       this.decipher = createDecipheriv("aes-256-gcm", this.keyHash, this.iv);
       this.tail = this.tail.subarray(12);
     }
-    
+
     if (this.decipher && this.tail.length > 16) {
       const toProcess = this.tail.length - 16;
       const processBuf = this.tail.subarray(0, toProcess);
       this.tail = this.tail.subarray(toProcess);
-      
+
       try {
         const decrypted = this.decipher.update(processBuf);
         if (decrypted.length > 0) this.push(decrypted);
@@ -227,7 +238,7 @@ export class GcmDecryptStream extends Transform {
     if (!this.decipher || this.tail.length !== 16) {
       return cb(new Error("[GcmDecryptStream] Invalid encrypted data: too short or no auth tag"));
     }
-    
+
     try {
       this.decipher.setAuthTag(this.tail);
       const finalBuf = this.decipher.final();

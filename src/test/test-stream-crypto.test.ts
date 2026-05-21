@@ -6,10 +6,14 @@ import { PassThrough, Readable } from "stream";
 
 describe("Stream Encryption Logic", () => {
   it("should flawlessly encode and decode async with encryption", async () => {
-    const encoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      encryptionKey: "secret-key",
-      compress: false
-    });
+    const encoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        encryptionKey: "secret-key",
+        compress: false,
+      },
+    );
     const largeBuffer = randomBytes(100 * 1024); // 100KB to trigger chunking
     const encoded = await encoder.encodeAsync(largeBuffer);
     const decoded = await encoder.decodeToBufferAsync(encoded);
@@ -17,10 +21,14 @@ describe("Stream Encryption Logic", () => {
   });
 
   it("should round-trip public stream API with encryption", async () => {
-    const encoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      encryptionKey: "secret-key",
-      compress: false,
-    });
+    const encoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        encryptionKey: "secret-key",
+        compress: false,
+      },
+    );
     const input = randomBytes(96 * 1024);
     const encodeStream = createEncodeStream(encoder);
     const encodedChunks: string[] = [];
@@ -47,11 +55,15 @@ describe("Stream Encryption Logic", () => {
   });
 
   it("should round-trip public stream API with compression and encryption", async () => {
-    const encoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      encryptionKey: "secret-key",
-      compress: true,
-      compressionAlgorithm: "brotli",
-    });
+    const encoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        encryptionKey: "secret-key",
+        compress: true,
+        compressionAlgorithm: "brotli",
+      },
+    );
     const input = Buffer.from("stream-encryption-with-compression::".repeat(5000));
     const encodeStream = createEncodeStream(encoder);
     const encodedChunks: string[] = [];
@@ -78,11 +90,18 @@ describe("Stream Encryption Logic", () => {
   });
 
   it("should auto-detect compression in public decode stream without matching defaults", async () => {
-    const encodeEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      compress: true,
-      compressionAlgorithm: "brotli",
-    });
-    const decodeEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=");
+    const encodeEncoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        compress: true,
+        compressionAlgorithm: "brotli",
+      },
+    );
+    const decodeEncoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+    );
     const input = Buffer.from("stream-autodetect-compression::".repeat(4000));
     const encodeStream = createEncodeStream(encodeEncoder);
     const encodedChunks: string[] = [];
@@ -109,14 +128,22 @@ describe("Stream Encryption Logic", () => {
   });
 
   it("should auto-detect encryption and compression in public decode stream when key matches", async () => {
-    const encodeEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      encryptionKey: "secret-key",
-      compress: true,
-      compressionAlgorithm: "brotli",
-    });
-    const decodeEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      encryptionKey: "secret-key",
-    });
+    const encodeEncoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        encryptionKey: "secret-key",
+        compress: true,
+        compressionAlgorithm: "brotli",
+      },
+    );
+    const decodeEncoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        encryptionKey: "secret-key",
+      },
+    );
     const input = Buffer.from("stream-autodetect-encryption::".repeat(4000));
     const encodeStream = createEncodeStream(encodeEncoder);
     const encodedChunks: string[] = [];
@@ -143,12 +170,19 @@ describe("Stream Encryption Logic", () => {
   });
 
   it("should reject auto-detected encrypted streams when decode key is missing", async () => {
-    const encodeEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      encryptionKey: "secret-key",
-      compress: true,
-      compressionAlgorithm: "brotli",
-    });
-    const decodeEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=");
+    const encodeEncoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        encryptionKey: "secret-key",
+        compress: true,
+        compressionAlgorithm: "brotli",
+      },
+    );
+    const decodeEncoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+    );
     const input = Buffer.from("stream-autodetect-encryption-missing-key::".repeat(4000));
     const encodeStream = createEncodeStream(encodeEncoder);
     const encodedChunks: string[] = [];
@@ -169,22 +203,30 @@ describe("Stream Encryption Logic", () => {
           .on("data", () => {})
           .on("end", resolve)
           .on("error", reject);
-      })
+      }),
     ).rejects.toThrow(/encryptionKey/i);
   });
 
   it("should respect encoder default compression levels in public stream encode", async () => {
     const input = Buffer.from(("abc123xyz-".repeat(2000) + "\n").repeat(200));
-    const lowEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      compress: true,
-      compressionAlgorithm: "brotli",
-      compressionLevel: 0,
-    });
-    const highEncoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      compress: true,
-      compressionAlgorithm: "brotli",
-      compressionLevel: 11,
-    });
+    const lowEncoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        compress: true,
+        compressionAlgorithm: "brotli",
+        compressionLevel: 0,
+      },
+    );
+    const highEncoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        compress: true,
+        compressionAlgorithm: "brotli",
+        compressionLevel: 11,
+      },
+    );
 
     const collect = async (encoder: Ddu64): Promise<string> => {
       const chunks: string[] = [];
@@ -206,9 +248,13 @@ describe("Stream Encryption Logic", () => {
   });
 
   it("should emit decoded data before source end when stream header is present", async () => {
-    const encoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      compress: false,
-    });
+    const encoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        compress: false,
+      },
+    );
     const input = Buffer.from("stream-header-early-output::".repeat(600));
     const encodeStream = createEncodeStream(encoder);
     const encodedChunks: string[] = [];
@@ -236,10 +282,7 @@ describe("Stream Encryption Logic", () => {
     });
 
     const completion = new Promise<void>((resolve, reject) => {
-      source
-        .pipe(decodeStream)
-        .on("end", resolve)
-        .on("error", reject);
+      source.pipe(decodeStream).on("end", resolve).on("error", reject);
     });
 
     source.write(Buffer.from(encoded.slice(0, 4096), "utf-8"));
@@ -254,11 +297,15 @@ describe("Stream Encryption Logic", () => {
   });
 
   it("should keep decoding legacy footer-only stream payloads with default auto-detect", async () => {
-    const encoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-      encryptionKey: "secret-key",
-      compress: true,
-      compressionAlgorithm: "brotli",
-    });
+    const encoder = new Ddu64(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      "=",
+      {
+        encryptionKey: "secret-key",
+        compress: true,
+        compressionAlgorithm: "brotli",
+      },
+    );
     const input = Buffer.from("legacy-stream-footer::".repeat(4000));
     const encodeStream = createEncodeStream(encoder, { streamAutoDetect: false });
     const encodedChunks: string[] = [];

@@ -19,15 +19,11 @@ try {
     process.exit(process.exitCode ?? 1);
   }
 
-  const pack = spawnSync(
-    "npm",
-    ["pack", "--dry-run", "--json", "--cache", cacheDir],
-    {
-      cwd,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
+  const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--cache", cacheDir], {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   if (pack.status !== 0) {
     fail(`npm pack failed.\n${pack.stderr || pack.stdout}`);

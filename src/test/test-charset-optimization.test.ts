@@ -10,7 +10,7 @@ describe("Charset Optimization - Removal Validation", () => {
           new Ddu64(undefined, undefined, {
             dduSetSymbol: "twoCharSet" as any,
             throwOnError: true,
-          })
+          }),
       ).toThrow(/not found/i);
     });
 
@@ -20,7 +20,7 @@ describe("Charset Optimization - Removal Validation", () => {
           new Ddu64(undefined, undefined, {
             dduSetSymbol: "threeCharSet" as any,
             throwOnError: true,
-          })
+          }),
       ).toThrow(/not found/i);
     });
 
@@ -56,13 +56,13 @@ describe("Charset Optimization - Removal Validation", () => {
     function generateBmpCharset(size: number): { chars: string[]; paddingChar: string } {
       const chars: string[] = [];
       let codePoint = 0x0001;
-      while (chars.length < size && codePoint <= 0xFFFF) {
-        if (codePoint === 0x0A || codePoint === 0x0D) {
+      while (chars.length < size && codePoint <= 0xffff) {
+        if (codePoint === 0x0a || codePoint === 0x0d) {
           codePoint++;
           continue;
         }
-        if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
-          codePoint = 0xE000;
+        if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
+          codePoint = 0xe000;
           continue;
         }
         chars.push(String.fromCharCode(codePoint));
@@ -71,24 +71,24 @@ describe("Charset Optimization - Removal Validation", () => {
       // Find a padding char not in the charset
       let paddingCodePoint = codePoint;
       while (
-        paddingCodePoint === 0x0A ||
-        paddingCodePoint === 0x0D ||
-        (paddingCodePoint >= 0xD800 && paddingCodePoint <= 0xDFFF) ||
-        paddingCodePoint > 0xFFFF
+        paddingCodePoint === 0x0a ||
+        paddingCodePoint === 0x0d ||
+        (paddingCodePoint >= 0xd800 && paddingCodePoint <= 0xdfff) ||
+        paddingCodePoint > 0xffff
       ) {
-        if (paddingCodePoint > 0xFFFF) {
+        if (paddingCodePoint > 0xffff) {
           // Fallback: use a code point we skipped earlier
-          paddingCodePoint = 0x0A; // won't work, try another approach
+          paddingCodePoint = 0x0a; // won't work, try another approach
           break;
         }
         paddingCodePoint++;
       }
       // If we can't find one after the charset, use one before it
-      if (paddingCodePoint > 0xFFFF || paddingCodePoint === 0x0A) {
+      if (paddingCodePoint > 0xffff || paddingCodePoint === 0x0a) {
         // The charset starts at 0x0001, so there's nothing before it.
         // But since we're generating less than 63,486 chars, there will always be room.
         // Use a char that's definitely not in a small charset
-        paddingCodePoint = 0xFFFE; // This should not be in charset if size < 63,486
+        paddingCodePoint = 0xfffe; // This should not be in charset if size < 63,486
       }
       return { chars, paddingChar: String.fromCharCode(paddingCodePoint) };
     }
@@ -98,9 +98,7 @@ describe("Charset Optimization - Removal Validation", () => {
       expect(chars.length).toBe(10000);
       expect(chars.every((c) => c.length === 1)).toBe(true);
 
-      expect(
-        () => new Ddu64(chars, paddingChar, { throwOnError: true })
-      ).not.toThrow();
+      expect(() => new Ddu64(chars, paddingChar, { throwOnError: true })).not.toThrow();
     });
 
     it("should throw when charset exceeds maximum supported size of 65536", () => {
@@ -131,18 +129,14 @@ describe("Charset Optimization - Removal Validation", () => {
       // Verify that the maximum BMP charset initializes successfully
       const { chars, paddingChar } = generateBmpCharset(63000);
       expect(chars.length).toBe(63000);
-      expect(
-        () => new Ddu64(chars, paddingChar, { throwOnError: true })
-      ).not.toThrow();
+      expect(() => new Ddu64(chars, paddingChar, { throwOnError: true })).not.toThrow();
 
       // Verify that non-BMP chars (which would be needed to exceed BMP limit)
       // are rejected as multi-character symbols
-      const nonBmpChars = Array.from({ length: 100 }, (_, i) =>
-        String.fromCodePoint(0x10000 + i)
+      const nonBmpChars = Array.from({ length: 100 }, (_, i) => String.fromCodePoint(0x10000 + i));
+      expect(() => new Ddu64(nonBmpChars, "X", { throwOnError: true })).toThrow(
+        /multi-character symbols are not supported/i,
       );
-      expect(
-        () => new Ddu64(nonBmpChars, "X", { throwOnError: true })
-      ).toThrow(/multi-character symbols are not supported/i);
     });
 
     it("should initialize successfully with charset of 256 characters and encode/decode", () => {
@@ -170,17 +164,15 @@ describe("Charset Optimization - Removal Validation", () => {
 
   describe("Multi-character symbol rejection (Requirement 8.3, 4.2)", () => {
     it("should throw when charset contains multi-character symbols with throwOnError", () => {
-      expect(
-        () =>
-          new Ddu64(["AB", "CD", "EF", "GH"], "X", { throwOnError: true })
-      ).toThrow(/multi-character symbols are not supported/i);
+      expect(() => new Ddu64(["AB", "CD", "EF", "GH"], "X", { throwOnError: true })).toThrow(
+        /multi-character symbols are not supported/i,
+      );
     });
 
     it("should throw when charset has mixed single and multi-character symbols", () => {
-      expect(
-        () =>
-          new Ddu64(["A", "BC", "D", "E"], "X", { throwOnError: true })
-      ).toThrow(/multi-character symbols are not supported/i);
+      expect(() => new Ddu64(["A", "BC", "D", "E"], "X", { throwOnError: true })).toThrow(
+        /multi-character symbols are not supported/i,
+      );
     });
   });
 

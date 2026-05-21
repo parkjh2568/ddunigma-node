@@ -1,19 +1,24 @@
 export enum DduSetSymbol {
   DDU = "ddu",
+  DDU_V1 = "ddu_v1",
   ONECHARSET = "oneCharSet",
 }
 
 export interface CharSetConfig {
   /** charset 식별 심볼 */
   symbol: DduSetSymbol;
-  /** 인코딩에 사용할 문자 배열 */
+  /** 인코딩에 사용할 문자 배열 (codaChar가 있으면 기본 문자 배열) */
   charSet: string[];
+  /** 종성 문자 배열 (charSet × codaChar 조합으로 최종 charset 생성) */
+  codaChar?: string[];
   /** 최대 필요 문자 수 */
   maxRequiredLength: number;
   /** 비트 길이 (log2) */
   bitLength: number;
   /** 패딩 문자 */
   paddingChar: string;
+  /** 패딩 문자 반복 방식 사용 여부 */
+  useRepeatPadding?: boolean;
 }
 
 /** 진행률 콜백 정보 */
@@ -25,7 +30,16 @@ export interface DduProgressInfo {
   /** 진행률 (0-100, 단계별 근사값) */
   percent: number;
   /** 현재 처리 단계 */
-  stage?: "start" | "encrypt" | "compress" | "encode" | "decode" | "decompress" | "checksum" | "decrypt" | "done";
+  stage?:
+    | "start"
+    | "encrypt"
+    | "compress"
+    | "encode"
+    | "decode"
+    | "decompress"
+    | "checksum"
+    | "decrypt"
+    | "done";
 }
 
 /** 인코딩 통계 정보 */
@@ -111,6 +125,8 @@ export interface DduConstructorOptions extends DduOptions {
   dduSetSymbol?: DduSetSymbol;
   /** 커스텀 charset 문자 배열 또는 문자열 */
   dduChar?: string[] | string;
+  /** 종성 문자 배열 (dduChar × codaChar 조합으로 최종 charset 동적 생성) */
+  codaChar?: string[];
   /** 패딩 문자 */
   paddingChar?: string;
   /** 필요 문자 수 */
@@ -137,17 +153,19 @@ export interface DduConstructorOptions extends DduOptions {
   urlSafe?: boolean;
   /** 암호화 키 (AES-256-GCM) */
   encryptionKey?: string;
+  /** 패딩 문자 반복 방식 사용 여부 */
+  useRepeatPadding?: boolean;
 }
 
 const dduDefaultConstructorOptions: DduConstructorOptions = {
-  /** 기본 charset: DDU (한글 + 특수문자) */
+  /** 기본 charset: DDU (한글 종성 결합 64개) */
   dduSetSymbol: DduSetSymbol.DDU,
   /** 2의 제곱수 강제 */
   usePowerOfTwo: true,
-  /** 필요 문자 수: 8개 */
-  requiredLength: 8,
-  /** 비트 길이: 3 (2^3 = 8) */
-  bitLength: 3,
+  /** 필요 문자 수: 64개 */
+  requiredLength: 64,
+  /** 비트 길이: 6 (2^6 = 64) */
+  bitLength: 6,
 };
 
 export { dduDefaultConstructorOptions };

@@ -33,12 +33,10 @@ function reportTest(name: string, passed: boolean, details?: string) {
 function runFixedValueTests(
   label: string,
   encoder: Ddu64,
-  cases: { name: string; encoded: string; original?: string; inputHex?: string }[]
+  cases: { name: string; encoded: string; original?: string; inputHex?: string }[],
 ) {
-  cases.forEach(test => {
-    const original = test.inputHex
-      ? Buffer.from(test.inputHex, "hex")
-      : test.original!;
+  cases.forEach((test) => {
+    const original = test.inputHex ? Buffer.from(test.inputHex, "hex") : test.original!;
 
     // 디코딩 검증
     try {
@@ -48,14 +46,18 @@ function runFixedValueTests(
         reportTest(
           `[${label} 디코드] ${test.name}`,
           expected.equals(decoded),
-          !expected.equals(decoded) ? `예상hex: ${test.inputHex}, 실제hex: ${decoded.toString("hex").substring(0, 40)}` : undefined
+          !expected.equals(decoded)
+            ? `예상hex: ${test.inputHex}, 실제hex: ${decoded.toString("hex").substring(0, 40)}`
+            : undefined,
         );
       } else {
         const decoded = encoder.decode(test.encoded);
         reportTest(
           `[${label} 디코드] ${test.name}`,
           test.original === decoded,
-          test.original !== decoded ? `예상: "${test.original!.substring(0, 30)}", 실제: "${decoded.substring(0, 30)}"` : undefined
+          test.original !== decoded
+            ? `예상: "${test.original!.substring(0, 30)}", 실제: "${decoded.substring(0, 30)}"`
+            : undefined,
         );
       }
     } catch (err: any) {
@@ -68,7 +70,9 @@ function runFixedValueTests(
       reportTest(
         `[${label} 인코드] ${test.name}`,
         test.encoded === encoded,
-        test.encoded !== encoded ? `예상: "${test.encoded.substring(0, 40)}", 실제: "${encoded.substring(0, 40)}"` : undefined
+        test.encoded !== encoded
+          ? `예상: "${test.encoded.substring(0, 40)}", 실제: "${encoded.substring(0, 40)}"`
+          : undefined,
       );
     } catch (err: any) {
       reportTest(`[${label} 인코드] ${test.name}`, false, err.message);
@@ -92,7 +96,7 @@ async function streamToBuffer(readable: NodeJS.ReadableStream): Promise<Buffer> 
   await new Promise<void>((resolve, reject) => {
     readable
       .on("data", (chunk: Buffer | string) =>
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
       )
       .on("end", resolve)
       .on("error", reject);
@@ -101,10 +105,70 @@ async function streamToBuffer(readable: NodeJS.ReadableStream): Promise<Buffer> 
 }
 
 const BASE64_CHARS = [
-  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
-  "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "a", "b", "c", "d", "e", "f",
-  "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v",
-  "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "/",
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "H",
+  "I",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "P",
+  "Q",
+  "R",
+  "S",
+  "T",
+  "U",
+  "V",
+  "W",
+  "X",
+  "Y",
+  "Z",
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "w",
+  "x",
+  "y",
+  "z",
+  "0",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "+",
+  "/",
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -113,7 +177,8 @@ console.log("[ 1. 커스텀 charset 고정 인코딩 결과 검증 (v2.0.2 기�
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
 {
-  const customCharset = "qa1437zwo1437IOPLcrlp0NX7IOPLcrlp0NXfgbujmiHDGk6ye37IOPLcrlp0NXdWERThn5QKAJvtSFMZBCV";
+  const customCharset =
+    "qa1437zwo1437IOPLcrlp0NX7IOPLcrlp0NXfgbujmiHDGk6ye37IOPLcrlp0NXdWERThn5QKAJvtSFMZBCV";
   const customPadding = "9";
   const decoder = new Ddu64(customCharset, customPadding, { usePowerOfTwo: false });
 
@@ -121,12 +186,38 @@ console.log("══════════════════════�
     { name: "빈 문자열", encoded: "", original: "" },
     { name: "단일 문자 (A)", encoded: "qpqp94", original: "A" },
     { name: "짧은 영문 (Hello)", encoded: "qNqzqgqAqHqza792", original: "Hello" },
-    { name: "긴 영문", encoded: "qgqzqeqRqoqwq7qCqiqbqcqKqoqzqIqMqHaqqGqvqoqzqmqtqkq1qaqQqGqbqCqSqDqMqaqtqGqTqgqMqoqwq0qnqmqNqaqAqjquq5a1qoqzq0qtqmqS94", original: "The quick brown fox jumps over the lazy dog" },
-    { name: "숫자 (1234567890)", encoded: "qLqXqoqZqcq4qfqVqcqZqya1qLqq94", original: "1234567890" },
-    { name: "한글 (안녕하세요)", encoded: "a3qIqbqoa4aaqbqga3qmqbqja3qoqNaaa3qIqQqf", original: "안녕하세요" },
-    { name: "혼합 텍스트", encoded: "qNqzqgqAqHqza7qyqgqVazqMqHqzqpqeqoqrqMqgqdqrqvq7qRqNqqqFqLqWqLqya7qIawqjqyqq94", original: "Hello World! 안녕 123 😀" },
-    { name: "특수문자", encoded: "qoqfqqqWqIq1qgqkqIqdqnqnqOqga7qKqPqXqCqHququqJazq6q4qAa4qIqMqSqvqlq4aaaoqPqS94", original: "!@#$%^&*()_+-=[]{}|;:',.<>?/" },
-    { name: "반복 패턴", encoded: "qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1", original: "ABABAB".repeat(10) },
+    {
+      name: "긴 영문",
+      encoded:
+        "qgqzqeqRqoqwq7qCqiqbqcqKqoqzqIqMqHaqqGqvqoqzqmqtqkq1qaqQqGqbqCqSqDqMqaqtqGqTqgqMqoqwq0qnqmqNqaqAqjquq5a1qoqzq0qtqmqS94",
+      original: "The quick brown fox jumps over the lazy dog",
+    },
+    {
+      name: "숫자 (1234567890)",
+      encoded: "qLqXqoqZqcq4qfqVqcqZqya1qLqq94",
+      original: "1234567890",
+    },
+    {
+      name: "한글 (안녕하세요)",
+      encoded: "a3qIqbqoa4aaqbqga3qmqbqja3qoqNaaa3qIqQqf",
+      original: "안녕하세요",
+    },
+    {
+      name: "혼합 텍스트",
+      encoded: "qNqzqgqAqHqza7qyqgqVazqMqHqzqpqeqoqrqMqgqdqrqvq7qRqNqqqFqLqWqLqya7qIawqjqyqq94",
+      original: "Hello World! 안녕 123 😀",
+    },
+    {
+      name: "특수문자",
+      encoded: "qoqfqqqWqIq1qgqkqIqdqnqnqOqga7qKqPqXqCqHququqJazq6q4qAa4qIqMqSqvqlq4aaaoqPqS94",
+      original: "!@#$%^&*()_+-=[]{}|;:',.<>?/",
+    },
+    {
+      name: "반복 패턴",
+      encoded:
+        "qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1qpqfqIqaqpqEq7q1",
+      original: "ABABAB".repeat(10),
+    },
   ]);
 }
 
@@ -143,13 +234,37 @@ console.log("══════════════════════�
     { name: "단일바이트_0xFF", inputHex: "ff", encoded: "/w=4" },
     { name: "2바이트", inputHex: "cafe", encoded: "yv4=2" },
     { name: "3바이트_정렬", inputHex: "deadbe", encoded: "3q2+" },
-    { name: "바이트_0to15", inputHex: "000102030405060708090a0b0c0d0e0f", encoded: "AAECAwQFBgcICQoLDA0ODw=4" },
-    { name: "일본어", inputHex: "e38193e38293e381abe381a1e381afe4b896e7958c", encoded: "44GT44KT44Gr44Gh44Gv5LiW55WM" },
-    { name: "이모지", inputHex: "f09f8e89f09f94a5f09f92bbf09f9a80", encoded: "8J+OifCflKXwn5K78J+agA=4" },
-    { name: "줄바꿈포함", inputHex: "6c696e65315c6e6c696e65325c726c696e6533", encoded: "bGluZTFcbmxpbmUyXHJsaW5lMw=4" },
+    {
+      name: "바이트_0to15",
+      inputHex: "000102030405060708090a0b0c0d0e0f",
+      encoded: "AAECAwQFBgcICQoLDA0ODw=4",
+    },
+    {
+      name: "일본어",
+      inputHex: "e38193e38293e381abe381a1e381afe4b896e7958c",
+      encoded: "44GT44KT44Gr44Gh44Gv5LiW55WM",
+    },
+    {
+      name: "이모지",
+      inputHex: "f09f8e89f09f94a5f09f92bbf09f9a80",
+      encoded: "8J+OifCflKXwn5K78J+agA=4",
+    },
+    {
+      name: "줄바꿈포함",
+      inputHex: "6c696e65315c6e6c696e65325c726c696e6533",
+      encoded: "bGluZTFcbmxpbmUyXHJsaW5lMw=4",
+    },
     { name: "공백탭", inputHex: "20205c745c742020", encoded: "ICBcdFx0ICA=2" },
-    { name: "URL", inputHex: "68747470733a2f2f6578616d706c652e636f6d2f706174683f713d3126623d322366726167", encoded: "aHR0cHM6Ly9leGFtcGxlLmNvbS9wYXRoP3E9MSZiPTIjZnJhZw=4" },
-    { name: "JSON", inputHex: "7b226b6579223a2276616c7565222c226e756d223a3132332c22617272223a5b312c322c335d7d", encoded: "eyJrZXkiOiJ2YWx1ZSIsIm51bSI6MTIzLCJhcnIiOlsxLDIsM119" },
+    {
+      name: "URL",
+      inputHex: "68747470733a2f2f6578616d706c652e636f6d2f706174683f713d3126623d322366726167",
+      encoded: "aHR0cHM6Ly9leGFtcGxlLmNvbS9wYXRoP3E9MSZiPTIjZnJhZw=4",
+    },
+    {
+      name: "JSON",
+      inputHex: "7b226b6579223a2276616c7565222c226e756d223a3132332c22617272223a5b312c322c335d7d",
+      encoded: "eyJrZXkiOiJ2YWx1ZSIsIm51bSI6MTIzLCJhcnIiOlsxLDIsM119",
+    },
   ]);
 }
 
@@ -162,10 +277,19 @@ console.log("══════════════════════�
   const ddu = new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU });
 
   runFixedValueTests("DDU", ddu, [
-    { name: "Hello", original: "Hello", encoded: "이이뜌?이!!야우우뜌?.야뭐2" },
-    { name: "안녕하세요", original: "안녕하세요", encoded: ".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야" },
-    { name: "Test123!@#", original: "Test123!@#", encoded: "이!뜌?이!?우우!뜌우뜌야?이땨야?이뜌!뜌뜌땨뜌?뭐1" },
-    { name: "A x50", original: "A".repeat(50), encoded: "이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌!뜌땨이뜌이야뜌야뭐2" },
+    { name: "Hello", original: "Hello", encoded: "읶뜟잉듖욷뜟뎾뭐" },
+    {
+      name: "안녕하세요",
+      original: "안녕하세요",
+      encoded: "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊",
+    },
+    { name: "Test123!@#", original: "Test123!@#", encoded: "잉뜟잉댣웅뜓뜢댞땾댞뜡뜌땨댜뭐뭐" },
+    {
+      name: "A x50",
+      original: "A".repeat(50),
+      encoded:
+        "이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜢뭐",
+    },
   ]);
 }
 
@@ -181,7 +305,11 @@ console.log("══════════════════════�
     { name: "Hello", original: "Hello", encoded: "R3Wga37=2" },
     { name: "안녕하세요", original: "안녕하세요", encoded: "61VywpVW6ZVY6yRp61eU" },
     { name: "Test123!@#", original: "Test123!@#", encoded: "W3Wudr0m4mzAyk=4" },
-    { name: "A x50", original: "A".repeat(50), encoded: "QUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQU0=2" },
+    {
+      name: "A x50",
+      original: "A".repeat(50),
+      encoded: "QUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQUzsQU0=2",
+    },
   ]);
 }
 
@@ -221,17 +349,23 @@ console.log("══════════════════════�
 
   const compressCases = [
     { name: "A x100 압축", original: "A".repeat(100), encoded: "eJxzdKQ9AAAC6Rll=ELYSIA0" },
-    { name: "Hello World! x20 압축", original: "Hello World! ".repeat(20), encoded: "eJzzSM3JyVcIzy/KSVFU8BiZHACo7ldF=ELYSIA0" },
+    {
+      name: "Hello World! x20 압축",
+      original: "Hello World! ".repeat(20),
+      encoded: "eJzzSM3JyVcIzy/KSVFU8BiZHACo7ldF=ELYSIA0",
+    },
   ];
 
-  compressCases.forEach(test => {
+  compressCases.forEach((test) => {
     // 디코딩 검증
     try {
       const decoded = encoder.decode(test.encoded);
       reportTest(
         `[압축 디코드] ${test.name}`,
         test.original === decoded,
-        test.original !== decoded ? `길이 불일치: 예상=${test.original.length}, 실제=${decoded.length}` : undefined
+        test.original !== decoded
+          ? `길이 불일치: 예상=${test.original.length}, 실제=${decoded.length}`
+          : undefined,
       );
     } catch (err: any) {
       reportTest(`[압축 디코드] ${test.name}`, false, err.message);
@@ -243,7 +377,9 @@ console.log("══════════════════════�
       reportTest(
         `[압축 인코드] ${test.name}`,
         test.encoded === encoded,
-        test.encoded !== encoded ? `예상: "${test.encoded.substring(0, 40)}", 실제: "${encoded.substring(0, 40)}"` : undefined
+        test.encoded !== encoded
+          ? `예상: "${test.encoded.substring(0, 40)}", 실제: "${encoded.substring(0, 40)}"`
+          : undefined,
       );
     } catch (err: any) {
       reportTest(`[압축 인코드] ${test.name}`, false, err.message);
@@ -265,7 +401,7 @@ console.log("══════════════════════�
     { name: "1234567890", original: "1234567890", encoded: "MTIzNDU2Nzg5MA=4CHK261daee5" },
   ];
 
-  checksumCases.forEach(test => {
+  checksumCases.forEach((test) => {
     // 디코딩 검증
     try {
       const decoded = encoder.decode(test.encoded, { checksum: true });
@@ -280,7 +416,7 @@ console.log("══════════════════════�
       reportTest(
         `[체크섬 인코드] ${test.name}`,
         test.encoded === encoded,
-        test.encoded !== encoded ? `예상: "${test.encoded}", 실제: "${encoded}"` : undefined
+        test.encoded !== encoded ? `예상: "${test.encoded}", 실제: "${encoded}"` : undefined,
       );
     } catch (err: any) {
       reportTest(`[체크섬 인코드] ${test.name}`, false, err.message);
@@ -325,7 +461,7 @@ console.log("══════════════════════�
   ];
 
   // 결정적 인코딩
-  fixedCases.forEach(tc => {
+  fixedCases.forEach((tc) => {
     try {
       const encoded1 = encoder.encode(tc.original);
       const encoded2 = encoder.encode(tc.original);
@@ -336,7 +472,7 @@ console.log("══════════════════════�
   });
 
   // 라운드트립
-  fixedCases.forEach(tc => {
+  fixedCases.forEach((tc) => {
     try {
       const encoded = encoder.encode(tc.original);
       const decoded = encoder.decode(encoded);
@@ -358,19 +494,14 @@ console.log("══════════════════════�
     { name: "DDU", symbol: DduSetSymbol.DDU },
   ];
 
-  const testStrings = [
-    "Hello World!",
-    "안녕하세요",
-    "Hello안녕123!😀",
-    "A".repeat(1000),
-  ];
+  const testStrings = ["Hello World!", "안녕하세요", "Hello안녕123!😀", "A".repeat(1000)];
 
   symbols.forEach(({ name, symbol }) => {
     try {
       const encoder = new Ddu64(undefined, undefined, { dduSetSymbol: symbol });
       let allPassed = true;
 
-      testStrings.forEach(td => {
+      testStrings.forEach((td) => {
         try {
           const encoded = encoder.encode(td);
           const decoded = encoder.decode(encoded);
@@ -408,8 +539,16 @@ console.log("══════════════════════�
 
 {
   const presetFingerprints = [
-    { name: "DDU", symbol: DduSetSymbol.DDU, sha256: "1b97a1e46501c368c1bfc9c7598ade9a73f0952c087dcfb77642eeafcf298bad" },
-    { name: "ONECHARSET", symbol: DduSetSymbol.ONECHARSET, sha256: "4ec78da248ad30f1232bd8cf2adb839ecf5e32b7c16951f098bffe110f6544cd" },
+    {
+      name: "DDU",
+      symbol: DduSetSymbol.DDU,
+      sha256: "00fb0086d79d83014fa40b9eebd7a52f020934249ff0e87498dcb518aa038615",
+    },
+    {
+      name: "ONECHARSET",
+      symbol: DduSetSymbol.ONECHARSET,
+      sha256: "4ec78da248ad30f1232bd8cf2adb839ecf5e32b7c16951f098bffe110f6544cd",
+    },
   ];
 
   presetFingerprints.forEach(({ name, symbol, sha256 }) => {
@@ -423,11 +562,15 @@ console.log("══════════════════════�
             paddingChar: info.paddingChar,
             bitLength: info.bitLength,
             usePowerOfTwo: info.usePowerOfTwo,
-          })
+          }),
         )
         .digest("hex");
 
-      reportTest(`프리셋 ${name} fingerprint`, digest === sha256, `예상: ${sha256}, 실제: ${digest}`);
+      reportTest(
+        `프리셋 ${name} fingerprint`,
+        digest === sha256,
+        `예상: ${sha256}, 실제: ${digest}`,
+      );
     } catch (err: any) {
       reportTest(`프리셋 ${name} fingerprint`, false, err.message);
     }
@@ -444,12 +587,16 @@ console.log("══════════════════════�
 
   try {
     const encoded = await streamToString(
-      Readable.from([Buffer.from("Hello")]).pipe(createEncodeStream(encoder))
+      Readable.from([Buffer.from("Hello")]).pipe(createEncodeStream(encoder)),
     );
-    reportTest("기본 스트림 헤더 인코드 고정값", encoded === "=DDS1N0=SGVsbG8=2", `실제: "${encoded}"`);
+    reportTest(
+      "기본 스트림 헤더 인코드 고정값",
+      encoded === "=DDS1N0=SGVsbG8=2",
+      `실제: "${encoded}"`,
+    );
 
     const decoded = await streamToBuffer(
-      Readable.from([Buffer.from(encoded)]).pipe(createDecodeStream(encoder))
+      Readable.from([Buffer.from(encoded)]).pipe(createDecodeStream(encoder)),
     );
     reportTest("기본 스트림 헤더 디코드", decoded.toString("utf-8") === "Hello");
   } catch (err: any) {
@@ -459,13 +606,17 @@ console.log("══════════════════════�
   try {
     const legacyEncoded = await streamToString(
       Readable.from([Buffer.from("Hello")]).pipe(
-        createEncodeStream(encoder, { streamAutoDetect: false })
-      )
+        createEncodeStream(encoder, { streamAutoDetect: false }),
+      ),
     );
-    reportTest("레거시 footer-only 스트림 고정값", legacyEncoded === "SGVsbG8=2", `실제: "${legacyEncoded}"`);
+    reportTest(
+      "레거시 footer-only 스트림 고정값",
+      legacyEncoded === "SGVsbG8=2",
+      `실제: "${legacyEncoded}"`,
+    );
 
     const decoded = await streamToBuffer(
-      Readable.from([Buffer.from(legacyEncoded)]).pipe(createDecodeStream(encoder))
+      Readable.from([Buffer.from(legacyEncoded)]).pipe(createDecodeStream(encoder)),
     );
     reportTest("레거시 footer-only 기본 디코드", decoded.toString("utf-8") === "Hello");
   } catch (err: any) {
@@ -476,10 +627,14 @@ console.log("══════════════════════�
     const deflateEncoder = new Ddu64(BASE64_CHARS, "=", { compress: true });
     const encoded = await streamToString(
       Readable.from([Buffer.from("Hello Hello Hello Hello Hello")]).pipe(
-        createEncodeStream(deflateEncoder)
-      )
+        createEncodeStream(deflateEncoder),
+      ),
     );
-    reportTest("압축 스트림 헤더 접두사", encoded.startsWith("=DDS1D0="), `실제: "${encoded.slice(0, 16)}"`);
+    reportTest(
+      "압축 스트림 헤더 접두사",
+      encoded.startsWith("=DDS1D0="),
+      `실제: "${encoded.slice(0, 16)}"`,
+    );
   } catch (err: any) {
     reportTest("압축 스트림 헤더 접두사", false, err.message);
   }
@@ -505,7 +660,7 @@ console.log("══════════════════════�
     "getStats",
   ];
 
-  requiredMethods.forEach(method => {
+  requiredMethods.forEach((method) => {
     reportTest(`API: ${method}() 존재`, typeof (encoder as any)[method] === "function");
   });
 
@@ -673,7 +828,7 @@ console.log("══════════════════════�
   // encoding 옵션
   try {
     const enc = new Ddu64(BASE64_CHARS, "=", { encoding: "latin1" });
-    const buf = Buffer.from([0xFF, 0x00, 0xAA]);
+    const buf = Buffer.from([0xff, 0x00, 0xaa]);
     const encoded = enc.encode(buf);
     const decoded = enc.decodeToBuffer(encoded);
     reportTest("encoding: latin1 옵션", buf.equals(decoded));
@@ -739,7 +894,11 @@ console.log("══════════════════════�
   // onProgress 옵션
   try {
     let called = false;
-    encoder.encode(td, { onProgress: () => { called = true; } });
+    encoder.encode(td, {
+      onProgress: () => {
+        called = true;
+      },
+    });
     reportTest("encode 옵션: onProgress", called);
   } catch (err: any) {
     reportTest("encode 옵션: onProgress", false, err.message);
@@ -777,7 +936,7 @@ console.log("══════════════════════�
   for (let len = 1; len <= 8; len++) {
     try {
       const buf = Buffer.alloc(len);
-      for (let i = 0; i < len; i++) buf[i] = (i * 37 + 0xAB) & 0xFF;
+      for (let i = 0; i < len; i++) buf[i] = (i * 37 + 0xab) & 0xff;
       const encoded = encoder.encode(buf);
       const decoded = encoder.decodeToBuffer(encoded);
       reportTest(`[바이트길이 ${len}] 라운드트립`, buf.equals(decoded));
@@ -809,7 +968,7 @@ console.log("══════════════════════�
 
   // 전부 0xFF
   try {
-    const ones = Buffer.alloc(32, 0xFF);
+    const ones = Buffer.alloc(32, 0xff);
     const encoded = encoder.encode(ones);
     const decoded = encoder.decodeToBuffer(encoded);
     reportTest("[32바이트 0xFF] 라운드트립", ones.equals(decoded));

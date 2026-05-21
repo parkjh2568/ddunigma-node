@@ -37,36 +37,333 @@ function reportTest(name: string, passed: boolean, details?: string) {
 }
 
 const BASE64_CHARS = [
-  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
-  "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "a", "b", "c", "d", "e", "f",
-  "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v",
-  "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "/",
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "H",
+  "I",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "P",
+  "Q",
+  "R",
+  "S",
+  "T",
+  "U",
+  "V",
+  "W",
+  "X",
+  "Y",
+  "Z",
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "w",
+  "x",
+  "y",
+  "z",
+  "0",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "+",
+  "/",
 ];
 
 // 한글 charset (256개)
 const koreanCharsRaw = [
-  "뜌", "뜍", "뜎", "뜏", "뜐", "뜑", "뜒", "뜓", "뜔", "뜕", "뜖", "뜗", "뜘", "뜙", "뜚", "뜛",
-  "뜜", "뜝", "뜞", "뜟", "뜠", "뜡", "뜢", "뜣", "뜤", "뜥", "뜦", "뜧", "뜨", "뜩", "뜪", "뜫",
-  "뜬", "뜭", "뜮", "뜯", "뜰", "뜱", "뜲", "뜳", "뜴", "뜵", "뜶", "뜷", "뜸", "뜹", "뜺", "뜻",
-  "뜼", "뜽", "뜾", "뜿", "땨", "땩", "땪", "땫", "땬", "땭", "땮", "땯", "땰", "땱", "땲", "땳",
-  "땴", "땵", "땶", "땷", "땸", "땹", "땺", "땻", "땼", "땽", "땾", "땿", "떀", "떁", "떂", "떃",
-  "떄", "떅", "떆", "떇", "떈", "떉", "떊", "떋", "떌", "떍", "떎", "떏", "떐", "떑", "떒", "떓",
-  "떔", "떕", "떖", "떗", "떘", "떙", "떚", "떛", "우", "욱", "욲", "욳", "운", "울", "욶", "욷",
-  "움", "웁", "웂", "웃", "웄", "웅", "웆", "웇", "워", "웍", "웎", "웏", "원", "월", "웒", "웓",
-  "웕", "웖", "웗", "웘", "웙", "웚", "웛", "위", "윅", "윆", "윇", "윈", "윉", "윊", "윋", "윌",
-  "윍", "윎", "윏", "윐", "윑", "윒", "윓", "윔", "윕", "윖", "따", "딱", "딲", "딳", "딴", "딵",
-  "딶", "딷", "딸", "딹", "딺", "딻", "딼", "딽", "딾", "딿", "땀", "땁", "땂", "땃", "땄", "땅",
-  "땆", "땇", "땈", "땉", "땊", "땋", "때", "땍", "땎", "땏", "땑", "땒", "땓", "땔", "땕", "땖",
-  "땗", "땘", "땙", "땚", "땛", "땜", "땝", "땞", "땟", "땠", "땡", "땢", "야", "약", "얂", "얃",
-  "얄", "얅", "얆", "얇", "얈", "얉", "얊", "얋", "얌", "얍", "얎", "얏", "양", "얒", "얓", "얔",
-  "얕", "얖", "얗", "얘", "얙", "얚", "얛", "얜", "얝", "얞", "얟", "얠", "얡", "얢", "얣", "얤",
-  "얥", "얦", "얧", "얨", "얩", "얪", "얫", "얬", "얭", "얮", "얯", "얰", "얱",
+  "뜌",
+  "뜍",
+  "뜎",
+  "뜏",
+  "뜐",
+  "뜑",
+  "뜒",
+  "뜓",
+  "뜔",
+  "뜕",
+  "뜖",
+  "뜗",
+  "뜘",
+  "뜙",
+  "뜚",
+  "뜛",
+  "뜜",
+  "뜝",
+  "뜞",
+  "뜟",
+  "뜠",
+  "뜡",
+  "뜢",
+  "뜣",
+  "뜤",
+  "뜥",
+  "뜦",
+  "뜧",
+  "뜨",
+  "뜩",
+  "뜪",
+  "뜫",
+  "뜬",
+  "뜭",
+  "뜮",
+  "뜯",
+  "뜰",
+  "뜱",
+  "뜲",
+  "뜳",
+  "뜴",
+  "뜵",
+  "뜶",
+  "뜷",
+  "뜸",
+  "뜹",
+  "뜺",
+  "뜻",
+  "뜼",
+  "뜽",
+  "뜾",
+  "뜿",
+  "땨",
+  "땩",
+  "땪",
+  "땫",
+  "땬",
+  "땭",
+  "땮",
+  "땯",
+  "땰",
+  "땱",
+  "땲",
+  "땳",
+  "땴",
+  "땵",
+  "땶",
+  "땷",
+  "땸",
+  "땹",
+  "땺",
+  "땻",
+  "땼",
+  "땽",
+  "땾",
+  "땿",
+  "떀",
+  "떁",
+  "떂",
+  "떃",
+  "떄",
+  "떅",
+  "떆",
+  "떇",
+  "떈",
+  "떉",
+  "떊",
+  "떋",
+  "떌",
+  "떍",
+  "떎",
+  "떏",
+  "떐",
+  "떑",
+  "떒",
+  "떓",
+  "떔",
+  "떕",
+  "떖",
+  "떗",
+  "떘",
+  "떙",
+  "떚",
+  "떛",
+  "우",
+  "욱",
+  "욲",
+  "욳",
+  "운",
+  "울",
+  "욶",
+  "욷",
+  "움",
+  "웁",
+  "웂",
+  "웃",
+  "웄",
+  "웅",
+  "웆",
+  "웇",
+  "워",
+  "웍",
+  "웎",
+  "웏",
+  "원",
+  "월",
+  "웒",
+  "웓",
+  "웕",
+  "웖",
+  "웗",
+  "웘",
+  "웙",
+  "웚",
+  "웛",
+  "위",
+  "윅",
+  "윆",
+  "윇",
+  "윈",
+  "윉",
+  "윊",
+  "윋",
+  "윌",
+  "윍",
+  "윎",
+  "윏",
+  "윐",
+  "윑",
+  "윒",
+  "윓",
+  "윔",
+  "윕",
+  "윖",
+  "따",
+  "딱",
+  "딲",
+  "딳",
+  "딴",
+  "딵",
+  "딶",
+  "딷",
+  "딸",
+  "딹",
+  "딺",
+  "딻",
+  "딼",
+  "딽",
+  "딾",
+  "딿",
+  "땀",
+  "땁",
+  "땂",
+  "땃",
+  "땄",
+  "땅",
+  "땆",
+  "땇",
+  "땈",
+  "땉",
+  "땊",
+  "땋",
+  "때",
+  "땍",
+  "땎",
+  "땏",
+  "땑",
+  "땒",
+  "땓",
+  "땔",
+  "땕",
+  "땖",
+  "땗",
+  "땘",
+  "땙",
+  "땚",
+  "땛",
+  "땜",
+  "땝",
+  "땞",
+  "땟",
+  "땠",
+  "땡",
+  "땢",
+  "야",
+  "약",
+  "얂",
+  "얃",
+  "얄",
+  "얅",
+  "얆",
+  "얇",
+  "얈",
+  "얉",
+  "얊",
+  "얋",
+  "얌",
+  "얍",
+  "얎",
+  "얏",
+  "양",
+  "얒",
+  "얓",
+  "얔",
+  "얕",
+  "얖",
+  "얗",
+  "얘",
+  "얙",
+  "얚",
+  "얛",
+  "얜",
+  "얝",
+  "얞",
+  "얟",
+  "얠",
+  "얡",
+  "얢",
+  "얣",
+  "얤",
+  "얥",
+  "얦",
+  "얧",
+  "얨",
+  "얩",
+  "얪",
+  "얫",
+  "얬",
+  "얭",
+  "얮",
+  "얯",
+  "얰",
+  "얱",
 ];
 
 const uniqueKorean = [...new Set(koreanCharsRaw)];
 const koreanChars256 = [...uniqueKorean];
 if (koreanChars256.length < 256) {
-  const additionalStart = 0xC560;
+  const additionalStart = 0xc560;
   for (let i = 0; koreanChars256.length < 256; i++) {
     const char = String.fromCharCode(additionalStart + i);
     if (!koreanChars256.includes(char)) {
@@ -100,12 +397,15 @@ const testData = [
   { name: "중간 길이", data: "Lorem ipsum dolor sit amet. ".repeat(10) },
   { name: "긴 텍스트 (1KB)", data: "Test ".repeat(250) },
   { name: "매우 긴 텍스트 (10KB)", data: "A".repeat(10000) },
-  { name: "긴 한글 스토리", data: "안녕나안보고싶었어?스스로칭찬하려니까부담되는걸?하지만기록은완성해야하니까어쩔수없지~엘리시아는상냥하고,친근하고,귀엽고,똑똑하고아름다운소녀야.그녀의초대를거절하거나그녀를냉정하게대할수있는사람은없어.전설속의엘프처럼모든이의마음을사로잡고13명의영웅을이곳에모았으면서첫번째자리를양보하는겸손함까지...영웅들에게엘리시아는가장믿음직스럽고사랑받는동료야.너희도그렇게생각하지?1" },
+  {
+    name: "긴 한글 스토리",
+    data: "안녕나안보고싶었어?스스로칭찬하려니까부담되는걸?하지만기록은완성해야하니까어쩔수없지~엘리시아는상냥하고,친근하고,귀엽고,똑똑하고아름다운소녀야.그녀의초대를거절하거나그녀를냉정하게대할수있는사람은없어.전설속의엘프처럼모든이의마음을사로잡고13명의영웅을이곳에모았으면서첫번째자리를양보하는겸손함까지...영웅들에게엘리시아는가장믿음직스럽고사랑받는동료야.너희도그렇게생각하지?1",
+  },
 ];
 
 Object.entries(encoders).forEach(([name, encoder]) => {
   console.log(`\n${name}:`);
-  testData.forEach(test => {
+  testData.forEach((test) => {
     try {
       const encoded = encoder.encode(test.data);
       const decoded = encoder.decode(encoded);
@@ -124,9 +424,9 @@ console.log("══════════════════════�
 {
   console.log("2의 제곱수 charset:");
   const powerOfTwoSizes = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
-  powerOfTwoSizes.forEach(size => {
+  powerOfTwoSizes.forEach((size) => {
     try {
-      const chars = Array.from({ length: size }, (_, i) => String.fromCharCode(0x4E00 + i));
+      const chars = Array.from({ length: size }, (_, i) => String.fromCharCode(0x4e00 + i));
       const ddu = new Ddu64(chars, "뭐");
       const td = `크기${size}테스트`;
       const encoded = ddu.encode(td);
@@ -139,7 +439,7 @@ console.log("══════════════════════�
 
   console.log("\n비 2의 제곱수 charset:");
   const nonPowerOfTwoSizes = [3, 5, 7, 10, 15, 20, 50, 100, 200, 500];
-  nonPowerOfTwoSizes.forEach(size => {
+  nonPowerOfTwoSizes.forEach((size) => {
     try {
       const chars = Array.from({ length: size }, (_, i) => String.fromCharCode(0x5000 + i));
       const ddu = new Ddu64(chars, "뭐", { usePowerOfTwo: false });
@@ -168,7 +468,7 @@ console.log("══════════════════════�
     { name: "Hex", encoding: "hex", data: "48656c6c6f20576f726c6421" },
   ];
 
-  encodingTests.forEach(test => {
+  encodingTests.forEach((test) => {
     try {
       const encoder = new Ddu64(BASE64_CHARS, "=", { encoding: test.encoding });
       const originalBuffer = Buffer.from(test.data, test.encoding);
@@ -191,21 +491,33 @@ console.log("══════════════════════�
 
   // 단일 바이트 (0x00~0xFF)
   for (let i = 0; i <= 255; i++) {
-    bitPatternTests.push({ name: `0x${i.toString(16).padStart(2, '0').toUpperCase()}`, data: Buffer.from([i]) });
+    bitPatternTests.push({
+      name: `0x${i.toString(16).padStart(2, "0").toUpperCase()}`,
+      data: Buffer.from([i]),
+    });
   }
 
   // 패턴 테스트
-  [0x00, 0xFF, 0xAA, 0x55, 0xCC, 0x33, 0xF0, 0x0F].forEach(p => {
-    bitPatternTests.push({ name: `패턴 0x${p.toString(16).padStart(2, '0')} (64B)`, data: Buffer.alloc(64, p) });
+  [0x00, 0xff, 0xaa, 0x55, 0xcc, 0x33, 0xf0, 0x0f].forEach((p) => {
+    bitPatternTests.push({
+      name: `패턴 0x${p.toString(16).padStart(2, "0")} (64B)`,
+      data: Buffer.alloc(64, p),
+    });
   });
 
   // 순차 증가/감소
-  bitPatternTests.push({ name: "순차 0x00~0xFF", data: Buffer.from(Array.from({ length: 256 }, (_, i) => i)) });
-  bitPatternTests.push({ name: "순차 0xFF~0x00", data: Buffer.from(Array.from({ length: 256 }, (_, i) => 255 - i)) });
+  bitPatternTests.push({
+    name: "순차 0x00~0xFF",
+    data: Buffer.from(Array.from({ length: 256 }, (_, i) => i)),
+  });
+  bitPatternTests.push({
+    name: "순차 0xFF~0x00",
+    data: Buffer.from(Array.from({ length: 256 }, (_, i) => 255 - i)),
+  });
 
   // 경계 패턴
   bitPatternTests.push({ name: "0x00 (512B)", data: Buffer.alloc(512, 0x00) });
-  bitPatternTests.push({ name: "0xFF (512B)", data: Buffer.alloc(512, 0xFF) });
+  bitPatternTests.push({ name: "0xFF (512B)", data: Buffer.alloc(512, 0xff) });
 
   // 랜덤 패턴
   for (let i = 0; i < 20; i++) {
@@ -222,8 +534,14 @@ console.log("══════════════════════�
   bitPatternTests.push({ name: "혼합 멀티바이트", data: Buffer.from("Aáä한🎉") });
 
   const latin1Encoders = {
-    "Ddu64 (DEFAULT)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.ONECHARSET, encoding: 'latin1' }),
-    "Ddu64 (DDU)": new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU, encoding: 'latin1' }),
+    "Ddu64 (DEFAULT)": new Ddu64(undefined, undefined, {
+      dduSetSymbol: DduSetSymbol.ONECHARSET,
+      encoding: "latin1",
+    }),
+    "Ddu64 (DDU)": new Ddu64(undefined, undefined, {
+      dduSetSymbol: DduSetSymbol.DDU,
+      encoding: "latin1",
+    }),
   };
 
   let totalBitTests = 0;
@@ -232,10 +550,10 @@ console.log("══════════════════════�
   Object.entries(latin1Encoders).forEach(([name, encoder]) => {
     console.log(`\n${name}:`);
     let encoderPassed = 0;
-    bitPatternTests.forEach(test => {
+    bitPatternTests.forEach((test) => {
       const encoded = encoder.encode(test.data);
       const decoded = encoder.decode(encoded);
-      const decodedBuffer = Buffer.from(decoded, 'latin1');
+      const decodedBuffer = Buffer.from(decoded, "latin1");
       totalBitTests++;
       totalTests++;
       if (decodedBuffer.equals(test.data)) {
@@ -264,10 +582,12 @@ console.log("══════════════════════�
     let allPassed = true;
     for (let len = 1; len <= 100; len++) {
       const data = "x".repeat(len);
-      Object.values(encoders).forEach(encoder => {
+      Object.values(encoders).forEach((encoder) => {
         try {
           if (encoder.decode(encoder.encode(data)) !== data) allPassed = false;
-        } catch { allPassed = false; }
+        } catch {
+          allPassed = false;
+        }
       });
     }
     reportTest("다양한 길이 (1-100자) 모든 인코더", allPassed);
@@ -277,12 +597,14 @@ console.log("══════════════════════�
   {
     const testLengths = [1, 2, 3, 7, 8, 14, 15, 16, 31, 32, 63, 64];
     let allPassed = true;
-    testLengths.forEach(len => {
+    testLengths.forEach((len) => {
       const data = "a".repeat(len);
-      Object.values(encoders).forEach(encoder => {
+      Object.values(encoders).forEach((encoder) => {
         try {
           if (encoder.decode(encoder.encode(data)) !== data) allPassed = false;
-        } catch { allPassed = false; }
+        } catch {
+          allPassed = false;
+        }
       });
     });
     reportTest("패딩 경계 테스트 (특정 길이)", allPassed);
@@ -297,7 +619,7 @@ console.log("══════════════════════�
     { name: "복잡한 유니코드", data: "👨‍👩‍👧‍👦🏴󠁧󠁢󠁥󠁮󠁧󠁿🇰🇷🇺🇸".repeat(10) },
   ];
 
-  specialCases.forEach(tc => {
+  specialCases.forEach((tc) => {
     Object.entries(encoders).forEach(([name, encoder]) => {
       try {
         const decoded = encoder.decode(encoder.encode(tc.data));
@@ -337,7 +659,7 @@ console.log("══════════════════════�
   // 특수 패딩 문자
   {
     const specialPaddings = ["=", "-", "_", "~", "!", "@", "#"];
-    specialPaddings.forEach(pad => {
+    specialPaddings.forEach((pad) => {
       try {
         const ddu = new Ddu64(BASE64_CHARS, pad);
         const td = "특수패딩테스트";
@@ -363,7 +685,12 @@ console.log("══════════════════════�
     { name: "긴 영문", data: "The quick brown fox jumps over the lazy dog. ".repeat(25) },
     { name: "한글 텍스트", data: "안녕하세요! 반갑습니다. 오늘 날씨가 좋네요. ".repeat(20) },
     { name: "혼합 텍스트", data: "Hello안녕123!@#가나다ABC".repeat(40) },
-    { name: "JSON 데이터", data: JSON.stringify({ users: Array(50).fill({ name: "Test", age: 25, email: "test@test.com" }) }) },
+    {
+      name: "JSON 데이터",
+      data: JSON.stringify({
+        users: Array(50).fill({ name: "Test", age: 25, email: "test@test.com" }),
+      }),
+    },
     { name: "대용량 (10KB)", data: "Lorem ipsum dolor sit amet. ".repeat(400) },
   ];
 
@@ -382,8 +709,13 @@ console.log("══════════════════════�
       if (!bothOk) allCompressionPassed = false;
 
       const ratio = ((1 - compressEncoded.length / normalEncoded.length) * 100).toFixed(1);
-      const ratioStr = compressEncoded.length < normalEncoded.length ? `${ratio}%↓` : `+${Math.abs(parseFloat(ratio))}%`;
-      console.log(`│ ${tc.name.padEnd(17)} │ ${tc.data.length.toString().padStart(8)} │ ${normalEncoded.length.toString().padStart(8)} │ ${compressEncoded.length.toString().padStart(8)} │ ${ratioStr.padStart(8)} │ ${bothOk ? "✓ 정상" : "✗ 실패"}     │`);
+      const ratioStr =
+        compressEncoded.length < normalEncoded.length
+          ? `${ratio}%↓`
+          : `+${Math.abs(parseFloat(ratio))}%`;
+      console.log(
+        `│ ${tc.name.padEnd(17)} │ ${tc.data.length.toString().padStart(8)} │ ${normalEncoded.length.toString().padStart(8)} │ ${compressEncoded.length.toString().padStart(8)} │ ${ratioStr.padStart(8)} │ ${bothOk ? "✓ 정상" : "✗ 실패"}     │`,
+      );
     } catch (err: any) {
       allCompressionPassed = false;
       console.log(`│ ${tc.name.padEnd(17)} │ 에러: ${err.message.substring(0, 50).padEnd(56)} │`);
@@ -394,7 +726,8 @@ console.log("══════════════════════�
 
   // 다양한 인코더에서 압축
   console.log("\n  다양한 인코더에서 압축:");
-  const compressData = "압축 테스트용 데이터입니다. 반복되는 패턴이 있으면 압축률이 높아집니다. ".repeat(30);
+  const compressData =
+    "압축 테스트용 데이터입니다. 반복되는 패턴이 있으면 압축률이 높아집니다. ".repeat(30);
   Object.entries(encoders).forEach(([name, enc]) => {
     try {
       const compressEncoded = enc.encode(compressData, { compress: true });
@@ -412,10 +745,13 @@ console.log("══════════════════════�
     try {
       const length = Math.floor(Math.random() * 5000) + 100;
       let rd = "";
-      for (let j = 0; j < length; j++) rd += String.fromCharCode(Math.floor(Math.random() * 0xD800));
+      for (let j = 0; j < length; j++)
+        rd += String.fromCharCode(Math.floor(Math.random() * 0xd800));
       const encoded = encoder.encode(rd, { compress: true });
       if (encoder.decode(encoded) === rd) fuzzPassed++;
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   reportTest(`압축 Fuzzing (${fuzzPassed}/100)`, fuzzPassed === 100);
 }
@@ -476,7 +812,7 @@ console.log("══════════════════════�
     const td = "A".repeat(100);
     const encoded = encoder.encode(td, { chunkSize: 20, chunkSeparator: "\n" });
     const lines = encoded.split("\n");
-    const allChunksCorrect = lines.slice(0, -1).every(line => line.length === 20);
+    const allChunksCorrect = lines.slice(0, -1).every((line) => line.length === 20);
     reportTest("청크 분할 (20자)", allChunksCorrect);
     reportTest("청크 분할 디코딩", td === encoder.decode(encoded));
   } catch (err: any) {
@@ -556,12 +892,16 @@ console.log("══════════════════════�
     const chars2 = CharsetBuilder.base64().build();
     reportTest("CharsetBuilder: Base64", chars2.length === 64);
 
-    const chars3 = CharsetBuilder.fromString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
-      .excludeConfusing().build();
+    const chars3 = CharsetBuilder.fromString(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+    )
+      .excludeConfusing()
+      .build();
     reportTest("CharsetBuilder: 혼동 문자 제외", !chars3.includes("0") && !chars3.includes("O"));
 
     const chars4 = CharsetBuilder.fromString("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-      .limitToPowerOfTwo().build();
+      .limitToPowerOfTwo()
+      .build();
     reportTest("CharsetBuilder: 2의 제곱수 제한", chars4.length === 32);
 
     const { charset, padding } = CharsetBuilder.base64().buildWithPadding();
@@ -600,7 +940,10 @@ console.log("══════════════════════�
     const p3 = new DduPipeline().compress().encrypt("my-key").encode(encoder);
     const td3 = "B".repeat(500);
     const r3 = p3.processToString(td3);
-    reportTest("DduPipeline: 압축 → 암호화 → 인코딩 → 역순", td3 === p3.reverse().processToString(r3));
+    reportTest(
+      "DduPipeline: 압축 → 암호화 → 인코딩 → 역순",
+      td3 === p3.reverse().processToString(r3),
+    );
 
     // 복제
     const cloned = p3.clone();
@@ -624,7 +967,7 @@ console.log("══════════════════════�
     const length = Math.floor(Math.random() * 100) + 1;
     let randomStr = "";
     for (let j = 0; j < length; j++) {
-      randomStr += String.fromCharCode(Math.floor(Math.random() * (0xD7A3 - 0x0020)) + 0x0020);
+      randomStr += String.fromCharCode(Math.floor(Math.random() * (0xd7a3 - 0x0020)) + 0x0020);
     }
     try {
       if (encoder.decode(encoder.encode(randomStr)) !== randomStr) {
@@ -656,7 +999,7 @@ console.log("══════════════════════�
     { name: "100KB", data: "Lorem ipsum ".repeat(10000), iterations: 10 },
   ];
 
-  perfTests.forEach(tc => {
+  perfTests.forEach((tc) => {
     console.log(`\n${tc.name} (${tc.iterations}회):`);
     console.log("  인코더          | 인코딩(평균) | 디코딩(평균) | 출력 크기");
     console.log("  " + "-".repeat(65));
@@ -675,7 +1018,9 @@ console.log("══════════════════════�
         for (let i = 0; i < tc.iterations; i++) encoder.decode(encoded);
         const decTime = performance.now() - startDec;
 
-        console.log(`  ${name.padEnd(17)} | ${(encTime / tc.iterations).toFixed(3).padStart(10)}ms | ${(decTime / tc.iterations).toFixed(3).padStart(10)}ms | ${encoded.length.toString().padStart(9)} 자`);
+        console.log(
+          `  ${name.padEnd(17)} | ${(encTime / tc.iterations).toFixed(3).padStart(10)}ms | ${(decTime / tc.iterations).toFixed(3).padStart(10)}ms | ${encoded.length.toString().padStart(9)} 자`,
+        );
       } catch (err: any) {
         console.log(`  ${name.padEnd(17)} | 에러: ${err.message}`);
       }
@@ -712,8 +1057,10 @@ console.log("══════════════════════�
       if (global.gc) global.gc();
       const afterGC = process.memoryUsage().heapUsed;
 
-      const leak = (afterGC - startMem) > 1024 * 1024;
-      console.log(`  ${name.padEnd(17)} | ${formatBytes(startMem).padStart(10)} | ${formatBytes(endMem).padStart(10)} | ${formatBytes(afterGC).padStart(4)} | ${leak ? "⚠️ 의심" : "✅ 없음"}`);
+      const leak = afterGC - startMem > 1024 * 1024;
+      console.log(
+        `  ${name.padEnd(17)} | ${formatBytes(startMem).padStart(10)} | ${formatBytes(endMem).padStart(10)} | ${formatBytes(afterGC).padStart(4)} | ${leak ? "⚠️ 의심" : "✅ 없음"}`,
+      );
     } catch (err: any) {
       console.log(`  ${name.padEnd(17)} | 에러: ${err.message}`);
     }
@@ -741,14 +1088,18 @@ console.log("══════════════════════�
         try {
           if (encoder.decode(encoder.encode(td)) !== td) errors++;
           iterations++;
-        } catch { errors++; }
+        } catch {
+          errors++;
+        }
       }
 
       const elapsed = (performance.now() - startTime) / 1000;
       const opsPerSec = iterations / elapsed;
       const stability = errors === 0 ? "✅ 안정" : "⚠️ 주의";
 
-      console.log(`  ${name.padEnd(17)} | ${iterations.toString().padStart(9)} | ${opsPerSec.toFixed(0).padStart(14)} | ${errors.toString().padStart(6)} | ${stability}`);
+      console.log(
+        `  ${name.padEnd(17)} | ${iterations.toString().padStart(9)} | ${opsPerSec.toFixed(0).padStart(14)} | ${errors.toString().padStart(6)} | ${stability}`,
+      );
     } catch (err: any) {
       console.log(`  ${name.padEnd(17)} | 에러: ${err.message}`);
     }
@@ -826,20 +1177,24 @@ async function runAsyncTests() {
     const tasks: Promise<boolean>[] = [];
 
     for (let i = 0; i < ITERATIONS; i++) {
-      tasks.push(new Promise<boolean>((resolve) => {
-        setImmediate(() => {
-          try {
-            const len = Math.floor(Math.random() * 1000) + 1;
-            const buffer = Buffer.allocUnsafe(len);
-            for (let j = 0; j < len; j++) buffer[j] = Math.floor(Math.random() * 256);
-            resolve(buffer.equals(encoder.decodeToBuffer(encoder.encode(buffer))));
-          } catch { resolve(false); }
-        });
-      }));
+      tasks.push(
+        new Promise<boolean>((resolve) => {
+          setImmediate(() => {
+            try {
+              const len = Math.floor(Math.random() * 1000) + 1;
+              const buffer = Buffer.allocUnsafe(len);
+              for (let j = 0; j < len; j++) buffer[j] = Math.floor(Math.random() * 256);
+              resolve(buffer.equals(encoder.decodeToBuffer(encoder.encode(buffer))));
+            } catch {
+              resolve(false);
+            }
+          });
+        }),
+      );
     }
 
     const results = await Promise.all(tasks);
-    const failures = results.filter(r => !r).length;
+    const failures = results.filter((r) => !r).length;
     reportTest(`비동기 Fuzzing ${ITERATIONS}회`, failures === 0);
   }
 

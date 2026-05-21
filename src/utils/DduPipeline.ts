@@ -56,7 +56,7 @@ export class DduPipeline {
    */
   decompress(
     maxDecompressedBytes?: number,
-    algorithm: "deflate" | "brotli" = "deflate"
+    algorithm: "deflate" | "brotli" = "deflate",
   ): DduPipeline {
     this.steps.push({ type: "decompress", maxDecompressedBytes, algorithm });
     return this;
@@ -112,7 +112,7 @@ export class DduPipeline {
   encodeWith(
     dduChar?: string[] | string,
     paddingChar?: string,
-    options?: DduConstructorOptions
+    options?: DduConstructorOptions,
   ): DduPipeline {
     const encoder = new Ddu64(dduChar, paddingChar, options);
     return this.encode(encoder);
@@ -163,7 +163,7 @@ export class DduPipeline {
           case "transform":
           case "transformString":
             throw new Error(
-              `[DduPipeline reverse] Cannot reverse "${step.type}" step. Custom transform functions are not reversible. Use explicit encode/decode pairs instead.`
+              `[DduPipeline reverse] Cannot reverse "${step.type}" step. Custom transform functions are not reversible. Use explicit encode/decode pairs instead.`,
             );
         }
       });
@@ -210,16 +210,12 @@ export class DduPipeline {
   private executeStep(step: PipelineStep, data: string | Buffer): string | Buffer {
     switch (step.type) {
       case "compress":
-        return this.compressData(
-          this.toBuffer(data),
-          step.level ?? 9,
-          step.algorithm ?? "deflate"
-        );
+        return this.compressData(this.toBuffer(data), step.level ?? 9, step.algorithm ?? "deflate");
       case "decompress":
         return this.decompressData(
           this.toBuffer(data),
           step.maxDecompressedBytes,
-          step.algorithm ?? "deflate"
+          step.algorithm ?? "deflate",
         );
       case "encrypt":
         return this.encryptData(this.toBuffer(data), step.key);
@@ -244,11 +240,7 @@ export class DduPipeline {
     return typeof data === "string" ? data : data.toString("utf-8");
   }
 
-  private compressData(
-    data: Buffer,
-    level: number,
-    algorithm: "deflate" | "brotli"
-  ): Buffer {
+  private compressData(data: Buffer, level: number, algorithm: "deflate" | "brotli"): Buffer {
     if (algorithm === "brotli") {
       return brotliCompressSync(data, {
         params: {
@@ -262,18 +254,14 @@ export class DduPipeline {
   private decompressData(
     data: Buffer,
     maxBytes?: number,
-    algorithm: "deflate" | "brotli" = "deflate"
+    algorithm: "deflate" | "brotli" = "deflate",
   ): Buffer {
     if (algorithm === "brotli") {
       const limit = maxBytes ?? Number.POSITIVE_INFINITY;
       return brotliDecompressWithLimit(data, limit, "DduPipeline decompress");
     }
 
-    return inflateWithLimit(
-      data,
-      maxBytes ?? Number.POSITIVE_INFINITY,
-      "DduPipeline decompress"
-    );
+    return inflateWithLimit(data, maxBytes ?? Number.POSITIVE_INFINITY, "DduPipeline decompress");
   }
 
   private encryptData(data: Buffer, key: string): Buffer {

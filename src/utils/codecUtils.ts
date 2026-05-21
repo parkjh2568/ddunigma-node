@@ -1,6 +1,69 @@
 /** URL-Safe 충돌 문자 목록 */
 export const URL_SAFE_CONFLICT_CHARS = ["-", "_", "."] as const;
 
+/** 한글 종성 인덱스 맵 */
+const CODA_INDEX_MAP: Record<string, number> = {
+  "": 0,
+  ㄱ: 1,
+  ㄲ: 2,
+  ㄳ: 3,
+  ㄴ: 4,
+  ㄵ: 5,
+  ㄶ: 6,
+  ㄷ: 7,
+  ㄹ: 8,
+  ㄺ: 9,
+  ㄻ: 10,
+  ㄼ: 11,
+  ㄽ: 12,
+  ㄾ: 13,
+  ㄿ: 14,
+  ㅀ: 15,
+  ㅁ: 16,
+  ㅂ: 17,
+  ㅄ: 18,
+  ㅅ: 19,
+  ㅆ: 20,
+  ㅇ: 21,
+  ㅈ: 22,
+  ㅊ: 23,
+  ㅋ: 24,
+  ㅌ: 25,
+  ㅍ: 26,
+  ㅎ: 27,
+};
+
+/**
+ * 한글 문자에 종성을 결합합니다.
+ * @param char - 기본 한글 문자 (종성 없는 상태)
+ * @param coda - 결합할 종성 자모 (빈 문자열이면 종성 없음)
+ * @returns 종성이 결합된 한글 문자
+ */
+export function combineCoda(char: string, coda: string): string {
+  const code = char.charCodeAt(0);
+  if (code < 44032 || code > 55203) return char;
+  const baseOrd = code - ((code - 44032) % 28);
+  const codaIdx = CODA_INDEX_MAP[coda] ?? 0;
+  return String.fromCharCode(baseOrd + codaIdx);
+}
+
+/**
+ * dduChar × codaChar 조합으로 최종 charset을 동적 생성합니다.
+ * @param dduChar - 기본 문자 배열
+ * @param codaChar - 종성 문자 배열
+ * @returns 조합된 charset 배열 (dduChar.length × codaChar.length 크기)
+ */
+export function buildCodaCharset(dduChar: string[], codaChar: string[]): string[] {
+  const result: string[] = new Array(dduChar.length * codaChar.length);
+  let idx = 0;
+  for (const base of dduChar) {
+    for (const coda of codaChar) {
+      result[idx++] = combineCoda(base, coda);
+    }
+  }
+  return result;
+}
+
 /** CRC32 룩업 테이블 (바이트 단위 연산으로 비트 루프 대비 4~8배 빠름) */
 const CRC32_TABLE: Uint32Array = (() => {
   const table = new Uint32Array(256);
@@ -32,16 +95,7 @@ export const ENCRYPT_MARKER = "ENC";
  */
 export function toUrlSafeFast(input: string): string {
   if (input.length === 0) return input;
-
-  const chars = new Array<string>(input.length);
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-    if (ch === "+") chars[i] = "-";
-    else if (ch === "/") chars[i] = "_";
-    else if (ch === "=") chars[i] = ".";
-    else chars[i] = ch;
-  }
-  return chars.join("");
+  return input.replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", ".");
 }
 
 /**
@@ -49,16 +103,7 @@ export function toUrlSafeFast(input: string): string {
  */
 export function fromUrlSafeFast(input: string): string {
   if (input.length === 0) return input;
-
-  const chars = new Array<string>(input.length);
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-    if (ch === "-") chars[i] = "+";
-    else if (ch === "_") chars[i] = "/";
-    else if (ch === ".") chars[i] = "=";
-    else chars[i] = ch;
-  }
-  return chars.join("");
+  return input.replaceAll("-", "+").replaceAll("_", "/").replaceAll(".", "=");
 }
 
 /**
@@ -87,6 +132,10 @@ export function splitIntoChunksFast(input: string, chunkSize: number, separator:
 export function removeChunksFast(input: string, defaultSeparator: string): string {
   if (input.length === 0) return input;
 
+  // 줄바꿈 제거는 항상 수행
+  let result = input.replace(/[\r\n]/g, "");
+
+  // 커스텀 separator가 있으면 추가 제거
   const separator =
     defaultSeparator &&
     defaultSeparator !== "\n" &&
@@ -94,28 +143,12 @@ export function removeChunksFast(input: string, defaultSeparator: string): strin
     defaultSeparator !== "\r"
       ? defaultSeparator
       : "";
-  const separatorLength = separator.length;
-  const chars: string[] = [];
 
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-    if (ch === "\n" || ch === "\r") {
-      continue;
-    }
-
-    if (
-      separatorLength > 0 &&
-      ch === separator[0] &&
-      input.startsWith(separator, i)
-    ) {
-      i += separatorLength - 1;
-      continue;
-    }
-
-    chars.push(ch);
+  if (separator.length > 0 && result.includes(separator)) {
+    result = result.replaceAll(separator, "");
   }
 
-  return chars.join("");
+  return result;
 }
 
 /**
@@ -152,13 +185,10 @@ export function extractChecksum(input: string): { data: string; checksum: string
  */
 export function normalizeCompressionLevel(
   value: number | undefined,
-  algorithm: "deflate" | "brotli"
+  algorithm: "deflate" | "brotli",
 ): number {
   const fallback = 6;
-  const normalized =
-    value === undefined || !Number.isFinite(value)
-      ? fallback
-      : Math.floor(value);
+  const normalized = value === undefined || !Number.isFinite(value) ? fallback : Math.floor(value);
 
   return algorithm === "brotli"
     ? Math.min(11, Math.max(0, normalized))
