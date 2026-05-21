@@ -46,6 +46,26 @@ export function decryptAes256Gcm(data: Buffer, keyHash: Buffer): Buffer {
 
 
 /**
+ * AES-256-GCM 스트림 포맷(iv + encrypted + authTag)을 복호화합니다.
+ * 스트림 포맷은 일반 포맷(iv + authTag + encrypted)과 바이트 순서가 다릅니다.
+ *
+ * @param data - 암호화된 데이터 (iv 12바이트 + encrypted + authTag 16바이트)
+ * @param keyHash - 32바이트 해시된 키 (deriveKey로 생성)
+ * @returns 복호화된 데이터
+ */
+export function decryptAes256GcmStream(data: Buffer, keyHash: Buffer): Buffer {
+  if (data.length < 28) {
+    throw new Error("[decrypt] Invalid encrypted stream data: too short");
+  }
+  const iv = data.subarray(0, 12);
+  const authTag = data.subarray(data.length - 16);
+  const encrypted = data.subarray(12, data.length - 16);
+  const decipher = createDecipheriv("aes-256-gcm", keyHash, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+}
+
+/**
  * 크기 제한을 적용하여 brotli 압축을 해제합니다.
  *
  * @param data - 압축된 데이터

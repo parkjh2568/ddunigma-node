@@ -1,5 +1,4 @@
 import { deflateSync, brotliCompressSync, constants } from "zlib";
-import { createDecipheriv } from "crypto";
 import {
   DduConstructorOptions,
   DduOptions,
@@ -13,6 +12,7 @@ import {
   deriveKey,
   encryptAes256Gcm,
   decryptAes256Gcm,
+  decryptAes256GcmStream,
   inflateWithLimit as inflateWithLimitUtil,
   brotliDecompressWithLimit,
   GcmEncryptStream,
@@ -932,16 +932,7 @@ export class Ddu64 {
     if (!this.encryptionKeyHash) {
       throw new Error("[Ddu64 decrypt] Encryption key is not set");
     }
-    if (data.length < 28) {
-      throw new Error("[Ddu64 decrypt] Invalid encrypted stream data: too short");
-    }
-
-    const iv = data.subarray(0, 12);
-    const authTag = data.subarray(data.length - 16);
-    const encrypted = data.subarray(12, data.length - 16);
-    const decipher = createDecipheriv("aes-256-gcm", this.encryptionKeyHash, iv);
-    decipher.setAuthTag(authTag);
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return decryptAes256GcmStream(data, this.encryptionKeyHash);
   }
 
   /**

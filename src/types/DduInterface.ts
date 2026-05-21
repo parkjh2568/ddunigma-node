@@ -148,8 +148,6 @@ const dduDefaultConstructorOptions: DduConstructorOptions = {
   requiredLength: 8,
   /** 비트 길이: 3 (2^3 = 8) */
   bitLength: 3,
-  /** 빌드 에러 시 throw하지 않음 */
-  useBuildErrorReturn: false,
 };
 
 export { dduDefaultConstructorOptions };
