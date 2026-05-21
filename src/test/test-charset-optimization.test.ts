@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Ddu64 } from "../encoders/Ddu64";
-import { DduSetSymbol } from "../types";
+import { DduSetSymbol } from "../types/DduInterface";
 
 describe("Charset Optimization - Removal Validation", () => {
   describe("TWOCHARSET and THREECHARSET removal (Requirements 8.1, 8.2, 8.4)", () => {

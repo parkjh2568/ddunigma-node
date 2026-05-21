@@ -1,11 +1,12 @@
-import { brotliCompressSync, brotliDecompressSync, constants, deflateSync } from "zlib";
+import { brotliCompressSync, constants, deflateSync } from "zlib";
 import { Ddu64 } from "../encoders/Ddu64";
-import { DduConstructorOptions } from "../types";
+import { DduConstructorOptions } from "../types/DduInterface";
 import {
   deriveKey,
   encryptAes256Gcm,
   decryptAes256Gcm,
   inflateWithLimit,
+  brotliDecompressWithLimit,
 } from "./crypto";
 
 /**
@@ -265,35 +266,7 @@ export class DduPipeline {
   ): Buffer {
     if (algorithm === "brotli") {
       const limit = maxBytes ?? Number.POSITIVE_INFINITY;
-      if (limit === Number.POSITIVE_INFINITY) {
-        return brotliDecompressSync(data);
-      }
-
-      try {
-        const inflated = brotliDecompressSync(data, { maxOutputLength: limit });
-        if (inflated.length > limit) {
-          throw new Error(
-            `[DduPipeline decompress] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${limit} bytes`
-          );
-        }
-        return inflated;
-      } catch (e: unknown) {
-        const err = e as { message?: string; code?: string };
-        const msg = String(err?.message ?? "").toLowerCase();
-        const code = String(err?.code ?? "");
-        if (
-          code === "ERR_BUFFER_TOO_LARGE" ||
-          msg.includes("cannot create a buffer larger") ||
-          msg.includes("buffer larger than") ||
-          msg.includes("output length")
-        ) {
-          throw new Error(
-            `[DduPipeline decompress] Decompressed data exceeds limit. Limit: ${limit} bytes`,
-            { cause: e }
-          );
-        }
-        throw e;
-      }
+      return brotliDecompressWithLimit(data, limit, "DduPipeline decompress");
     }
 
     return inflateWithLimit(

@@ -5,6 +5,7 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "sideEffects": false,
   "engines": {
     "node": ">=18.0.0"
   },
@@ -15,8 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src benchmarks eslint.config.mjs tsup.config.ts",
-    "lint:fix": "eslint src benchmarks eslint.config.mjs tsup.config.ts --fix",
+    "lint": "eslint src eslint.config.mjs tsup.config.ts",
+    "lint:fix": "eslint src eslint.config.mjs tsup.config.ts --fix",
     "format": "prettier --write src/",
     "test:all": "vitest run"
   },

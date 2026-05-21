@@ -4,10 +4,10 @@ export type {
   DduEncodeStats,
   DduProgressInfo,
   CharSetConfig,
-} from "./types";
-export { DduSetSymbol } from "./types";
-export { BaseDdu } from "./base";
-export { Ddu64 } from "./encoders";
+  CharSetInfo,
+} from "./types/DduInterface";
+export { DduSetSymbol } from "./types/DduInterface";
+export { Ddu64 } from "./encoders/Ddu64";
 export {
   CharsetBuilder,
   DduPipeline,

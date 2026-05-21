@@ -1,9 +1,5 @@
-/** URL-Safe 역방향 매핑 */
-export const URL_SAFE_REVERSE_MAP: Record<string, string> = {
-  "-": "+",
-  "_": "/",
-  ".": "=",
-};
+/** URL-Safe 충돌 문자 목록 */
+export const URL_SAFE_CONFLICT_CHARS = ["-", "_", "."] as const;
 
 /** CRC32 룩업 테이블 (바이트 단위 연산으로 비트 루프 대비 4~8배 빠름) */
 const CRC32_TABLE: Uint32Array = (() => {
@@ -99,7 +95,7 @@ export function removeChunksFast(input: string, defaultSeparator: string): strin
       ? defaultSeparator
       : "";
   const separatorLength = separator.length;
-  let result = "";
+  const chars: string[] = [];
 
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
@@ -116,10 +112,10 @@ export function removeChunksFast(input: string, defaultSeparator: string): strin
       continue;
     }
 
-    result += ch;
+    chars.push(ch);
   }
 
-  return result;
+  return chars.join("");
 }
 
 /**
@@ -149,4 +145,22 @@ export function extractChecksum(input: string): { data: string; checksum: string
     data: input.slice(0, markerIndex),
     checksum: checksum.toLowerCase(),
   };
+}
+
+/**
+ * 압축 레벨을 알고리즘별 지원 범위에 맞춰 정규화합니다.
+ */
+export function normalizeCompressionLevel(
+  value: number | undefined,
+  algorithm: "deflate" | "brotli"
+): number {
+  const fallback = 6;
+  const normalized =
+    value === undefined || !Number.isFinite(value)
+      ? fallback
+      : Math.floor(value);
+
+  return algorithm === "brotli"
+    ? Math.min(11, Math.max(0, normalized))
+    : Math.min(9, Math.max(0, normalized));
 }

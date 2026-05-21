@@ -1,6 +1,5 @@
-import { deflateSync, brotliCompressSync, brotliDecompressSync, constants } from "zlib";
+import { deflateSync, brotliCompressSync, constants } from "zlib";
 import { createDecipheriv } from "crypto";
-import { BaseDdu } from "../base/BaseDdu";
 import {
   DduConstructorOptions,
   DduOptions,
@@ -8,13 +7,14 @@ import {
   DduEncodeStats,
   CharSetInfo,
   dduDefaultConstructorOptions,
-} from "../types";
-import { getCharSet } from "../charSets";
+} from "../types/DduInterface";
+import { getCharSet } from "../presets";
 import {
   deriveKey,
   encryptAes256Gcm,
   decryptAes256Gcm,
   inflateWithLimit as inflateWithLimitUtil,
+  brotliDecompressWithLimit,
   GcmEncryptStream,
   GcmDecryptStream,
 } from "../utils/crypto";
@@ -25,11 +25,12 @@ import {
   removeChunksFast,
   calculateCRC32,
   extractChecksum,
-  URL_SAFE_REVERSE_MAP,
+  URL_SAFE_CONFLICT_CHARS,
   CHECKSUM_MARKER,
   COMPRESS_MARKER,
   BROTLI_MARKER,
-  ENCRYPT_MARKER
+  ENCRYPT_MARKER,
+  normalizeCompressionLevel,
 } from "../utils/codecUtils";
 
 // ============================================================================
@@ -97,10 +98,12 @@ const DECODE_PROGRESS = {
  * const encoder = new Ddu64(undefined, undefined, { compress: true });
  * const encoded = encoder.encode(longText);
  */
-export class Ddu64 extends BaseDdu {
+export class Ddu64 {
   // --------------------------------------------------------------------------
   // 멤버 변수
   // --------------------------------------------------------------------------
+
+  protected readonly defaultEncoding: BufferEncoding = "utf-8";
 
   /** 인코딩에 사용할 문자 배열 */
   protected readonly dduChar: string[];
@@ -194,7 +197,6 @@ export class Ddu64 extends BaseDdu {
     paddingChar?: string,
     dduOptions?: DduConstructorOptions
   ) {
-    super();
     // throwOnError 우선, useBuildErrorReturn은 하위 호환
     const shouldThrow = dduOptions?.throwOnError ?? dduOptions?.useBuildErrorReturn ?? false;
 
@@ -289,7 +291,7 @@ export class Ddu64 extends BaseDdu {
     this.defaultChunkSize = dduOptions?.chunkSize;
     this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
     this.defaultCompressionAlgorithm = dduOptions?.compressionAlgorithm ?? "deflate";
-    this.defaultCompressionLevel = this.normalizeCompressionLevel(
+    this.defaultCompressionLevel = normalizeCompressionLevel(
       dduOptions?.compressionLevel,
       this.defaultCompressionAlgorithm
     );
@@ -376,7 +378,7 @@ export class Ddu64 extends BaseDdu {
       const compressionAlgorithm =
         options?.compressionAlgorithm ?? this.defaultCompressionAlgorithm;
       const isBrotli = compressionAlgorithm === "brotli";
-      const level = this.normalizeCompressionLevel(
+      const level = normalizeCompressionLevel(
         options?.compressionLevel ?? this.defaultCompressionLevel,
         compressionAlgorithm
       );
@@ -526,34 +528,7 @@ export class Ddu64 extends BaseDdu {
         options?.compressionAlgorithm === "brotli" ||
         (!options?.compressionAlgorithm && this.defaultCompressionAlgorithm === "brotli");
       if (isBrotli) {
-        try {
-          const inflated = brotliDecompressSync(decoded, {
-            maxOutputLength: maxDecompressedBytes,
-          });
-          if (inflated.length > maxDecompressedBytes) {
-            throw new Error(
-              `[Ddu64 decode] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxDecompressedBytes} bytes`
-            );
-          }
-          decoded = inflated;
-        } catch (e: unknown) {
-          const err = e as { message?: string; code?: string };
-          const msg = String(err?.message ?? "").toLowerCase();
-          const code = String(err?.code ?? "");
-
-          if (
-            code === "ERR_BUFFER_TOO_LARGE" ||
-            msg.includes("cannot create a buffer larger") ||
-            msg.includes("buffer larger than") ||
-            msg.includes("output length")
-          ) {
-            throw new Error(
-              `[Ddu64 decode] Decompressed data exceeds limit. Limit: ${maxDecompressedBytes} bytes`,
-              { cause: e }
-            );
-          }
-          throw e;
-        }
+        decoded = brotliDecompressWithLimit(decoded, maxDecompressedBytes, "Ddu64 decode");
       } else {
         decoded = this.inflateWithLimit(decoded, maxDecompressedBytes);
       }
@@ -602,6 +577,7 @@ export class Ddu64 extends BaseDdu {
   }
 
   /**
+   * @internal
    * 공개 스트림 API의 auto-detect 경로에서 사용하는 전용 디코더입니다.
    * 스트림 인코딩은 compress -> encrypt -> encode 순서를 사용하므로,
    * 복원은 decode -> decrypt -> decompress 순서로 수행합니다.
@@ -650,34 +626,7 @@ export class Ddu64 extends BaseDdu {
         "maxDecompressedBytes"
       );
       if (compressionAlgorithm === "brotli") {
-        try {
-          const inflated = brotliDecompressSync(decoded, {
-            maxOutputLength: maxDecompressedBytes,
-          });
-          if (inflated.length > maxDecompressedBytes) {
-            throw new Error(
-              `[Ddu64 decode] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxDecompressedBytes} bytes`
-            );
-          }
-          decoded = inflated;
-        } catch (e: unknown) {
-          const err = e as { message?: string; code?: string };
-          const msg = String(err?.message ?? "").toLowerCase();
-          const code = String(err?.code ?? "");
-
-          if (
-            code === "ERR_BUFFER_TOO_LARGE" ||
-            msg.includes("cannot create a buffer larger") ||
-            msg.includes("buffer larger than") ||
-            msg.includes("output length")
-          ) {
-            throw new Error(
-              `[Ddu64 decode] Decompressed data exceeds limit. Limit: ${maxDecompressedBytes} bytes`,
-              { cause: e }
-            );
-          }
-          throw e;
-        }
+        decoded = brotliDecompressWithLimit(decoded, maxDecompressedBytes, "Ddu64 decode");
       } else {
         decoded = this.inflateWithLimit(decoded, maxDecompressedBytes);
       }
@@ -712,6 +661,7 @@ export class Ddu64 extends BaseDdu {
   }
 
   /**
+   * @internal
    * 외부 스트림 파이프라인에서 전처리된 Buffer를 그대로 인코딩합니다.
    * 압축/암호화는 수행하지 않고, 마지막 푸터에만 메타데이터를 반영합니다.
    */
@@ -995,6 +945,7 @@ export class Ddu64 extends BaseDdu {
   }
 
   /**
+   * @internal
    * 공개 스트림 API에서 사용할 암호화 Transform을 생성합니다.
    */
   createEncryptionStream(): GcmEncryptStream | undefined {
@@ -1005,6 +956,7 @@ export class Ddu64 extends BaseDdu {
   }
 
   /**
+   * @internal
    * 공개 스트림 API에서 사용할 복호화 Transform을 생성합니다.
    */
   createDecryptionStream(): GcmDecryptStream | undefined {
@@ -1017,6 +969,20 @@ export class Ddu64 extends BaseDdu {
   // --------------------------------------------------------------------------
   // 유틸리티 메서드
   // --------------------------------------------------------------------------
+
+  /**
+   * 주어진 숫자보다 작거나 같은 가장 큰 2의 제곱수의 지수를 반환합니다.
+   */
+  private getLargestPowerOfTwoExponent(n: number): number {
+    return Math.floor(Math.log2(n));
+  }
+
+  /**
+   * charset 크기에 필요한 비트 길이를 계산합니다.
+   */
+  private getBitLength(setLength: number): number {
+    return Math.ceil(Math.log2(setLength));
+  }
 
   /**
    * 옵션 값을 정규화합니다.
@@ -1038,24 +1004,6 @@ export class Ddu64 extends BaseDdu {
       return fallback;
     }
     return Math.floor(value);
-  }
-
-  /**
-   * 압축 레벨을 알고리즘별 지원 범위에 맞춰 정규화합니다.
-   */
-  private normalizeCompressionLevel(
-    value: number | undefined,
-    algorithm: "deflate" | "brotli"
-  ): number {
-    const fallback = 6;
-    const normalized =
-      value === undefined || !Number.isFinite(value)
-        ? fallback
-        : Math.floor(value);
-
-    return algorithm === "brotli"
-      ? Math.min(11, Math.max(0, normalized))
-      : Math.min(9, Math.max(0, normalized));
   }
 
   /**
@@ -1563,22 +1511,10 @@ export class Ddu64 extends BaseDdu {
           continue; // fallback으로 재시도
         }
 
-        // 문자 길이 일관성 검증
-        const charLength = charSet[0].length;
-        const invalidChar = charSet.find((c) => c.length !== charLength);
-        if (invalidChar) {
-          if (shouldThrow) {
-            throw new Error(
-              `[Ddu64 normalizeCharSet] Inconsistent char length. Expected ${charLength}, found "${invalidChar}" (${invalidChar.length})`
-            );
-          }
-          continue; // fallback으로 재시도
-        }
-
         // 패딩 검증
-        if (state.padding.length !== charLength) {
+        if (state.padding.length !== 1) {
           throw new Error(
-            `[Ddu64 normalizeCharSet] Padding length mismatch. Expected ${charLength}, got ${state.padding.length}`
+            `[Ddu64 normalizeCharSet] Padding length mismatch. Expected 1, got ${state.padding.length}`
           );
         }
         if (charSet.includes(state.padding)) {
@@ -1760,18 +1696,18 @@ export class Ddu64 extends BaseDdu {
     paddingChar: string,
     shouldThrow: boolean
   ): boolean {
-    const conflictChars = Object.keys(URL_SAFE_REVERSE_MAP); // ["-", "_", "."]
+    const conflictChars = URL_SAFE_CONFLICT_CHARS;
 
     for (const ch of conflictChars) {
       for (const c of charSet) {
         if (c.includes(ch)) {
-          const msg = `[Ddu64 Constructor] URL-Safe mode conflict: charset character "${c}" contains "${ch}" which would be transformed to "${URL_SAFE_REVERSE_MAP[ch]}" during decoding.`;
+          const msg = `[Ddu64 Constructor] URL-Safe mode conflict: charset character "${c}" contains "${ch}" which conflicts with URL-safe encoding.`;
           if (shouldThrow) throw new Error(msg);
           return false;
         }
       }
       if (paddingChar.includes(ch)) {
-        const msg = `[Ddu64 Constructor] URL-Safe mode conflict: padding character "${paddingChar}" contains "${ch}" which would be transformed to "${URL_SAFE_REVERSE_MAP[ch]}" during decoding.`;
+        const msg = `[Ddu64 Constructor] URL-Safe mode conflict: padding character "${paddingChar}" contains "${ch}" which conflicts with URL-safe encoding.`;
         if (shouldThrow) throw new Error(msg);
         return false;
       }
@@ -1787,7 +1723,7 @@ export class Ddu64 extends BaseDdu {
     paddingChar: string,
     requiredLength: number
   ): void {
-    if (charSet[0].length !== 1 || requiredLength > 256) return;
+    if (requiredLength > 256) return;
 
     const limit = Math.min(charSet.length, requiredLength);
     const targetChars = charSet.slice(0, limit);

@@ -1,12 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, createHash, CipherGCM, DecipherGCM } from "crypto";
 import { Transform, TransformCallback } from "stream";
-import { inflateSync, deflate, inflate, brotliCompress, brotliDecompress, ZlibOptions } from "zlib";
-import { promisify } from "util";
-
-export const deflateAsync = promisify(deflate);
-export const inflateAsync = promisify(inflate);
-export const brotliCompressAsync = promisify(brotliCompress);
-export const brotliDecompressAsync = promisify(brotliDecompress);
+import { inflateSync, brotliDecompressSync, ZlibOptions } from "zlib";
 
 /**
  * 문자열 키를 AES-256용 32바이트 키로 변환합니다.
@@ -50,6 +44,45 @@ export function decryptAes256Gcm(data: Buffer, keyHash: Buffer): Buffer {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 }
 
+
+/**
+ * 크기 제한을 적용하여 brotli 압축을 해제합니다.
+ *
+ * @param data - 압축된 데이터
+ * @param maxBytes - 최대 압축해제 바이트 수
+ * @param context - 에러 메시지에 표시할 컨텍스트
+ * @returns 압축 해제된 데이터
+ */
+export function brotliDecompressWithLimit(data: Buffer, maxBytes: number, context: string = "brotli decompress"): Buffer {
+  if (maxBytes === Number.POSITIVE_INFINITY) return brotliDecompressSync(data);
+
+  try {
+    const inflated = brotliDecompressSync(data, { maxOutputLength: maxBytes });
+    if (inflated.length > maxBytes) {
+      throw new Error(
+        `[${context}] Decompressed data exceeds limit. Size: ${inflated.length} bytes, Limit: ${maxBytes} bytes`
+      );
+    }
+    return inflated;
+  } catch (e: unknown) {
+    const err = e as { message?: string; code?: string };
+    const msg = String(err?.message ?? "").toLowerCase();
+    const code = String(err?.code ?? "");
+
+    if (
+      code === "ERR_BUFFER_TOO_LARGE" ||
+      msg.includes("cannot create a buffer larger") ||
+      msg.includes("buffer larger than") ||
+      msg.includes("output length")
+    ) {
+      throw new Error(
+        `[${context}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`,
+        { cause: e }
+      );
+    }
+    throw e;
+  }
+}
 
 /**
  * 크기 제한을 적용하여 zlib 압축을 해제합니다.

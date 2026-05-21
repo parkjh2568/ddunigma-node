@@ -1,8 +1,8 @@
 import { Transform, TransformCallback, TransformOptions, PassThrough } from "stream";
 import { createDeflate, createInflate, createBrotliCompress, createBrotliDecompress, constants } from "zlib";
 import { Ddu64 } from "../encoders/Ddu64";
-import { DduOptions } from "../types";
-import { removeChunksFast } from "./codecUtils";
+import { DduOptions } from "../types/DduInterface";
+import { removeChunksFast, normalizeCompressionLevel } from "./codecUtils";
 
 const STREAM_HEADER_MAGIC = "DDS1";
 
@@ -10,21 +10,6 @@ type StreamHeaderMeta = {
   compressionAlgorithm?: "deflate" | "brotli";
   encrypted: boolean;
 };
-
-function normalizeCompressionLevel(
-  value: number | undefined,
-  algorithm: "deflate" | "brotli"
-): number {
-  const fallback = 6;
-  const normalized =
-    value === undefined || !Number.isFinite(value)
-      ? fallback
-      : Math.floor(value);
-
-  return algorithm === "brotli"
-    ? Math.min(11, Math.max(0, normalized))
-    : Math.min(9, Math.max(0, normalized));
-}
 
 function getStreamHeaderLength(paddingChar: string): number {
   return paddingChar.length * 2 + STREAM_HEADER_MAGIC.length + 2;
