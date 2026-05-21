@@ -8,6 +8,13 @@ V2 추가사항
 
 - 이제 한글 종성 결합 시스템을 활용하여 8개 기본 문자 × 8개 종성으로 64가지 조합을 만들어, 6비트를 한 글자로 표현합니다.
 
+### Credits
+
+- Original Python Implementation by:
+  - [@i3ls](https://github.com/i3l3)
+  - [@gunu3371](https://github.com/gunu3371)
+- Original Repository: [ddunigma](https://github.com/i3l3/ddunigma)
+
 ## Requirements
 
 - **Node.js >= 18.0.0**
