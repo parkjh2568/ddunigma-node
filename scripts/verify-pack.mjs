@@ -47,6 +47,7 @@ try {
     "dist/index.cjs",
     "dist/index.d.ts",
     "dist/index.d.cts",
+    "dist/wasm/codec.wasm",
   ];
 
   for (const file of requiredFiles) {

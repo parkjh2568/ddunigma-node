@@ -1,4 +1,4 @@
-import { CharSetConfig, DduSetSymbol } from "./types/DduInterface";
+import { CharSetConfig, DduSetSymbol } from "./core/types";
 
 const dduCharSet: CharSetConfig = {
   symbol: DduSetSymbol.DDU,
@@ -16,6 +16,7 @@ const dduCharSetV1: CharSetConfig = {
   maxRequiredLength: 8,
   bitLength: 3,
   paddingChar: "뭐",
+  useRepeatPadding: true,
 };
 
 const oneCharSet: CharSetConfig = {

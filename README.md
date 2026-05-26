@@ -2,22 +2,11 @@
 
 [![npm version](https://badge.fury.io/js/@ddunigma%2Fnode.svg)](https://www.npmjs.com/package/@ddunigma/node)
 
-커스텀 charset을 사용하는 Base64 스타일 인코더/디코더 라이브러리입니다.
-
-V2 추가사항
-
-- 이제 한글 종성 결합 시스템을 활용하여 8개 기본 문자 × 8개 종성으로 64가지 조합을 만들어, 6비트를 한 글자로 표현합니다.
-
-### Credits
-
-- Original Python Implementation by:
-  - [@i3ls](https://github.com/i3l3)
-  - [@gunu3371](https://github.com/gunu3371)
-- Original Repository: [ddunigma](https://github.com/i3l3/ddunigma)
+커스텀 charset을 사용하는 Base64 스타일 인코더/디코더입니다. 런타임 종속성 없이 한글 종성 조합 charset, 압축, 암호화, 체크섬, 청크 분할, Web Streams, 선택적 WASM 가속을 지원합니다.
 
 ## Requirements
 
-- **Node.js >= 18.0.0**
+- Node.js >= 18.0.0
 
 ## Install
 
@@ -30,317 +19,377 @@ npm install @ddunigma/node
 ```typescript
 import { Ddu64, DduSetSymbol } from "@ddunigma/node";
 
-// V2 (기본, 한글 종성 결합 64개)
 const ddu = new Ddu64();
-ddu.encode("안녕하세요"); // "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊"
-ddu.decode("뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊"); // "안녕하세요"
 
-// V1 (구버전 호환, 8개 문자 쌍 방식)
-const dduV1 = new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU_V1 });
-dduV1.encode("안녕하세요"); // ".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야"
-dduV1.decode(".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야"); // "안녕하세요"
+const encoded = ddu.encode("안녕하세요");
+const decoded = ddu.decode(encoded);
+
+console.log(encoded);
+console.log(decoded); // "안녕하세요"
+
+const v1 = new Ddu64(undefined, undefined, {
+  dduSetSymbol: DduSetSymbol.DDU_V1,
+});
+
+v1.decode(v1.encode("legacy compatible"));
 ```
 
----
-
-## 기본 사용법
-
-### 인코딩/디코딩
+## Binary Data
 
 ```typescript
 import { Ddu64 } from "@ddunigma/node";
 
-const encoder = new Ddu64();
+const ddu = new Ddu64();
+const input = new Uint8Array([0, 1, 127, 128, 255]);
 
-const encoded = encoder.encode("Hello World!");
-const decoded = encoder.decode(encoded);
+const encoded = ddu.encode(input);
+const bytes = ddu.decodeToUint8Array(encoded);
+const buffer = ddu.decodeToBuffer(encoded); // Node.js Buffer
 ```
 
-### 커스텀 charset
+## Browser Entry
 
 ```typescript
-// 문자열 또는 배열로 charset 지정
-const encoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=");
+import { Ddu64 } from "@ddunigma/node/browser";
 
-// 종성 결합 커스텀 charset (dduChar × codaChar 동적 생성)
-const encoder2 = new Ddu64(["가", "나", "다", "라"], "뭐", {
-  codaChar: ["", "ㄱ", "ㄲ", "ㄷ"], // 4×4 = 16개 조합
-});
+const ddu = new Ddu64();
+
+const encoded = await ddu.encodeAsync("browser text");
+const decoded = await ddu.decodeAsync(encoded);
 ```
 
-### 프리셋
+브라우저 진입점에서는 동기 암호화/압축 메서드 대신 `encodeAsync`, `decodeAsync`, `decodeToUint8ArrayAsync`를 사용하세요.
 
-| Symbol       | 문자 수 | 비트 | 설명                                 |
-| ------------ | ------- | ---- | ------------------------------------ |
-| `DDU`        | 64      | 6    | 한글 종성 결합 (8 기본문자 × 8 종성) |
-| `DDU_V1`     | 8       | 3    | 구버전 호환 (뜌땨이우야!?.)          |
-| `ONECHARSET` | 64      | 6    | 영문 + 숫자 + 특수문자               |
+## Presets
 
 ```typescript
 import { Ddu64, DduSetSymbol } from "@ddunigma/node";
 
-const encoder = new Ddu64(undefined, undefined, {
+new Ddu64(undefined, undefined, {
+  dduSetSymbol: DduSetSymbol.DDU,
+});
+
+new Ddu64(undefined, undefined, {
+  dduSetSymbol: DduSetSymbol.DDU_V1,
+});
+
+new Ddu64(undefined, undefined, {
   dduSetSymbol: DduSetSymbol.ONECHARSET,
 });
 ```
 
----
+| Symbol | 문자 수 | 설명 |
+| --- | ---: | --- |
+| `DDU` | 64 | 한글 기본 문자 8개와 종성 8개를 조합 |
+| `DDU_V1` | 8 | 기존 8문자 방식 |
+| `ONECHARSET` | 64 | 영문, 숫자, 일부 URL 친화 문자 |
 
-## 고급 기능
-
-### 압축
-
-deflate(기본) 또는 brotli 압축을 지원합니다. 디코딩 시 자동으로 압축 여부를 감지합니다.
+## Custom Charset
 
 ```typescript
-const encoder = new Ddu64();
+const base64Like = new Ddu64(
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+  "=",
+);
 
-// 호출 시 옵션으로 지정
-const encoded = encoder.encode(longText, { compress: true });
-const decoded = encoder.decode(encoded);
-
-// 생성자에서 기본 활성화
-const compressEncoder = new Ddu64(undefined, undefined, {
-  compress: true,
-  compressionAlgorithm: "brotli",
-  compressionLevel: 6,
+const hangulCoda = new Ddu64(["가", "나", "다", "라"], "뭐", {
+  codaChar: ["", "ㄱ", "ㄲ", "ㄷ"],
 });
 ```
 
-### 암호화
-
-AES-256-GCM 암호화를 내장합니다. 동일한 키로 생성된 인코더만 복호화할 수 있습니다.
+## CharsetBuilder
 
 ```typescript
-const encoder = new Ddu64(undefined, undefined, {
+import { CharsetBuilder, Ddu64 } from "@ddunigma/node";
+
+const { charset, padding } = CharsetBuilder.base64()
+  .excludeConfusing()
+  .limitToPowerOfTwo()
+  .buildWithPadding();
+
+const ddu = new Ddu64(charset, padding);
+```
+
+```typescript
+const chars = CharsetBuilder.fromUnicodeRange(0x4e00, 0x4e7f)
+  .shuffle(12345)
+  .limitToPowerOfTwo()
+  .build();
+```
+
+## Compression
+
+```typescript
+const ddu = new Ddu64(undefined, undefined, {
+  compress: true,
+  compressionAlgorithm: "deflate",
+  compressionLevel: 6,
+});
+
+const encoded = ddu.encode("A".repeat(1000));
+const decoded = ddu.decode(encoded);
+```
+
+```typescript
+const brotli = new Ddu64(undefined, undefined, {
+  compress: true,
+  compressionAlgorithm: "brotli",
+  compressionLevel: 8,
+});
+```
+
+압축은 암호화 전에 적용됩니다. 그래서 `compress: true`와 `encryptionKey`를 함께 사용해도 반복 데이터의 압축 이득을 유지합니다.
+
+## Encryption
+
+```typescript
+const ddu = new Ddu64(undefined, undefined, {
   encryptionKey: "my-secret-key",
 });
 
-const encoded = encoder.encode("비밀 메시지");
-const decoded = encoder.decode(encoded);
+const encoded = ddu.encode("secret message");
+const decoded = ddu.decode(encoded);
 ```
 
-### 체크섬
-
-CRC32 체크섬으로 데이터 무결성을 검증합니다.
+PBKDF2를 사용하려면 `keyDerivation`을 지정합니다.
 
 ```typescript
-const encoder = new Ddu64();
-
-const encoded = encoder.encode(data, { checksum: true });
-const decoded = encoder.decode(encoded, { checksum: true });
-// 데이터 변조 시 에러 발생
-```
-
-### URL-Safe
-
-`+`, `/`, `=` 를 URL 안전 문자(`-`, `_`, `.`)로 변환합니다.
-
-```typescript
-const encoder = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
-  urlSafe: true,
-});
-```
-
-> charset/padding에 `-`, `_`, `.` 가 포함되면 urlSafe를 활성화할 수 없습니다.
-
-### 청크 분할
-
-```typescript
-const encoder = new Ddu64();
-
-const encoded = encoder.encode(data, {
-  chunkSize: 76,
-  chunkSeparator: "\n",
-});
-// 디코딩 시 구분자 자동 제거
-```
-
-### 비동기 처리
-
-대용량 데이터에서 이벤트 루프 블로킹을 방지합니다.
-
-```typescript
-const encoded = await encoder.encodeAsync(largeBuffer);
-const decoded = await encoder.decodeAsync(encoded);
-const buffer = await encoder.decodeToBufferAsync(encoded);
-```
-
-### 진행률 콜백
-
-```typescript
-encoder.encode(data, {
-  onProgress: ({ percent, stage }) => {
-    console.log(`${percent}% (${stage})`);
+const ddu = new Ddu64(undefined, undefined, {
+  encryptionKey: "user password",
+  keyDerivation: {
+    algorithm: "pbkdf2",
+    salt: "app-or-user-specific-salt",
+    iterations: 210_000,
+    hash: "SHA-256",
   },
 });
 ```
 
-### 통계
+동일한 데이터 복호화를 다른 인스턴스에서 수행하려면 같은 `encryptionKey`와 같은 `keyDerivation` 옵션을 사용해야 합니다.
+
+## Checksum
 
 ```typescript
-const stats = encoder.getStats(data, { compress: true });
-// { originalSize, encodedSize, compressedSize, compressionRatio, expansionRatio, charsetSize, bitLength }
+const ddu = new Ddu64(undefined, undefined, {
+  checksum: true,
+});
+
+const encoded = ddu.encode("checksum data");
+const decoded = ddu.decode(encoded);
 ```
 
-### Zip Bomb 방어
+체크섬은 복원된 원본 데이터 기준으로 검증됩니다.
+
+## URL-Safe
 
 ```typescript
-const encoder = new Ddu64(undefined, undefined, {
-  maxDecodedBytes: 10 * 1024 * 1024, // 10MB
-  maxDecompressedBytes: 50 * 1024 * 1024, // 50MB
+const ddu = new Ddu64(
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+  "=",
+  { urlSafe: true },
+);
+
+const encoded = ddu.encode("URL safe text");
+```
+
+`urlSafe`는 `+`, `/`, `=`를 각각 `-`, `_`, `.`로 변환합니다. charset 또는 padding에 `-`, `_`, `.`가 포함되어 있으면 활성화되지 않습니다.
+
+## Chunking
+
+```typescript
+const ddu = new Ddu64(undefined, undefined, {
+  chunkSize: 76,
+  chunkSeparator: "\n",
+});
+
+const encoded = ddu.encode("long data ".repeat(100));
+const decoded = ddu.decode(encoded);
+```
+
+## Async
+
+```typescript
+const ddu = new Ddu64(undefined, undefined, {
+  compress: true,
+  encryptionKey: "async-key",
+});
+
+const encoded = await ddu.encodeAsync("large async data");
+const decoded = await ddu.decodeAsync(encoded);
+const bytes = await ddu.decodeToUint8ArrayAsync(encoded);
+```
+
+## Progress
+
+```typescript
+const ddu = new Ddu64(undefined, undefined, { compress: true });
+
+ddu.encode("progress data", {
+  onProgress: ({ percent, stage }) => {
+    console.log(percent, stage);
+  },
 });
 ```
 
----
+`stage` 값은 `start`, `compress`, `encrypt`, `encode`, `decode`, `decrypt`, `decompress`, `checksum`, `done` 중 하나입니다.
 
-## CharsetBuilder
-
-커스텀 charset을 빌더 패턴으로 생성합니다.
+## Limits
 
 ```typescript
-import { CharsetBuilder } from "@ddunigma/node";
-
-// 유니코드 범위
-CharsetBuilder.fromUnicodeRange(0x4e00, 0x4e3f).build();
-
-// Base64에서 혼동 문자 제외
-CharsetBuilder.base64().excludeConfusing().build();
-
-// 2의 제곱수로 제한 + 시드 셔플
-CharsetBuilder.fromString("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-  .limitToPowerOfTwo()
-  .shuffle(12345)
-  .build();
-
-// 패딩 문자 자동 선택
-const { charset, padding } = CharsetBuilder.base64().buildWithPadding();
+const ddu = new Ddu64(undefined, undefined, {
+  maxDecodedBytes: 10 * 1024 * 1024,
+  maxDecompressedBytes: 50 * 1024 * 1024,
+});
 ```
 
----
-
-## DduPipeline
-
-압축 → 암호화 → 인코딩을 체이닝하고, `reverse()`로 역순 복원합니다.
+## Web Streams
 
 ```typescript
-import { DduPipeline, Ddu64 } from "@ddunigma/node";
+import {
+  Ddu64,
+  createReadableEncodeStream,
+  createReadableDecodeStream,
+} from "@ddunigma/node";
 
-const pipeline = new DduPipeline().compress(6, "brotli").encrypt("secret-key").encode(new Ddu64());
-
-const encoded = pipeline.processToString("Hello");
-const decoded = pipeline.reverse().processToString(encoded);
-```
-
----
-
-## 스트림
-
-대용량 파일을 메모리 효율적으로 처리합니다. 스트림 헤더로 압축/암호화를 자동 감지합니다.
-
-```typescript
-import { Ddu64, createEncodeStream, createDecodeStream } from "@ddunigma/node";
-import fs from "fs";
-
-const encoder = new Ddu64(undefined, undefined, {
+const ddu = new Ddu64(undefined, undefined, {
   compress: true,
   encryptionKey: "stream-key",
 });
 
-fs.createReadStream("input.bin")
-  .pipe(createEncodeStream(encoder))
-  .pipe(fs.createWriteStream("output.ddu"));
+const encodedStream = readableByteStream.pipeThrough(
+  createReadableEncodeStream(ddu, { compress: true }),
+);
 
-fs.createReadStream("output.ddu")
-  .pipe(createDecodeStream(encoder))
-  .pipe(fs.createWriteStream("restored.bin"));
+const decodedStream = encodedStream.pipeThrough(createReadableDecodeStream(ddu));
 ```
 
----
+`createReadableEncodeStream`은 `TransformStream<Uint8Array, string>`을 반환하고, `createReadableDecodeStream`은 `TransformStream<string, Uint8Array>`을 반환합니다.
 
-## API Reference
+## WASM
 
-### `new Ddu64(dduChar?, paddingChar?, options?)`
+```typescript
+import { Ddu64, preloadWasm } from "@ddunigma/node";
 
-| Parameter     | Type                    | Description              |
-| ------------- | ----------------------- | ------------------------ |
-| `dduChar`     | `string \| string[]`    | charset 문자열 또는 배열 |
-| `paddingChar` | `string`                | 패딩 문자                |
-| `options`     | `DduConstructorOptions` | 옵션 객체                |
+await preloadWasm();
 
-**생성자 옵션:**
+const ddu = new Ddu64(undefined, undefined, {
+  wasmThreshold: 4096,
+});
 
-| Option                 | Type                    | Default     | Description                   |
-| ---------------------- | ----------------------- | ----------- | ----------------------------- |
-| `dduSetSymbol`         | `DduSetSymbol`          | `DDU`       | 프리셋 심볼                   |
-| `codaChar`             | `string[]`              | —           | 종성 배열 (동적 charset 생성) |
-| `encoding`             | `BufferEncoding`        | `'utf-8'`   | 문자열 인코딩                 |
-| `compress`             | `boolean`               | `false`     | 기본 압축 활성화              |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | `'deflate'` | 압축 알고리즘                 |
-| `compressionLevel`     | `number`                | `6`         | 압축 레벨                     |
-| `urlSafe`              | `boolean`               | `false`     | URL-Safe 모드                 |
-| `encryptionKey`        | `string`                | —           | AES-256-GCM 암호화 키         |
-| `checksum`             | `boolean`               | `false`     | CRC32 체크섬                  |
-| `chunkSize`            | `number`                | —           | 청크 분할 크기                |
-| `chunkSeparator`       | `string`                | `'\n'`      | 청크 구분자                   |
-| `maxDecodedBytes`      | `number`                | `67108864`  | 최대 디코딩 바이트 (64MB)     |
-| `maxDecompressedBytes` | `number`                | `67108864`  | 최대 압축해제 바이트 (64MB)   |
-| `throwOnError`         | `boolean`               | `false`     | 초기화 오류 시 throw          |
-| `useRepeatPadding`     | `boolean`               | `false`     | 패딩 문자 반복 방식           |
-| `usePowerOfTwo`        | `boolean`               | `true`      | 2의 제곱수 charset 강제       |
-
-**메서드:**
-
-| Method                                   | Return            | Description          |
-| ---------------------------------------- | ----------------- | -------------------- |
-| `encode(data, options?)`                 | `string`          | 인코딩               |
-| `decode(encoded, options?)`              | `string`          | 디코딩               |
-| `decodeToBuffer(encoded, options?)`      | `Buffer`          | Buffer로 디코딩      |
-| `encodeAsync(data, options?)`            | `Promise<string>` | 비동기 인코딩        |
-| `decodeAsync(encoded, options?)`         | `Promise<string>` | 비동기 디코딩        |
-| `decodeToBufferAsync(encoded, options?)` | `Promise<Buffer>` | 비동기 Buffer 디코딩 |
-| `getStats(data, options?)`               | `DduEncodeStats`  | 인코딩 통계          |
-| `getCharSetInfo()`                       | `CharSetInfo`     | charset 정보         |
-
-**encode/decode 옵션 (DduOptions):**
-
-| Option                 | Type                    | Description          |
-| ---------------------- | ----------------------- | -------------------- |
-| `compress`             | `boolean`               | 압축 사용            |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | 압축 알고리즘        |
-| `compressionLevel`     | `number`                | 압축 레벨            |
-| `checksum`             | `boolean`               | 체크섬 추가/검증     |
-| `chunkSize`            | `number`                | 청크 분할 크기       |
-| `chunkSeparator`       | `string`                | 청크 구분자          |
-| `maxDecodedBytes`      | `number`                | 최대 디코딩 바이트   |
-| `maxDecompressedBytes` | `number`                | 최대 압축해제 바이트 |
-| `onProgress`           | `function`              | 진행률 콜백          |
-
----
-
-## Testing
-
-```bash
-pnpm test            # 전체 테스트
-pnpm test:watch      # 워치 모드
-pnpm test:coverage   # 커버리지
+const encoded = ddu.encode(new Uint8Array(1024 * 1024));
 ```
 
-## Build & Verify
+WASM을 사용할 수 없으면 JavaScript 구현으로 자동 폴백됩니다.
+
+## Stats
+
+```typescript
+const ddu = new Ddu64(undefined, undefined, {
+  compress: true,
+});
+
+const stats = ddu.getStats("A".repeat(1000));
+```
+
+```typescript
+type DduEncodeStats = {
+  originalSize: number;
+  encodedSize: number;
+  compressedSize?: number;
+  compressionRatio?: number;
+  expansionRatio: number;
+  charsetSize: number;
+  bitLength: number;
+};
+```
+
+## Options
+
+### Constructor
+
+```typescript
+new Ddu64(dduChar?, paddingChar?, options?);
+```
+
+| Option | Type | Default |
+| --- | --- | --- |
+| `dduSetSymbol` | `DduSetSymbol` | `DduSetSymbol.DDU` |
+| `dduChar` | `string \| string[]` | preset charset |
+| `paddingChar` | `string` | preset padding |
+| `codaChar` | `string[]` | `undefined` |
+| `requiredLength` | `number` | charset length |
+| `usePowerOfTwo` | `boolean` | `true` |
+| `throwOnError` | `boolean` | `false` |
+| `compress` | `boolean` | `false` |
+| `compressionAlgorithm` | `"deflate" \| "brotli"` | `"deflate"` |
+| `compressionLevel` | `number` | `6` |
+| `encryptionKey` | `string` | `undefined` |
+| `keyDerivation` | `KeyDerivationOptions` | `{ algorithm: "sha256" }` |
+| `checksum` | `boolean` | `false` |
+| `urlSafe` | `boolean` | `false` |
+| `chunkSize` | `number` | `undefined` |
+| `chunkSeparator` | `string` | `"\n"` |
+| `maxDecodedBytes` | `number` | `67108864` |
+| `maxDecompressedBytes` | `number` | `67108864` |
+| `obfuscate` | `boolean` | `false` |
+| `wasmThreshold` | `number` | `4096` |
+| `adapter` | `PlatformAdapter` | auto |
+
+### Per Call
+
+`encode`, `decode`, `decodeToUint8Array`, `encodeAsync`, `decodeAsync`, `decodeToUint8ArrayAsync`, `getStats`에서 사용할 수 있습니다.
+
+| Option | Type |
+| --- | --- |
+| `compress` | `boolean` |
+| `compressionAlgorithm` | `"deflate" \| "brotli"` |
+| `compressionLevel` | `number` |
+| `encrypt` | `boolean` |
+| `checksum` | `boolean` |
+| `chunkSize` | `number` |
+| `chunkSeparator` | `string` |
+| `maxDecodedBytes` | `number` |
+| `maxDecompressedBytes` | `number` |
+| `obfuscate` | `boolean` |
+| `onProgress` | `(info: DduProgressInfo) => void` |
+
+### Key Derivation
+
+```typescript
+type KeyDerivationOptions = {
+  algorithm?: "sha256" | "pbkdf2";
+  salt?: string | Uint8Array;
+  iterations?: number;
+  hash?: "SHA-256" | "SHA-384" | "SHA-512";
+};
+```
+
+## API
+
+```typescript
+class Ddu64 {
+  encode(data: string | Uint8Array, options?: DduOptions): string;
+  decode(encoded: string, options?: DduOptions): string;
+  decodeToUint8Array(encoded: string, options?: DduOptions): Uint8Array;
+  decodeToBuffer(encoded: string, options?: DduOptions): Buffer;
+  encodeAsync(data: string | Uint8Array, options?: DduOptions): Promise<string>;
+  decodeAsync(encoded: string, options?: DduOptions): Promise<string>;
+  decodeToUint8ArrayAsync(encoded: string, options?: DduOptions): Promise<Uint8Array>;
+  decodeToBufferAsync(encoded: string, options?: DduOptions): Promise<Buffer>;
+  getStats(data: string | Uint8Array, options?: DduOptions): DduEncodeStats;
+  getCharSetInfo(): CharSetInfo;
+}
+```
+
+## Build And Test
 
 ```bash
+pnpm test
 pnpm build
 pnpm lint
 pnpm bench
 pnpm pack:check
 ```
-
----
-
-## Credits
-
-- Original: [@i3ls](https://github.com/i3l3), [@gunu3371](https://github.com/gunu3371)
-- Repository: [ddunigma](https://github.com/i3l3/ddunigma)
 
 ## License
 

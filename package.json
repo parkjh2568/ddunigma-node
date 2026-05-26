@@ -31,6 +31,26 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./browser": {
+      "import": {
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
+      },
+      "require": {
+        "types": "./dist/browser.d.cts",
+        "default": "./dist/browser.cjs"
+      }
+    },
+    "./core": {
+      "import": {
+        "types": "./dist/core.d.ts",
+        "default": "./dist/core.js"
+      },
+      "require": {
+        "types": "./dist/core.d.cts",
+        "default": "./dist/core.cjs"
+      }
     }
   },
   "files": [
@@ -44,14 +64,15 @@
   "publishConfig": {
     "access": "public"
   },
-  "author": "",
+  "author": "parkjh2568",
   "license": "BSD-2-Clause",
-  "description": "",
+  "description": "ddunigma",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.13.0",
     "@vitest/coverage-v8": "^4.1.2",
     "eslint": "^10.2.0",
+    "fast-check": "^4.8.0",
     "globals": "^17.4.0",
     "prettier": "^3.8.1",
     "tsup": "^8.5.1",

@@ -1,0 +1,263 @@
+/**
+ * 구버전 호환성 테스트.
+ *
+ * 이전 버전에서 생성된 인코딩 결과가 현재 버전에서도
+ * 동일하게 인코딩/디코딩되는지 검증합니다.
+ */
+
+import { describe, it, expect } from "vitest";
+import { Ddu64Node } from "../Ddu64Node.js";
+import { DduSetSymbol } from "../core/types.js";
+
+describe("구버전 호환성 테스트", () => {
+  // ─── 기본 테스트 ───────────────────────────────────────────────────────────
+
+  describe("기본 인코딩/디코딩", () => {
+    it("기본 DDU 프리셋 - 안녕하세요12 (커스텀 charset)", () => {
+      // 구버전: 한글 종성 결합으로 생성된 큰 charset
+      // 이 테스트는 디코딩 호환성만 검증 (charset이 동적 생성이므로)
+      const koreanChars =
+        "뜌,뜍,뜎,뜏,뜐,뜑,뜒,뜓,뜔,뜕,뜖,뜗,뜘,뜙,뜚,뜛,뜜,뜝,뜞,뜟,뜠,뜡,뜢,뜣,뜤,뜥,뜦,뜧,뜨,뜩,뜪,뜫,뜬,뜭,뜮,뜯,뜰,뜱,뜲,뜳,뜴,뜵,뜶,뜷,뜸,뜹,뜺,뜻,뜼,뜽,뜾,뜿,땨,땩,땪,땫,땬,땭,땮,땯,땰,땱,땲,땳,땴,땵,땶,땷,땸,땹,땺,땻,땼,땽,땾,땿,떀,떁,떂,떃,떄,떅,떆,떇,떈,떉,떊,떋,떌,떍,떎,떏,떐,떑,떒,떓,떔,떕,떖,떗,떘,떙,떚,떛,우,욱,욲,욳,운,울,욶,욷,움,웁,웂,웃,웄,웅,웆,웇,워,웍,웎,웏,원,월,웒,웓,월,웕,웖,웗,웘,웙,웚,웛,위,윅,윆,윇,윈,윉,윊,윋,윌,윍,윎,윏,윐,윑,윒,윓,윔,윕,윖,따,딱,딲,딳,딴,딵,딶,딷,딸,딹,딺,딻,딼,딽,딾,딿,땀,땁,땂,땃,땄,땅,땆,땇,땈,땉,땊,땋,때,땍,땎,땏,때,땑,땒,땓,땔,땕,땖,땗,땘,땙,땚,땛,땜,땝,땞,땟,땠,땡,땢,야,약,얂,얃,얄,얅,얆,얇,얈,얉,얊,얋,얌,얍,얎,얏,양,양,얒,얓,얔,얕,얖,얗,얘,얙,얚,얛,얜,얝,얞,얟,얠,얡,얢,얣,얤,얥,얦,얧,얨,얩,얪,얫,얬,얭,얮,얯,얰,얱".split(
+          ",",
+        );
+      const encoder = new Ddu64Node(koreanChars, "뭐");
+
+      const encoded = encoder.encode("안녕하세요12");
+      const decoded = encoder.decode(encoded);
+      expect(decoded).toBe("안녕하세요12");
+
+      // 구버전 인코딩 결과로 디코딩 가능한지 확인
+      const legacyEncoded = "뜌얡뜌윒뜌윅뜌얠뜌웚뜌윒뜌얢뜌윒뜌윕뜌얡뜌웙뜌땎뜌얡뜌따뜌윑뜌뜽뜌뜾";
+      const legacyDecoded = encoder.decode(legacyEncoded);
+      expect(legacyDecoded).toBe("안녕하세요12");
+    });
+
+    it("4문자 charset (우따야야) - usePowerOfTwo", () => {
+      const encoder = new Ddu64Node("우따야야", "뭐", { usePowerOfTwo: true });
+
+      const input = "안녕하세요";
+      const encoded = encoder.encode(input);
+      const decoded = encoder.decode(encoded);
+      expect(decoded).toBe(input);
+
+      // 구버전 인코딩 결과 디코딩
+      const legacyEncoded =
+        "따우우야따우우우우야우따우따우따우야우우우야우우따우우야우야따우우야우우우따우따우야우따우따우따따우우야따우우따우야우따우따우따우야우따우야우우따우우야따우우우우야우우우따우우우야따우우야우우따우우야따우우우우야우따우야우야우야우따우따우우";
+      const legacyDecoded = encoder.decode(legacyEncoded);
+      expect(legacyDecoded).toBe(input);
+    });
+
+    it("4문자 charset (우따야야) - compress 라운드트립", () => {
+      const encoder = new Ddu64Node("우따야야", "뭐", { usePowerOfTwo: true });
+
+      const input = "안녕하세요".repeat(14);
+      // 압축 인코딩 → 디코딩 라운드트립 검증
+      // 참고: 압축 결과는 zlib 버전에 따라 달라질 수 있으므로
+      // 구버전 바이너리 호환 대신 라운드트립만 검증
+      const encoded = encoder.encode(input, { compress: true });
+      expect(encoded).toContain("ELYSIA");
+
+      const decoded = encoder.decode(encoded);
+      expect(decoded).toBe(input);
+    });
+  });
+
+  // ─── 프리셋 테스트 ─────────────────────────────────────────────────────────
+
+  describe("프리셋 호환성", () => {
+    it("DDU_V1 프리셋 - 안녕하세요", () => {
+      const encoder = new Ddu64Node(undefined, undefined, {
+        dduSetSymbol: DduSetSymbol.DDU_V1,
+      });
+
+      const legacyEncoded = ".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야";
+      const decoded = encoder.decode(legacyEncoded);
+      expect(decoded).toBe("안녕하세요");
+
+      // 현재 버전도 동일하게 인코딩하는지
+      const currentEncoded = encoder.encode("안녕하세요");
+      expect(currentEncoded).toBe(legacyEncoded);
+    });
+
+    it("ONECHARSET 프리셋 - Hello World!", () => {
+      const encoder = new Ddu64Node(undefined, undefined, {
+        dduSetSymbol: DduSetSymbol.ONECHARSET,
+      });
+
+      const legacyEncoded = "R3Wga37LWn8ma3QH";
+      const decoded = encoder.decode(legacyEncoded);
+      expect(decoded).toBe("Hello World!");
+
+      const currentEncoded = encoder.encode("Hello World!");
+      expect(currentEncoded).toBe(legacyEncoded);
+    });
+
+    it("기본 DDU 프리셋 - 안녕하세요 (useRepeatPadding)", () => {
+      const encoder = new Ddu64Node();
+
+      const legacyEncoded = "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊";
+      const decoded = encoder.decode(legacyEncoded);
+      expect(decoded).toBe("안녕하세요");
+
+      const currentEncoded = encoder.encode("안녕하세요");
+      expect(currentEncoded).toBe(legacyEncoded);
+    });
+
+    it("기본 DDU 프리셋 - 반복 문자열 (압축 없음)", () => {
+      const encoder = new Ddu64Node();
+      const input = "안녕하세요".repeat(14);
+
+      // 구버전 인코딩 결과의 시작 부분 확인
+      const legacyStart = "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊";
+      const currentEncoded = encoder.encode(input);
+
+      // 반복 패턴이므로 시작 부분이 동일해야 함
+      expect(currentEncoded.startsWith(legacyStart)).toBe(true);
+
+      // 라운드트립
+      const decoded = encoder.decode(currentEncoded);
+      expect(decoded).toBe(input);
+    });
+  });
+
+  // ─── 고급 기능 호환성 ──────────────────────────────────────────────────────
+
+  describe("고급 기능 호환성", () => {
+    it("체크섬 - 디코딩 호환", () => {
+      const encoder = new Ddu64Node();
+
+      const legacyEncoded =
+        "뎪뎨댯댜뎯땩댯댲뎯우읶댜땨땻듓듖듕땻듂댞듖땻댞뜢듖읶뜓듕약우댣듖앾듂읻듕앾듇야뭐CHKe603e028";
+      const decoded = encoder.decode(legacyEncoded, { checksum: true });
+      expect(decoded).toBe("데이터 무결성 테스트");
+    });
+
+    it("체크섬 - 인코딩 동일성", () => {
+      const encoder = new Ddu64Node();
+
+      const currentEncoded = encoder.encode("데이터 무결성 테스트", { checksum: true });
+      expect(currentEncoded).toContain("CHK");
+      expect(currentEncoded).toContain("e603e028");
+
+      const decoded = encoder.decode(currentEncoded, { checksum: true });
+      expect(decoded).toBe("데이터 무결성 테스트");
+    });
+
+    it("청크 분할 - 디코딩 호환", () => {
+      const encoder = new Ddu64Node();
+
+      const input = "청크 분할 테스트 문자열입니다. 긴 문자열을 나눠서 인코딩합니다.";
+      const encoded = encoder.encode(input, { chunkSize: 20, chunkSeparator: "\n" });
+      expect(encoded).toContain("\n");
+
+      const decoded = encoder.decode(encoded, { chunkSeparator: "\n" });
+      expect(decoded).toBe(input);
+    });
+
+    it("압축 (deflate) - 디코딩 호환", () => {
+      const encoder = new Ddu64Node();
+
+      const input = "안녕하세요".repeat(20);
+      const encoded = encoder.encode(input, { compress: true, compressionAlgorithm: "deflate" });
+
+      // ELYSIA 마커가 있어야 함
+      expect(encoded).toContain("ELYSIA");
+
+      const decoded = encoder.decode(encoded);
+      expect(decoded).toBe(input);
+    });
+
+    it("압축 (brotli) - 디코딩 호환", () => {
+      const encoder = new Ddu64Node();
+
+      const input = "안녕하세요".repeat(20);
+      const encoded = encoder.encode(input, { compress: true, compressionAlgorithm: "brotli" });
+
+      // GRISEO 마커가 있어야 함
+      expect(encoded).toContain("GRISEO");
+
+      const decoded = encoder.decode(encoded);
+      expect(decoded).toBe(input);
+    });
+
+    it("암호화 - 라운드트립", () => {
+      const encoder = new Ddu64Node(undefined, undefined, {
+        encryptionKey: "my-secret-key-123",
+      });
+
+      const input = "비밀 메시지입니다";
+      const encoded = encoder.encode(input);
+
+      // ENC 마커가 있어야 함
+      expect(encoded).toContain("ENC");
+
+      const decoded = encoder.decode(encoded);
+      expect(decoded).toBe(input);
+    });
+
+    it("URL-Safe - 인코딩/디코딩 호환", () => {
+      const encoder = new Ddu64Node(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        "=",
+        { urlSafe: true },
+      );
+
+      const input = "URL 안전 인코딩 테스트";
+      const legacyEncoded = "VVJMIOyViOyghCDsnbjsvZTrlKkg7YWM7Iqk7Yq4";
+      const decoded = encoder.decode(legacyEncoded);
+      expect(decoded).toBe(input);
+
+      const currentEncoded = encoder.encode(input);
+      expect(currentEncoded).toBe(legacyEncoded);
+    });
+
+    it("커스텀 종성결합 charset - 인코딩/디코딩 호환", () => {
+      const encoder = new Ddu64Node(["가", "나", "다", "라", "마", "바", "사", "아"], "뭐", {
+        codaChar: ["", "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄹ", "ㅁ", "ㅂ"],
+      });
+
+      const input = "종성 결합 테스트";
+      const legacyEncoded = "안낚낚갈안나닦삭나남밖삮받남삼달밖닦간발막라산받맊밖단발맊반마뭐";
+      const decoded = encoder.decode(legacyEncoded);
+      expect(decoded).toBe(input);
+
+      const currentEncoded = encoder.encode(input);
+      expect(currentEncoded).toBe(legacyEncoded);
+    });
+  });
+
+  // ─── 이모지/혼합 문자 호환성 ───────────────────────────────────────────────
+
+  describe("이모지/혼합 문자 호환성", () => {
+    it("영문+숫자+특수문자+한글+이모지 혼합", () => {
+      const encoder = new Ddu64Node();
+
+      const input = "Hello 123 !@# 안녕 🎉";
+      const legacyEncoded =
+        "읶뜟잉듖욷뜟뎾야땾읻땨댣땨뜎뜡뜌땨댞뜓듖양우얃듇약욱잊야뎾땩뎻땻앾이뭐뭐";
+      const decoded = encoder.decode(legacyEncoded);
+      expect(decoded).toBe(input);
+
+      const currentEncoded = encoder.encode(input);
+      expect(currentEncoded).toBe(legacyEncoded);
+    });
+  });
+
+  // ─── 통계 호환성 ───────────────────────────────────────────────────────────
+
+  describe("통계 호환성", () => {
+    it("getStats 결과가 구버전과 동일한 구조", () => {
+      const encoder = new Ddu64Node();
+      const input = "안녕하세요".repeat(10);
+
+      const stats = encoder.getStats(input, { compress: true });
+
+      expect(stats.originalSize).toBe(150);
+      expect(stats.charsetSize).toBe(64);
+      expect(stats.bitLength).toBe(6);
+      expect(stats.compressionRatio).toBeDefined();
+      expect(stats.compressionRatio!).toBeLessThan(1);
+      expect(stats.expansionRatio).toBeDefined();
+    });
+  });
+});

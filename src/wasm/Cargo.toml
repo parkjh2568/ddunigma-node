@@ -1,0 +1,31 @@
+[package]
+name = "ddunigma-wasm-codec"
+version = "0.1.0"
+edition = "2021"
+authors = ["ddunigma contributors"]
+description = "WASM bit-packing codec for ddunigma - accelerates encode/decode hot paths"
+license = "BSD-2-Clause"
+publish = false
+
+[lib]
+# cdylib produces a .wasm file suitable for loading via WebAssembly.instantiate()
+crate-type = ["cdylib"]
+path = "codec.rs"
+
+[profile.release]
+# Maximum optimization for smallest and fastest WASM binary
+opt-level = 3
+# Link-time optimization for cross-crate inlining
+lto = true
+# Single codegen unit for maximum optimization opportunities
+codegen-units = 1
+# Strip debug info to reduce binary size
+strip = true
+# Abort on panic (smaller binary, no unwinding overhead)
+panic = "abort"
+
+[profile.release.package."*"]
+opt-level = 3
+
+[features]
+default = []
