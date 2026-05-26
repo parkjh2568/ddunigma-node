@@ -151,10 +151,22 @@ export class Ddu64Core {
   // ─── 생성자 ─────────────────────────────────────────────────────────────────
 
   constructor(
-    dduChar?: string[] | string,
+    dduChar?: string[] | string | DduConstructorOptions,
     paddingChar?: string,
     dduOptions?: DduConstructorOptions,
   ) {
+    // 오버로드: new Ddu64({ ...options }) 형태 지원
+    if (
+      dduChar !== null &&
+      dduChar !== undefined &&
+      typeof dduChar === "object" &&
+      !Array.isArray(dduChar)
+    ) {
+      dduOptions = dduChar as DduConstructorOptions;
+      dduChar = undefined;
+      paddingChar = undefined;
+    }
+
     const shouldThrow = dduOptions?.throwOnError ?? dduOptions?.useBuildErrorReturn ?? false;
 
     // 어댑터 해석

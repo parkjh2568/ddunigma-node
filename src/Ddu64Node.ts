@@ -30,10 +30,22 @@ import type { DduConstructorOptions, DduOptions } from "./core/types.js";
  */
 export class Ddu64Node extends Ddu64Core {
   constructor(
-    dduChar?: string[] | string,
+    dduChar?: string[] | string | DduConstructorOptions,
     paddingChar?: string,
     dduOptions?: DduConstructorOptions,
   ) {
+    // 오버로드: new Ddu64({ ...options }) 형태 지원
+    if (
+      dduChar !== null &&
+      dduChar !== undefined &&
+      typeof dduChar === "object" &&
+      !Array.isArray(dduChar)
+    ) {
+      dduOptions = dduChar as DduConstructorOptions;
+      dduChar = undefined;
+      paddingChar = undefined;
+    }
+
     // 명시적으로 제공된 어댑터가 없으면 NodeAdapter를 자동 주입
     const options: DduConstructorOptions = {
       ...dduOptions,

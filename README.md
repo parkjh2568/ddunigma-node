@@ -36,7 +36,7 @@ ddu.encode("안녕하세요"); // "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶
 ddu.decode("뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊"); // "안녕하세요"
 
 // V1 (구버전 호환, 8개 문자 쌍 방식)
-const dduV1 = new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU_V1 });
+const dduV1 = new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
 dduV1.encode("안녕하세요"); // ".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야"
 dduV1.decode(".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야"); // "안녕하세요"
 ```
@@ -62,10 +62,12 @@ import { Ddu64, DduSetSymbol } from "@ddunigma/node";
 // 기본값 - 한글 종성 결합 64문자
 new Ddu64();
 
-// 구버전 호환 8문자
+// 구버전 호환 8문자 (아래 두 방법 모두 사용가능)
+new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
 new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU_V1 });
 
-// 영문+숫자 64문자
+// 영문+숫자 64문자 (아래 두 방법 모두 사용가능)
+new Ddu64({ dduSetSymbol: DduSetSymbol.ONECHARSET });
 new Ddu64(undefined, undefined, { dduSetSymbol: DduSetSymbol.ONECHARSET });
 ```
 
@@ -114,7 +116,7 @@ const chars = CharsetBuilder.fromUnicodeRange(0x4e00, 0x4e3f)
 ## Compression
 
 ```typescript
-const ddu = new Ddu64(undefined, undefined, {
+const ddu = new Ddu64({
   compress: true, // 압축 활성화
   compressionAlgorithm: "deflate", // "deflate" | "brotli"
   compressionLevel: 6, // deflate: 0-9, brotli: 0-11
@@ -130,7 +132,7 @@ const decoded = ddu.decode(encoded);
 
 ```typescript
 // SHA-256 키 파생 (기본)
-const ddu = new Ddu64(undefined, undefined, {
+const ddu = new Ddu64({
   encryptionKey: "my-secret-key",
 });
 
@@ -138,7 +140,7 @@ const encoded = ddu.encode("secret message");
 const decoded = ddu.decode(encoded); // 같은 키로만 복호화 가능
 
 // PBKDF2 키 파생
-const dduPbkdf2 = new Ddu64(undefined, undefined, {
+const dduPbkdf2 = new Ddu64({
   encryptionKey: "user password",
   keyDerivation: {
     algorithm: "pbkdf2",
@@ -152,7 +154,7 @@ const dduPbkdf2 = new Ddu64(undefined, undefined, {
 ## Checksum
 
 ```typescript
-const ddu = new Ddu64(undefined, undefined, { checksum: true });
+const ddu = new Ddu64({ checksum: true });
 
 const encoded = ddu.encode("data"); // CRC32 체크섬 포함
 const decoded = ddu.decode(encoded); // 무결성 검증 후 반환
@@ -172,7 +174,7 @@ const encoded = ddu.encode("URL safe text");
 ## Chunking
 
 ```typescript
-const ddu = new Ddu64(undefined, undefined, {
+const ddu = new Ddu64({
   chunkSize: 76,
   chunkSeparator: "\n",
 });
@@ -184,7 +186,7 @@ const encoded = ddu.encode("long data ".repeat(100));
 ## Obfuscation (한글 난독화)
 
 ```typescript
-const ddu = new Ddu64(undefined, undefined, {
+const ddu = new Ddu64({
   encryptionKey: "secret",
   obfuscate: true, // 암호화 필수
 });
@@ -211,7 +213,7 @@ Node.js에서도 async 메서드를 사용할 수 있습니다. 브라우저 진
 ```typescript
 import { Ddu64, createReadableEncodeStream, createReadableDecodeStream } from "@ddunigma/node";
 
-const ddu = new Ddu64(undefined, undefined, {
+const ddu = new Ddu64({
   compress: true,
   encryptionKey: "stream-key",
 });
@@ -230,7 +232,7 @@ import { Ddu64, preloadWasm } from "@ddunigma/node";
 
 await preloadWasm(); // 선택적 사전 로드
 
-const ddu = new Ddu64(undefined, undefined, {
+const ddu = new Ddu64({
   wasmThreshold: 4096, // 이 크기 이상일 때 WASM 사용
 });
 
@@ -242,7 +244,7 @@ WASM을 사용할 수 없으면 JavaScript로 자동 폴백됩니다.
 ## Progress Callback
 
 ```typescript
-const ddu = new Ddu64(undefined, undefined, { compress: true });
+const ddu = new Ddu64({ compress: true });
 
 ddu.encode("data", {
   onProgress: ({ percent, stage }) => {
@@ -255,7 +257,7 @@ ddu.encode("data", {
 ## Stats
 
 ```typescript
-const ddu = new Ddu64(undefined, undefined, { compress: true });
+const ddu = new Ddu64({ compress: true });
 const stats = ddu.getStats("A".repeat(1000));
 
 // { originalSize, encodedSize, compressedSize, compressionRatio, expansionRatio, charsetSize, bitLength }
@@ -264,7 +266,7 @@ const stats = ddu.getStats("A".repeat(1000));
 ## Size Limits
 
 ```typescript
-const ddu = new Ddu64(undefined, undefined, {
+const ddu = new Ddu64({
   maxDecodedBytes: 10 * 1024 * 1024, // 디코딩 최대 크기 (기본 64MB)
   maxDecompressedBytes: 50 * 1024 * 1024, // 압축해제 최대 크기 (기본 64MB)
 });
@@ -296,7 +298,11 @@ class Ddu64 {
 ## Constructor Options
 
 ```typescript
-new Ddu64(dduChar?, paddingChar?, options?);
+// 옵션만 전달 (권장)
+new Ddu64(options?);
+
+// charset 직접 지정
+new Ddu64(dduChar, paddingChar, options?);
 ```
 
 | Option                 | Type                    | Default     | 설명                  |

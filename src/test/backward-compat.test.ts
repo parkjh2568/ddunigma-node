@@ -243,6 +243,71 @@ describe("구버전 호환성 테스트", () => {
     });
   });
 
+  // ─── 생성자 오버로드 호환성 ─────────────────────────────────────────────────
+
+  describe("생성자 오버로드 호환성", () => {
+    it("new Ddu64({ options }) 형태가 new Ddu64(undefined, undefined, { options })와 동일", () => {
+      const oldStyle = new Ddu64Node(undefined, undefined, {
+        dduSetSymbol: DduSetSymbol.DDU_V1,
+      });
+      const newStyle = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+
+      const input = "안녕하세요";
+      expect(newStyle.encode(input)).toBe(oldStyle.encode(input));
+      expect(newStyle.decode(oldStyle.encode(input))).toBe(input);
+    });
+
+    it("new Ddu64({ options }) - DDU 기본 프리셋과 동일", () => {
+      const defaultEncoder = new Ddu64Node();
+      const optionsEncoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU });
+
+      const input = "테스트 데이터";
+      expect(optionsEncoder.encode(input)).toBe(defaultEncoder.encode(input));
+    });
+
+    it("new Ddu64({ options }) - compress 옵션", () => {
+      const encoder = new Ddu64Node({ compress: true });
+
+      const input = "A".repeat(100);
+      const encoded = encoder.encode(input);
+      expect(encoded).toContain("ELYSIA");
+      expect(encoder.decode(encoded)).toBe(input);
+    });
+
+    it("new Ddu64({ options }) - 과거 인코딩 데이터 디코딩 가능", () => {
+      const encoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+
+      const legacyEncoded = ".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야";
+      expect(encoder.decode(legacyEncoded)).toBe("안녕하세요");
+    });
+
+    it("기존 charset 직접 지정 방식은 여전히 동작", () => {
+      const encoder = new Ddu64Node(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        "=",
+      );
+
+      const input = "Hello World!";
+      const encoded = encoder.encode(input);
+      expect(encoder.decode(encoded)).toBe(input);
+    });
+
+    it("charset + options 조합도 여전히 동작", () => {
+      const encoder = new Ddu64Node(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        "=",
+        { urlSafe: true },
+      );
+
+      const input = "test";
+      const encoded = encoder.encode(input);
+      // URL-safe이므로 +/= 대신 -_. 사용
+      expect(encoded).not.toContain("+");
+      expect(encoded).not.toContain("/");
+      expect(encoder.decode(encoded)).toBe(input);
+    });
+  });
+
   // ─── 통계 호환성 ───────────────────────────────────────────────────────────
 
   describe("통계 호환성", () => {
