@@ -20,6 +20,7 @@ type BenchResult = {
 };
 
 const textEncoder = new TextEncoder();
+const BASE64_CHARS = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"];
 
 function makeText(size: number): string {
   const seed = "ddunigma benchmark 안녕하세요 0123456789 ABC xyz\n";
@@ -117,9 +118,9 @@ async function main(): Promise<void> {
 
   const cases: BenchCase[] = [
     {
-      name: "DDU text 256KB",
+      name: "Base64 text 256KB",
       mode: "native-base64",
-      encoder: new Ddu64(),
+      encoder: new Ddu64(BASE64_CHARS, "="),
       input: largeText,
       iterations: 30,
     },
@@ -141,7 +142,7 @@ async function main(): Promise<void> {
     },
     {
       name: "ONECHARSET binary 256KB",
-      mode: "native-base64",
+      mode: "wasm-bitpack",
       encoder: new Ddu64({ dduSetSymbol: DduSetSymbol.ONECHARSET }),
       input: binary,
       iterations: 30,

@@ -10,7 +10,7 @@ V2 추가사항
 
 ### Credits
 
-- Original Python Implementation by:
+- Origin implementation by:
   - [@i3ls](https://github.com/i3l3)
   - [@gunu3371](https://github.com/gunu3371)
 - Original Repository: [ddunigma](https://github.com/i3l3/ddunigma)

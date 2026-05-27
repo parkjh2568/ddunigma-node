@@ -83,14 +83,13 @@ let wasmByteLoader: WasmByteLoader = loadWasmBytesViaFetch;
  */
 class WasmCodecImpl implements WasmCodec {
   private readonly exports: WasmExports;
-  private _ready = true;
 
   constructor(exports: WasmExports) {
     this.exports = exports;
   }
 
   get ready(): boolean {
-    return this._ready;
+    return true;
   }
 
   /**

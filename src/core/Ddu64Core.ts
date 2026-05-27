@@ -14,6 +14,7 @@ import {
   parseFooter,
   buildFooter,
   extractChecksum,
+  CHECKSUM_MARKER,
   COMPRESS_MARKER,
   BROTLI_MARKER,
   ENCRYPT_MARKER,
@@ -63,9 +64,6 @@ const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 const STANDARD_BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const BASE64_PADDING = "=";
-const BASE64_INDEX_LOOKUP: Record<string, number> = Object.fromEntries(
-  [...STANDARD_BASE64_ALPHABET].map((ch, index) => [ch, index]),
-);
 
 // ─── Ddu64Core 클래스 ──────────────────────────────────────────────────────────
 
@@ -91,9 +89,6 @@ export class Ddu64Core {
 
   /** charset 크기가 2의 제곱수인지 여부 */
   protected readonly usePowerOfTwo: boolean;
-
-  /** 문자 → 인덱스 역방향 룩업 맵 */
-  protected readonly dduBinaryLookup: Map<string, number> = new Map();
 
   /** UTF-16 코드 유닛 → 인덱스 direct lookup (단일 BMP 심볼 전용) */
   private readonly dduCharCodeLookup: Int32Array;
@@ -149,11 +144,8 @@ export class Ddu64Core {
   /** WASM 사용 임계값 */
   private readonly wasmThreshold: number;
 
-  /** 네이티브 Base64 fast path 사용 여부 */
+  /** 표준 Base64 charset에서 네이티브 Base64 fast path 사용 여부 */
   private readonly canUseNativeBase64: boolean;
-
-  /** 현재 charset 문자 → 네이티브 Base64 문자 매핑 */
-  private readonly nativeDecodeMap: Map<string, string> | undefined;
 
   /** 플랫폼 어댑터 (동기용 지연 로드 또는 명시적 제공) */
   private adapter: PlatformAdapter | undefined;
@@ -227,7 +219,7 @@ export class Ddu64Core {
       initial.usePowerOfTwo ??
       (requestedPow2 !== undefined ? requestedPow2 && autoIsPow2 : autoIsPow2);
 
-    // DDU_V1은 8개 심볼로 6비트 값을 두 글자 쌍으로 표현하는 Python 호환 프로필입니다.
+    // DDU_V1은 8개 심볼로 6비트 값을 두 글자 쌍으로 표현하는 Origin 호환 프로필입니다.
     const presetBitLength =
       encodingProfile?.bitLength ??
       (initial.isPredefined && initial.usePowerOfTwo !== undefined ? initial.bitLength : undefined);
@@ -240,7 +232,6 @@ export class Ddu64Core {
     this.dduCharCodeLookup.fill(-1);
     for (let i = 0; i < dduLength; i++) {
       const char = this.dduChar[i];
-      this.dduBinaryLookup.set(char, i);
       this.dduCharCodeLookup[char.charCodeAt(0)] = i;
     }
 
@@ -293,14 +284,11 @@ export class Ddu64Core {
       charsetSize: dduLength,
     };
     this.wasmThreshold = validateWasmThreshold(dduOptions?.wasmThreshold ?? DEFAULT_WASM_THRESHOLD);
-    this.canUseNativeBase64 = this.usePowerOfTwo && this.dduChar.length === 64;
-    if (this.canUseNativeBase64) {
-      this.nativeDecodeMap = new Map();
-      for (let i = 0; i < STANDARD_BASE64_ALPHABET.length; i++) {
-        const encodedChar = this.dduChar[i];
-        this.nativeDecodeMap.set(encodedChar, STANDARD_BASE64_ALPHABET[i]);
-      }
-    }
+    this.canUseNativeBase64 =
+      this.usePowerOfTwo &&
+      this.bitLength === 6 &&
+      this.paddingChar === BASE64_PADDING &&
+      this.dduChar.join("") === STANDARD_BASE64_ALPHABET;
   }
 
   // ─── 공개 메서드 ─────────────────────────────────────────────────────────
@@ -412,11 +400,8 @@ export class Ddu64Core {
    * 비동기 인코딩 - 브라우저를 포함한 모든 런타임에서 동작합니다.
    */
   async encodeAsync(input: Uint8Array | string, options?: DduOptions): Promise<string> {
-    const shouldCompress = options?.compress ?? this.defaultCompress;
-    const shouldChecksum = options?.checksum ?? this.defaultChecksum;
-    const shouldEncrypt = (options?.encrypt ?? true) && !!this.encryptionKey;
-    const chunkSize = options?.chunkSize ?? this.defaultChunkSize;
-    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
+    const { shouldCompress, shouldChecksum, shouldEncrypt, chunkSize, chunkSeparator } =
+      this.resolveEncodeSettings(options);
 
     let workingData = typeof input === "string" ? stringToBytes(input) : input;
     this.reportProgress(options, {
@@ -646,11 +631,8 @@ export class Ddu64Core {
     input: Uint8Array | string,
     options?: DduOptions,
   ): { encoded: string; compressedSize?: number } {
-    const shouldCompress = options?.compress ?? this.defaultCompress;
-    const shouldChecksum = options?.checksum ?? this.defaultChecksum;
-    const shouldEncrypt = (options?.encrypt ?? true) && !!this.encryptionKey;
-    const chunkSize = options?.chunkSize ?? this.defaultChunkSize;
-    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
+    const { shouldCompress, shouldChecksum, shouldEncrypt, chunkSize, chunkSeparator } =
+      this.resolveEncodeSettings(options);
 
     let workingData = typeof input === "string" ? stringToBytes(input) : input;
     this.reportProgress(options, {
@@ -715,6 +697,22 @@ export class Ddu64Core {
     return { encoded, compressedSize };
   }
 
+  private resolveEncodeSettings(options?: DduOptions): {
+    shouldCompress: boolean;
+    shouldChecksum: boolean;
+    shouldEncrypt: boolean;
+    chunkSize: number | undefined;
+    chunkSeparator: string;
+  } {
+    return {
+      shouldCompress: options?.compress ?? this.defaultCompress,
+      shouldChecksum: options?.checksum ?? this.defaultChecksum,
+      shouldEncrypt: (options?.encrypt ?? true) && !!this.encryptionKey,
+      chunkSize: options?.chunkSize ?? this.defaultChunkSize,
+      chunkSeparator: options?.chunkSeparator ?? this.defaultChunkSeparator,
+    };
+  }
+
   /**
    * 인코딩 마무리: 비트팩 인코딩 + 후처리(난독화/체크섬/URL-safe/청킹).
    * 동기/비동기 인코딩에서 공유하는 순수 동기 단계입니다.
@@ -777,7 +775,7 @@ export class Ddu64Core {
 
     // 체크섬 추가
     if (shouldChecksum && checksum) {
-      result = result + "CHK" + checksum;
+      result = result + CHECKSUM_MARKER + checksum;
     }
 
     // URL-Safe 변환
@@ -806,13 +804,14 @@ export class Ddu64Core {
     if (data.length === 0) return "";
 
     const nativeEncoded = this.encodeBytesWithNativeBase64(data);
-    let indices: ArrayLike<number>;
     let paddingBits: number;
+    let payload: string;
 
     if (nativeEncoded) {
-      indices = nativeEncoded.indices;
       paddingBits = nativeEncoded.paddingBits;
+      payload = nativeEncoded.payload;
     } else {
+      let indices: ArrayLike<number>;
       const wasm = this.shouldUseWasm(data.length) ? getWasmCodecSync() : null;
       if (wasm?.ready && this.usePowerOfTwo) {
         const wasmResult = wasm.encode(data, this.bitLength);
@@ -823,41 +822,40 @@ export class Ddu64Core {
         indices = bitPackResult.indices;
         paddingBits = bitPackResult.paddingBits;
       }
-    }
 
-    // 인덱스를 문자로 매핑 (코드포인트 배열 → String.fromCharCode 배치 호출)
-    const len = indices.length;
-    let payload: string;
-    if (len <= FULL_CODE_BUFFER_THRESHOLD) {
-      const codes = new Uint16Array(len);
-      for (let i = 0; i < len; i++) {
-        codes[i] = this.dduCharCodes[indices[i]];
-      }
+      // 인덱스를 문자로 매핑 (코드포인트 배열 → String.fromCharCode 배치 호출)
+      const len = indices.length;
+      if (len <= FULL_CODE_BUFFER_THRESHOLD) {
+        const codes = new Uint16Array(len);
+        for (let i = 0; i < len; i++) {
+          codes[i] = this.dduCharCodes[indices[i]];
+        }
 
-      if (len <= STRING_CHUNK_SIZE) {
-        payload = String.fromCharCode.apply(null, codes as unknown as number[]);
+        if (len <= STRING_CHUNK_SIZE) {
+          payload = String.fromCharCode.apply(null, codes as unknown as number[]);
+        } else {
+          const chunks = new Array<string>(Math.ceil(len / STRING_CHUNK_SIZE));
+          let chunkIndex = 0;
+          for (let offset = 0; offset < len; offset += STRING_CHUNK_SIZE) {
+            const slice = codes.subarray(offset, Math.min(offset + STRING_CHUNK_SIZE, len));
+            chunks[chunkIndex++] = String.fromCharCode.apply(null, slice as unknown as number[]);
+          }
+          payload = chunks.join("");
+        }
       } else {
+        const codes = new Uint16Array(STRING_CHUNK_SIZE);
         const chunks = new Array<string>(Math.ceil(len / STRING_CHUNK_SIZE));
         let chunkIndex = 0;
         for (let offset = 0; offset < len; offset += STRING_CHUNK_SIZE) {
-          const slice = codes.subarray(offset, Math.min(offset + STRING_CHUNK_SIZE, len));
-          chunks[chunkIndex++] = String.fromCharCode.apply(null, slice as unknown as number[]);
+          const chunkLen = Math.min(STRING_CHUNK_SIZE, len - offset);
+          for (let i = 0; i < chunkLen; i++) {
+            codes[i] = this.dduCharCodes[indices[offset + i]];
+          }
+          const view = chunkLen === codes.length ? codes : codes.subarray(0, chunkLen);
+          chunks[chunkIndex++] = String.fromCharCode.apply(null, view as unknown as number[]);
         }
         payload = chunks.join("");
       }
-    } else {
-      const codes = new Uint16Array(STRING_CHUNK_SIZE);
-      const chunks = new Array<string>(Math.ceil(len / STRING_CHUNK_SIZE));
-      let chunkIndex = 0;
-      for (let offset = 0; offset < len; offset += STRING_CHUNK_SIZE) {
-        const chunkLen = Math.min(STRING_CHUNK_SIZE, len - offset);
-        for (let i = 0; i < chunkLen; i++) {
-          codes[i] = this.dduCharCodes[indices[offset + i]];
-        }
-        const view = chunkLen === codes.length ? codes : codes.subarray(0, chunkLen);
-        chunks[chunkIndex++] = String.fromCharCode.apply(null, view as unknown as number[]);
-      }
-      payload = chunks.join("");
     }
 
     // 푸터 생성
@@ -1053,7 +1051,7 @@ export class Ddu64Core {
 
   private encodeBytesWithNativeBase64(
     data: Uint8Array,
-  ): { indices: ArrayLike<number>; paddingBits: number } | null {
+  ): { payload: string; paddingBits: number } | null {
     if (!this.canUseNativeBase64) return null;
     const base64 = this.bytesToBase64(data);
     if (base64 === null) return null;
@@ -1065,16 +1063,8 @@ export class Ddu64Core {
       payloadLength--;
     }
 
-    const indices =
-      payloadLength >= TYPED_INDICES_THRESHOLD
-        ? new Uint16Array(payloadLength)
-        : new Array<number>(payloadLength);
-    for (let i = 0; i < payloadLength; i++) {
-      indices[i] = BASE64_INDEX_LOOKUP[base64[i]];
-    }
-
     return {
-      indices,
+      payload: base64.slice(0, payloadLength),
       paddingBits: paddingChars === 2 ? 4 : paddingChars === 1 ? 2 : 0,
     };
   }
@@ -1083,22 +1073,16 @@ export class Ddu64Core {
     cleanedInput: string,
     paddingBits: number,
   ): Uint8Array | null {
-    if (!this.canUseNativeBase64 || !this.nativeDecodeMap) return null;
+    if (!this.canUseNativeBase64) return null;
 
     const paddingChars = paddingBits === 4 ? 2 : paddingBits === 2 ? 1 : paddingBits === 0 ? 0 : -1;
     if (paddingChars < 0) return null;
 
-    const parts = new Array<string>(cleanedInput.length + paddingChars);
     for (let i = 0; i < cleanedInput.length; i++) {
-      const mapped = this.nativeDecodeMap.get(cleanedInput[i]);
-      if (mapped === undefined) return null;
-      parts[i] = mapped;
-    }
-    for (let i = 0; i < paddingChars; i++) {
-      parts[cleanedInput.length + i] = BASE64_PADDING;
+      if (this.dduCharCodeLookup[cleanedInput.charCodeAt(i)] < 0) return null;
     }
 
-    return this.base64ToBytes(parts.join(""));
+    return this.base64ToBytes(cleanedInput + BASE64_PADDING.repeat(paddingChars));
   }
 
   private bytesToBase64(data: Uint8Array): string | null {

@@ -227,7 +227,7 @@ describe("Test Vectors", () => {
     }
   });
 
-  describe("Cross-language vectors (Python compatibility)", () => {
+  describe("Cross-language vectors (Origin compatibility)", () => {
     const crossLangVectors = testVectors.filter((v) => v.tags.includes("cross-language"));
 
     for (const vector of crossLangVectors) {

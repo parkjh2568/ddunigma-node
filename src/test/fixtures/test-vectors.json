@@ -100,7 +100,7 @@
       "charset": { "preset": "ddu", "paddingChar": "뭐" },
       "options": { "useRepeatPadding": true },
       "expected": { "encoded": "" },
-      "tags": ["cross-language", "python-compatible"]
+      "tags": ["cross-language", "origin-compatible"]
     },
     {
       "id": "cross-lang-single-ascii",
@@ -109,7 +109,7 @@
       "charset": { "preset": "ddu", "paddingChar": "뭐" },
       "options": { "useRepeatPadding": true },
       "expected": { "encoded": "이이뭐뭐" },
-      "tags": ["cross-language", "python-compatible"]
+      "tags": ["cross-language", "origin-compatible"]
     },
     {
       "id": "cross-lang-multibyte-utf8",
@@ -118,7 +118,7 @@
       "charset": { "preset": "ddu", "paddingChar": "뭐" },
       "options": { "useRepeatPadding": true },
       "expected": { "encoded": "뎯욱잇웆뎪듇앾뜌" },
-      "tags": ["cross-language", "python-compatible"]
+      "tags": ["cross-language", "origin-compatible"]
     },
     {
       "id": "cross-lang-no-padding",
@@ -127,7 +127,7 @@
       "charset": { "preset": "ddu", "paddingChar": "뭐" },
       "options": { "useRepeatPadding": true },
       "expected": { "encoded": "이잊땩뜓" },
-      "tags": ["cross-language", "python-compatible"]
+      "tags": ["cross-language", "origin-compatible"]
     },
     {
       "id": "cross-lang-max-padding",
@@ -136,7 +136,7 @@
       "charset": { "preset": "ddu", "paddingChar": "뭐" },
       "options": { "useRepeatPadding": true },
       "expected": { "encoded": "잇뜌뭐뭐" },
-      "tags": ["cross-language", "python-compatible"]
+      "tags": ["cross-language", "origin-compatible"]
     }
   ]
 }

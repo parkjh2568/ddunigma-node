@@ -489,8 +489,8 @@ console.log(`실패: ${failedTests}개\n`);
 
 if (failedTests === 0) {
   console.log("✅ 모든 주요 기능 정상 작동!\n");
-  console.log("💡 종합 테스트: npx tsx ./src/test/test-comprehensive.ts");
-  console.log("💡 호환성 테스트: npx tsx ./src/test/test-compat.ts\n");
+  console.log("💡 전체 테스트: pnpm test");
+  console.log("💡 패키지 검증: pnpm pack:check\n");
 } else {
   console.log(`❌ ${failedTests}개 테스트 실패\n`);
 }

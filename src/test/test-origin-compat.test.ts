@@ -1,16 +1,16 @@
 /**
- * Python Cross-Platform Compatibility Tests
+ * Origin Cross-Platform Compatibility Tests
  *
  * Verifies that the Node.js Ddu64 implementation produces output identical
- * to the Python Ddu64 v2 class when using the DDU preset with useRepeatPadding.
+ * to the Origin Ddu64 v2 class when using the DDU preset with useRepeatPadding.
  *
  * Cross-platform compatibility boundary:
  * - COMPATIBLE: Plain encoding with DDU preset (base chars + coda chars + padding)
  * - NOT COMPATIBLE: Compression (deflate/brotli), encryption (AES-256-GCM),
  *   and checksum (CRC32) features use footer markers not supported by the
- *   Python implementation.
+ *   Origin implementation.
  *
- * Python Ddu64 v2 algorithm:
+ * Origin Ddu64 v2 algorithm:
  * 1. Convert input bytes to binary string (8 bits per byte)
  * 2. Split into 6-bit chunks
  * 3. Pad last chunk with zeros to reach 6 bits
@@ -26,23 +26,23 @@ import { Ddu64Node } from "../Ddu64Node.js";
 import { DduSetSymbol } from "../core/types.js";
 import testVectorsData from "./fixtures/test-vectors.json";
 
-// ─── Python DDU v2 Constants ─────────────────────────────────────────────────
+// ─── Origin DDU v2 Constants ─────────────────────────────────────────────────
 
-/** Python Ddu64 v2 default base characters */
-const PYTHON_BASE_CHARS = ["뜌", "땨", "이", "우", "야", "듀", "댜", "뎨"];
+/** Origin Ddu64 v2 default base characters */
+const ORIGIN_BASE_CHARS = ["뜌", "땨", "이", "우", "야", "듀", "댜", "뎨"];
 
-/** Python Ddu64 v2 default coda characters (jongseong) */
-const PYTHON_CODA_CHARS = ["", "ㄱ", "ㄲ", "ㄷ", "ㅈ", "ㅇ", "ㅅ", "ㅆ"];
+/** Origin Ddu64 v2 default coda characters (jongseong) */
+const ORIGIN_CODA_CHARS = ["", "ㄱ", "ㄲ", "ㄷ", "ㅈ", "ㅇ", "ㅅ", "ㅆ"];
 
-/** Python Ddu64 v2 default padding character */
-const PYTHON_PADDING_CHAR = "뭐";
+/** Origin Ddu64 v2 default padding character */
+const ORIGIN_PADDING_CHAR = "뭐";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Create a Ddu64Node encoder configured to match Python Ddu64 v2 defaults.
+ * Create a Ddu64Node encoder configured to match Origin Ddu64 v2 defaults.
  */
-function createPythonCompatEncoder(): Ddu64Node {
+function createOriginCompatEncoder(): Ddu64Node {
   return new Ddu64Node(undefined, undefined, {
     dduSetSymbol: DduSetSymbol.DDU,
     useRepeatPadding: true,
@@ -50,9 +50,9 @@ function createPythonCompatEncoder(): Ddu64Node {
 }
 
 /**
- * Reference implementation of the Python padding calculation.
+ * Reference implementation of the Origin padding calculation.
  *
- * In Python Ddu64 v2:
+ * In Origin Ddu64 v2:
  *   padding = 6 - len(last_chunk_bits)
  *   padding_char_count = padding // 2
  *
@@ -65,7 +65,7 @@ function createPythonCompatEncoder(): Ddu64Node {
  *   paddingBits = 6 - lastChunkBitLength (or 0 if evenly divisible)
  *   paddingCharCount = paddingBits / 2
  */
-function pythonPaddingCount(inputByteLength: number): number {
+function originPaddingCount(inputByteLength: number): number {
   if (inputByteLength === 0) return 0;
   const totalBits = inputByteLength * 8;
   const remainder = totalBits % 6;
@@ -75,10 +75,10 @@ function pythonPaddingCount(inputByteLength: number): number {
 }
 
 /**
- * Reference implementation of the Python Ddu64 v2 encode algorithm.
+ * Reference implementation of the Origin Ddu64 v2 encode algorithm.
  * Used to verify our Node.js implementation matches.
  */
-function pythonDdu64Encode(input: Uint8Array): string {
+function originDdu64Encode(input: Uint8Array): string {
   if (input.length === 0) return "";
 
   // Step 1: Convert bytes to binary string
@@ -104,19 +104,19 @@ function pythonDdu64Encode(input: Uint8Array): string {
     const value = parseInt(chunk, 2);
     const baseIdx = Math.floor(value / 8);
     const codaIdx = value % 8;
-    const baseChar = PYTHON_BASE_CHARS[baseIdx];
-    const coda = PYTHON_CODA_CHARS[codaIdx];
+    const baseChar = ORIGIN_BASE_CHARS[baseIdx];
+    const coda = ORIGIN_CODA_CHARS[codaIdx];
     resultChars.push(combineCoda(baseChar, coda));
   }
 
   // Step 5: Append padding characters
   const paddingCount = padding / 2;
-  return resultChars.join("") + PYTHON_PADDING_CHAR.repeat(paddingCount);
+  return resultChars.join("") + ORIGIN_PADDING_CHAR.repeat(paddingCount);
 }
 
 /**
  * Combine a Hangul base character with a coda (jongseong).
- * Mirrors the Python combine_coda function.
+ * Mirrors the Origin combine_coda function.
  */
 function combineCoda(baseChar: string, coda: string): string {
   if (coda === "") return baseChar;
@@ -162,7 +162,7 @@ function combineCoda(baseChar: string, coda: string): string {
 
 // ─── Test Suite ──────────────────────────────────────────────────────────────
 
-describe("Python Cross-Platform Compatibility", () => {
+describe("Origin Cross-Platform Compatibility", () => {
   describe("Cross-language test vectors from fixture", () => {
     const crossLangVectors = (
       testVectorsData as {
@@ -184,7 +184,7 @@ describe("Python Cross-Platform Compatibility", () => {
 
     for (const vector of crossLangVectors) {
       it(`[${vector.id}] ${vector.description}`, () => {
-        const encoder = createPythonCompatEncoder();
+        const encoder = createOriginCompatEncoder();
         const inputBytes =
           vector.input.raw === ""
             ? new Uint8Array(0)
@@ -205,36 +205,36 @@ describe("Python Cross-Platform Compatibility", () => {
     }
   });
 
-  describe("Padding calculation matches Python formula", () => {
-    // Python formula: padding_char_count = (6 - lastChunkBitLength) / 2
+  describe("Padding calculation matches Origin formula", () => {
+    // Origin formula: padding_char_count = (6 - lastChunkBitLength) / 2
     // where lastChunkBitLength = totalBits % 6 (or 6 if divisible)
 
     it("1 byte (8 bits): 1 chunk of 6 + 1 chunk of 2 → padding = (6-2)/2 = 2", () => {
-      expect(pythonPaddingCount(1)).toBe(2);
+      expect(originPaddingCount(1)).toBe(2);
     });
 
     it("2 bytes (16 bits): 2 chunks of 6 + 1 chunk of 4 → padding = (6-4)/2 = 1", () => {
-      expect(pythonPaddingCount(2)).toBe(1);
+      expect(originPaddingCount(2)).toBe(1);
     });
 
     it("3 bytes (24 bits): 4 chunks of 6, no remainder → padding = 0", () => {
-      expect(pythonPaddingCount(3)).toBe(0);
+      expect(originPaddingCount(3)).toBe(0);
     });
 
     it("4 bytes (32 bits): 5 chunks of 6 + 1 chunk of 2 → padding = (6-2)/2 = 2", () => {
-      expect(pythonPaddingCount(4)).toBe(2);
+      expect(originPaddingCount(4)).toBe(2);
     });
 
     it("5 bytes (40 bits): 6 chunks of 6 + 1 chunk of 4 → padding = (6-4)/2 = 1", () => {
-      expect(pythonPaddingCount(5)).toBe(1);
+      expect(originPaddingCount(5)).toBe(1);
     });
 
     it("6 bytes (48 bits): 8 chunks of 6, no remainder → padding = 0", () => {
-      expect(pythonPaddingCount(6)).toBe(0);
+      expect(originPaddingCount(6)).toBe(0);
     });
 
-    it("Node.js encoder padding matches Python formula for various input sizes", () => {
-      const encoder = createPythonCompatEncoder();
+    it("Node.js encoder padding matches Origin formula for various input sizes", () => {
+      const encoder = createOriginCompatEncoder();
 
       for (let size = 1; size <= 30; size++) {
         const input = new Uint8Array(size);
@@ -242,12 +242,12 @@ describe("Python Cross-Platform Compatibility", () => {
         for (let i = 0; i < size; i++) input[i] = (i * 37 + 13) & 0xff;
 
         const encoded = encoder.encode(input);
-        const expectedPaddingCount = pythonPaddingCount(size);
+        const expectedPaddingCount = originPaddingCount(size);
 
         // Count trailing padding characters
         let actualPaddingCount = 0;
         for (let i = encoded.length - 1; i >= 0; i--) {
-          if (encoded[i] === PYTHON_PADDING_CHAR) {
+          if (encoded[i] === ORIGIN_PADDING_CHAR) {
             actualPaddingCount++;
           } else {
             break;
@@ -262,80 +262,80 @@ describe("Python Cross-Platform Compatibility", () => {
     });
   });
 
-  describe("DDU preset encoding matches Python Ddu64 v2 output", () => {
-    it("'Hello' encodes identically to Python", () => {
-      const encoder = createPythonCompatEncoder();
+  describe("DDU preset encoding matches Origin Ddu64 v2 output", () => {
+    it("'Hello' encodes identically to Origin", () => {
+      const encoder = createOriginCompatEncoder();
       const input = new Uint8Array(Buffer.from("Hello", "utf-8"));
 
       const nodeEncoded = encoder.encode(input);
-      const pythonEncoded = pythonDdu64Encode(input);
+      const originEncoded = originDdu64Encode(input);
 
-      expect(nodeEncoded).toBe(pythonEncoded);
+      expect(nodeEncoded).toBe(originEncoded);
     });
 
-    it("'안녕하세요' (Korean) encodes identically to Python", () => {
-      const encoder = createPythonCompatEncoder();
+    it("'안녕하세요' (Korean) encodes identically to Origin", () => {
+      const encoder = createOriginCompatEncoder();
       const input = new Uint8Array(Buffer.from("안녕하세요", "utf-8"));
 
       const nodeEncoded = encoder.encode(input);
-      const pythonEncoded = pythonDdu64Encode(input);
+      const originEncoded = originDdu64Encode(input);
 
-      expect(nodeEncoded).toBe(pythonEncoded);
+      expect(nodeEncoded).toBe(originEncoded);
     });
 
-    it("single byte 'A' encodes identically to Python", () => {
-      const encoder = createPythonCompatEncoder();
+    it("single byte 'A' encodes identically to Origin", () => {
+      const encoder = createOriginCompatEncoder();
       const input = new Uint8Array([0x41]);
 
       const nodeEncoded = encoder.encode(input);
-      const pythonEncoded = pythonDdu64Encode(input);
+      const originEncoded = originDdu64Encode(input);
 
-      expect(nodeEncoded).toBe(pythonEncoded);
+      expect(nodeEncoded).toBe(originEncoded);
       expect(nodeEncoded).toBe("이이뭐뭐"); // From test vector
     });
 
-    it("binary data [0x00, 0xFF, 0xAA] encodes identically to Python", () => {
-      const encoder = createPythonCompatEncoder();
+    it("binary data [0x00, 0xFF, 0xAA] encodes identically to Origin", () => {
+      const encoder = createOriginCompatEncoder();
       const input = new Uint8Array([0x00, 0xff, 0xaa]);
 
       const nodeEncoded = encoder.encode(input);
-      const pythonEncoded = pythonDdu64Encode(input);
+      const originEncoded = originDdu64Encode(input);
 
-      expect(nodeEncoded).toBe(pythonEncoded);
+      expect(nodeEncoded).toBe(originEncoded);
     });
 
-    it("'ABC' (no padding needed) encodes identically to Python", () => {
-      const encoder = createPythonCompatEncoder();
+    it("'ABC' (no padding needed) encodes identically to Origin", () => {
+      const encoder = createOriginCompatEncoder();
       const input = new Uint8Array(Buffer.from("ABC", "utf-8"));
 
       const nodeEncoded = encoder.encode(input);
-      const pythonEncoded = pythonDdu64Encode(input);
+      const originEncoded = originDdu64Encode(input);
 
-      expect(nodeEncoded).toBe(pythonEncoded);
+      expect(nodeEncoded).toBe(originEncoded);
       expect(nodeEncoded).toBe("이잊땩뜓"); // From test vector
     });
 
-    it("'한글' (multi-byte UTF-8) encodes identically to Python", () => {
-      const encoder = createPythonCompatEncoder();
+    it("'한글' (multi-byte UTF-8) encodes identically to Origin", () => {
+      const encoder = createOriginCompatEncoder();
       const input = new Uint8Array(Buffer.from("한글", "utf-8"));
 
       const nodeEncoded = encoder.encode(input);
-      const pythonEncoded = pythonDdu64Encode(input);
+      const originEncoded = originDdu64Encode(input);
 
-      expect(nodeEncoded).toBe(pythonEncoded);
+      expect(nodeEncoded).toBe(originEncoded);
     });
 
-    it("all single-byte values (0x00-0xFF) encode identically to Python", () => {
-      const encoder = createPythonCompatEncoder();
+    it("all single-byte values (0x00-0xFF) encode identically to Origin", () => {
+      const encoder = createOriginCompatEncoder();
 
       for (let byte = 0; byte <= 255; byte++) {
         const input = new Uint8Array([byte]);
         const nodeEncoded = encoder.encode(input);
-        const pythonEncoded = pythonDdu64Encode(input);
+        const originEncoded = originDdu64Encode(input);
 
         expect(nodeEncoded).toBe(
-          pythonEncoded,
-          `Byte 0x${byte.toString(16).padStart(2, "0")}: Node="${nodeEncoded}" vs Python="${pythonEncoded}"`,
+          originEncoded,
+          `Byte 0x${byte.toString(16).padStart(2, "0")}: Node="${nodeEncoded}" vs Origin="${originEncoded}"`,
         );
       }
     });
@@ -343,7 +343,7 @@ describe("Python Cross-Platform Compatibility", () => {
 
   describe("Round-trip for UTF-8 sequences", () => {
     it("ASCII string round-trips correctly", () => {
-      const encoder = createPythonCompatEncoder();
+      const encoder = createOriginCompatEncoder();
       const input = "The quick brown fox jumps over the lazy dog";
       const inputBytes = new Uint8Array(Buffer.from(input, "utf-8"));
 
@@ -354,7 +354,7 @@ describe("Python Cross-Platform Compatibility", () => {
     });
 
     it("Korean text round-trips correctly", () => {
-      const encoder = createPythonCompatEncoder();
+      const encoder = createOriginCompatEncoder();
       const input = "가나다라마바사아자차카타파하";
       const inputBytes = new Uint8Array(Buffer.from(input, "utf-8"));
 
@@ -365,7 +365,7 @@ describe("Python Cross-Platform Compatibility", () => {
     });
 
     it("mixed multi-byte UTF-8 (emoji, CJK, Latin) round-trips correctly", () => {
-      const encoder = createPythonCompatEncoder();
+      const encoder = createOriginCompatEncoder();
       const input = "Hello 世界 🌍 Ñoño café 한국어";
       const inputBytes = new Uint8Array(Buffer.from(input, "utf-8"));
 
@@ -376,7 +376,7 @@ describe("Python Cross-Platform Compatibility", () => {
     });
 
     it("4-byte UTF-8 sequences (emoji) round-trip correctly", () => {
-      const encoder = createPythonCompatEncoder();
+      const encoder = createOriginCompatEncoder();
       const input = "🎉🎊🎈🎁🎄🎃🎅🤶";
       const inputBytes = new Uint8Array(Buffer.from(input, "utf-8"));
 
@@ -387,7 +387,7 @@ describe("Python Cross-Platform Compatibility", () => {
     });
 
     it("empty input round-trips correctly", () => {
-      const encoder = createPythonCompatEncoder();
+      const encoder = createOriginCompatEncoder();
       const inputBytes = new Uint8Array(0);
 
       const encoded = encoder.encode(inputBytes);
@@ -398,7 +398,7 @@ describe("Python Cross-Platform Compatibility", () => {
     });
 
     it("large UTF-8 input (100 KB) round-trips correctly", () => {
-      const encoder = createPythonCompatEncoder();
+      const encoder = createOriginCompatEncoder();
       // Generate 100 KB of mixed UTF-8 content
       const segment = "Hello 안녕 世界 🌍 ";
       const repeated = segment.repeat(Math.ceil(100_000 / Buffer.from(segment).length));
@@ -411,7 +411,7 @@ describe("Python Cross-Platform Compatibility", () => {
     });
 
     it("1 MB UTF-8 input round-trips correctly", () => {
-      const encoder = createPythonCompatEncoder();
+      const encoder = createOriginCompatEncoder();
       // Generate 1 MB of data
       const segment = "뚜니그마 DDUnigma テスト 🔐 ";
       const segmentBytes = Buffer.from(segment, "utf-8");
@@ -430,22 +430,22 @@ describe("Python Cross-Platform Compatibility", () => {
   describe("Compatibility boundary documentation", () => {
     /**
      * IMPORTANT: The following features are NOT cross-platform compatible
-     * with the Python Ddu64 implementation:
+     * with the Origin Ddu64 implementation:
      *
      * 1. Compression (deflate/brotli): Uses footer markers (ELYSIA/GRISEO)
-     *    that the Python implementation does not recognize.
+     *    that the Origin implementation does not recognize.
      *
      * 2. Encryption (AES-256-GCM): Uses footer marker (ENC) and wire format
-     *    (IV + authTag + ciphertext) not supported by Python.
+     *    (IV + authTag + ciphertext) not supported by Origin.
      *
      * 3. Checksum (CRC32): Uses CHK marker appended after footer,
-     *    not supported by Python.
+     *    not supported by Origin.
      *
      * Only plain encoding with the DDU preset and useRepeatPadding: true
-     * produces output that is interoperable between Node.js and Python.
+     * produces output that is interoperable between Node.js and Origin.
      */
 
-    it("compressed output is NOT decodable by Python-compatible decoder", () => {
+    it("compressed output is NOT decodable by Origin-compatible decoder", () => {
       const encoder = new Ddu64Node(undefined, undefined, {
         dduSetSymbol: DduSetSymbol.DDU,
         useRepeatPadding: true,
@@ -455,11 +455,11 @@ describe("Python Cross-Platform Compatibility", () => {
       const encoded = encoder.encode(input);
 
       // Compressed output contains footer markers (ELYSIA/GRISEO + padding digit)
-      // that Python cannot parse
+      // that Origin cannot parse
       expect(encoded).toMatch(/ELYSIA|뭐\d/);
     });
 
-    it("encrypted output is NOT decodable by Python-compatible decoder", () => {
+    it("encrypted output is NOT decodable by Origin-compatible decoder", () => {
       const encoder = new Ddu64Node(undefined, undefined, {
         dduSetSymbol: DduSetSymbol.DDU,
         useRepeatPadding: true,
@@ -472,7 +472,7 @@ describe("Python Cross-Platform Compatibility", () => {
       expect(encoded).toContain("ENC");
     });
 
-    it("checksum output is NOT decodable by Python-compatible decoder", () => {
+    it("checksum output is NOT decodable by Origin-compatible decoder", () => {
       const encoder = new Ddu64Node(undefined, undefined, {
         dduSetSymbol: DduSetSymbol.DDU,
         useRepeatPadding: true,
@@ -485,8 +485,8 @@ describe("Python Cross-Platform Compatibility", () => {
       expect(encoded).toContain("CHK");
     });
 
-    it("plain DDU encoding IS compatible with Python (no markers in output)", () => {
-      const encoder = createPythonCompatEncoder();
+    it("plain DDU encoding IS compatible with Origin (no markers in output)", () => {
+      const encoder = createOriginCompatEncoder();
       const input = new Uint8Array(Buffer.from("compatible", "utf-8"));
       const encoded = encoder.encode(input);
 
@@ -501,14 +501,14 @@ describe("Python Cross-Platform Compatibility", () => {
       for (const char of encoded) {
         const code = char.charCodeAt(0);
         const isHangulSyllable = code >= 0xac00 && code <= 0xd7a3;
-        const isPadding = char === PYTHON_PADDING_CHAR;
+        const isPadding = char === ORIGIN_PADDING_CHAR;
         expect(isHangulSyllable || isPadding).toBe(true);
       }
     });
   });
 
-  describe("Python reference algorithm verification", () => {
-    it("reference pythonDdu64Encode matches known test vectors", () => {
+  describe("Origin reference algorithm verification", () => {
+    it("reference originDdu64Encode matches known test vectors", () => {
       // Verify our reference implementation against the fixture vectors
       const vectors = [
         { hex: "48656c6c6f", expected: "읶뜟잉듖욷뜟뎾뭐" }, // Hello
@@ -520,7 +520,7 @@ describe("Python Cross-Platform Compatibility", () => {
 
       for (const { hex, expected } of vectors) {
         const input = new Uint8Array(Buffer.from(hex, "hex"));
-        const result = pythonDdu64Encode(input);
+        const result = originDdu64Encode(input);
         expect(result).toBe(expected);
       }
     });
@@ -528,14 +528,14 @@ describe("Python Cross-Platform Compatibility", () => {
     it("6-bit chunk mapping: value 0 → base[0]+coda[0] = 뜌", () => {
       // Value 0: base_char[0//8=0] + coda_char[0%8=0] = "뜌" + "" = "뜌"
       const input = new Uint8Array([0, 0, 0]); // 24 bits = 4 chunks of 000000
-      const encoded = pythonDdu64Encode(input);
+      const encoded = originDdu64Encode(input);
       expect(encoded).toBe("뜌뜌뜌뜌"); // All zeros, no padding (24 bits / 6 = 4 exact)
     });
 
     it("6-bit chunk mapping: value 63 → base[7]+coda[7] = 뎨+ㅆ = 뎾", () => {
       // Value 63 (111111): base_char[63//8=7] + coda_char[63%8=7] = "뎨" + "ㅆ"
       const input = new Uint8Array([0xff, 0xff, 0xff]); // 24 bits = 4 chunks of 111111
-      const encoded = pythonDdu64Encode(input);
+      const encoded = originDdu64Encode(input);
       // Each chunk is 63 → base[7] + coda[7]
       const expectedChar = combineCoda("뎨", "ㅆ");
       expect(encoded).toBe(expectedChar.repeat(4));

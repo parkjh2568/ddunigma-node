@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest";
 import { Ddu64Node } from "../Ddu64Node.js";
 import { DduSetSymbol } from "../core/types.js";
+import compatVectors from "./fixtures/compat-vectors.json";
 
 describe("구버전 호환성 테스트", () => {
   // ─── 기본 테스트 ───────────────────────────────────────────────────────────
@@ -155,53 +156,34 @@ describe("구버전 호환성 테스트", () => {
     });
   });
 
-  // ─── Python 크로스 플랫폼 호환 벡터 ────────────────────────────────────────
+  // ─── 크로스 플랫폼 호환 벡터 ────────────────────────────────────────
+  // src/test/fixtures/compat-vectors.json
+  // 63개 엣지 케이스 (다국어, 이모지, 제어문자, 패딩 경계 등)이 들어있습니다.
 
-  describe("Python 크로스 플랫폼 호환 벡터", () => {
-    const v2Vectors: [string, string][] = [
-      ["안녕하세요", "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊"],
-      ["hello", "욲뜟잉듖욷뜟뎾뭐"],
-      ["A", "이이뭐뭐"],
-      ["AB", "이잊땨뭐"],
-      ["ABC", "이잊땩뜓"],
-      ["test 123!", "웅뜟잉댣웅뜎뜌댝땾얃땾약"],
-      ["가나다라", "뎪듇뜎뜌뎪뎨땪우뎪뎨듓얒뎪뎩댯뎾"],
-    ];
-
-    const v1Vectors: [string, string][] = [
-      ["안녕하세요", ".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야"],
-      ["hello", "우이뜌?이!!야우우뜌?.야뭐"],
-      ["A", "이뜌이뜌뭐뭐"],
-      ["AB", "이뜌이야땨뜌뭐"],
-      ["ABC", "이뜌이야땨땨뜌우"],
-      ["test 123!", "우!뜌?이!?우우!뜌이뜌뜌?땨땨야야우땨야야땨"],
-      ["가나다라", ".이!우뜌이뜌뜌.이.뜌땨이우뜌.이.뜌!?야야.이.땨??.야"],
-    ];
+  describe("크로스 플랫폼 호환 벡터", () => {
+    const v2Encoder = new Ddu64Node();
+    const v1Encoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
 
     describe("V2 (DDU)", () => {
-      const encoder = new Ddu64Node();
-
-      for (const [input, expected] of v2Vectors) {
-        it(`"${input}" 인코딩 일치`, () => {
-          expect(encoder.encode(input)).toBe(expected);
+      for (const vec of compatVectors) {
+        it(`[${vec.name}] 인코딩 일치`, () => {
+          expect(v2Encoder.encode(vec.input)).toBe(vec.v2);
         });
 
-        it(`"${input}" 디코딩 일치`, () => {
-          expect(encoder.decode(expected)).toBe(input);
+        it(`[${vec.name}] 디코딩 라운드트립`, () => {
+          expect(v2Encoder.decode(vec.v2)).toBe(vec.input);
         });
       }
     });
 
     describe("V1 (DDU_V1)", () => {
-      const encoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
-
-      for (const [input, expected] of v1Vectors) {
-        it(`"${input}" 인코딩 일치`, () => {
-          expect(encoder.encode(input)).toBe(expected);
+      for (const vec of compatVectors) {
+        it(`[${vec.name}] 인코딩 일치`, () => {
+          expect(v1Encoder.encode(vec.input)).toBe(vec.v1);
         });
 
-        it(`"${input}" 디코딩 일치`, () => {
-          expect(encoder.decode(expected)).toBe(input);
+        it(`[${vec.name}] 디코딩 라운드트립`, () => {
+          expect(v1Encoder.decode(vec.v1)).toBe(vec.input);
         });
       }
     });

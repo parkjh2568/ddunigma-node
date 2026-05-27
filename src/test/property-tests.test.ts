@@ -24,21 +24,21 @@ const NUM_RUNS = 100;
 
 // ─── 헬퍼 함수 ──────────────────────────────────────────────────────────────
 
-/** Python 호환 인코더 생성 */
-function createPythonCompatEncoder(): Ddu64Node {
+/** Origin 호환 인코더 생성 */
+function createOriginCompatEncoder(): Ddu64Node {
   return new Ddu64Node(undefined, undefined, {
     dduSetSymbol: DduSetSymbol.DDU,
     useRepeatPadding: true,
   });
 }
 
-/** Python 참조 구현 인코딩 */
-function pythonDdu64Encode(input: Uint8Array): string {
+/** Origin 참조 구현 인코딩 */
+function originDdu64Encode(input: Uint8Array): string {
   if (input.length === 0) return "";
 
-  const PYTHON_BASE_CHARS = ["뜌", "땨", "이", "우", "야", "듀", "댜", "뎨"];
-  const PYTHON_CODA_CHARS = ["", "ㄱ", "ㄲ", "ㄷ", "ㅈ", "ㅇ", "ㅅ", "ㅆ"];
-  const PYTHON_PADDING_CHAR = "뭐";
+  const ORIGIN_BASE_CHARS = ["뜌", "땨", "이", "우", "야", "듀", "댜", "뎨"];
+  const ORIGIN_CODA_CHARS = ["", "ㄱ", "ㄲ", "ㄷ", "ㅈ", "ㅇ", "ㅅ", "ㅆ"];
+  const ORIGIN_PADDING_CHAR = "뭐";
 
   const CODA_MAP: Record<string, number> = {
     "": 0,
@@ -103,12 +103,12 @@ function pythonDdu64Encode(input: Uint8Array): string {
     const value = parseInt(chunk, 2);
     const baseIdx = Math.floor(value / 8);
     const codaIdx = value % 8;
-    resultChars.push(combineCoda(PYTHON_BASE_CHARS[baseIdx], PYTHON_CODA_CHARS[codaIdx]));
+    resultChars.push(combineCoda(ORIGIN_BASE_CHARS[baseIdx], ORIGIN_CODA_CHARS[codaIdx]));
   }
 
   // 패딩 문자 추가
   const paddingCount = Math.floor(padding / 2);
-  return resultChars.join("") + PYTHON_PADDING_CHAR.repeat(paddingCount);
+  return resultChars.join("") + ORIGIN_PADDING_CHAR.repeat(paddingCount);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -557,8 +557,7 @@ describe("Property-Based Tests", () => {
   // ─── Property 8: WASM/JS 동등성 (JS fallback 검증) ────────────────────────
   describe("Property 8: WASM/JS 동등성 (JS fallback 검증)", () => {
     it("WASM이 사용 불가능한 상태에서 JS fallback이 정상 동작", () => {
-      // WASM은 placeholder이므로 JS fallback만 검증
-      // Ddu64Core를 어댑터 없이 생성하면 동기 메서드에서 fallback 동작
+      // preloadWasm() 없이 생성하면 동기 hot path는 JS 구현으로 폴백합니다.
       const encoder = new Ddu64Node();
 
       fc.assert(
@@ -645,23 +644,23 @@ describe("Property-Based Tests", () => {
     });
   });
 
-  // ─── Property 13: Python 호환 ─────────────────────────────────────────────
-  describe("Property 13: Python 호환", () => {
-    it("DDU 프리셋 + useRepeatPadding으로 인코딩한 결과가 Python 참조 구현과 동일", () => {
-      const encoder = createPythonCompatEncoder();
+  // ─── Property 13: Origin 호환 ─────────────────────────────────────────────
+  describe("Property 13: Origin 호환", () => {
+    it("DDU 프리셋 + useRepeatPadding으로 인코딩한 결과가 Origin 참조 구현과 동일", () => {
+      const encoder = createOriginCompatEncoder();
 
       fc.assert(
         fc.property(fc.uint8Array({ minLength: 1, maxLength: 500 }), (data) => {
           const nodeEncoded = encoder.encode(data);
-          const pythonEncoded = pythonDdu64Encode(data);
-          expect(nodeEncoded).toBe(pythonEncoded);
+          const originEncoded = originDdu64Encode(data);
+          expect(nodeEncoded).toBe(originEncoded);
         }),
         { numRuns: NUM_RUNS },
       );
     });
 
-    it("Python 호환 인코딩의 라운드트립 검증", () => {
-      const encoder = createPythonCompatEncoder();
+    it("Origin 호환 인코딩의 라운드트립 검증", () => {
+      const encoder = createOriginCompatEncoder();
 
       fc.assert(
         fc.property(fc.uint8Array({ minLength: 1, maxLength: 500 }), (data) => {
@@ -673,15 +672,15 @@ describe("Property-Based Tests", () => {
       );
     });
 
-    it("패딩 문자 수가 Python 공식과 일치", () => {
-      const encoder = createPythonCompatEncoder();
+    it("패딩 문자 수가 Origin 공식과 일치", () => {
+      const encoder = createOriginCompatEncoder();
       const PADDING_CHAR = "뭐";
 
       fc.assert(
         fc.property(fc.uint8Array({ minLength: 1, maxLength: 500 }), (data) => {
           const encoded = encoder.encode(data);
 
-          // Python 패딩 공식: (6 - (totalBits % 6)) / 2, 또는 0 if 나누어 떨어짐
+          // Origin 패딩 공식: (6 - (totalBits % 6)) / 2, 또는 0 if 나누어 떨어짐
           const totalBits = data.length * 8;
           const remainder = totalBits % 6;
           const expectedPaddingCount = remainder === 0 ? 0 : Math.floor((6 - remainder) / 2);

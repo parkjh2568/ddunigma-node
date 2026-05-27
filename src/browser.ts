@@ -3,9 +3,8 @@
  *
  * 인코딩, 디코딩, CharsetBuilder, Web Streams, BrowserAdapter를 내보냅니다.
  *
- * 참고: DduPipeline은 Node.js `zlib` 모듈을 직접 임포트하므로
- * 이 진입점에서 제외됩니다. 브라우저 기반 인코딩/디코딩 파이프라인에는
- * BrowserAdapter와 함께 Ddu64Core를 사용하세요.
+ * Node.js 내장 모듈을 직접 임포트하지 않도록 BrowserAdapter 기반 구성만
+ * 포함합니다.
  *
  * @module browser
  * @packageDocumentation

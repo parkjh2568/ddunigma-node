@@ -203,7 +203,7 @@ export class BrowserAdapter implements PlatformAdapter {
 
   /**
    * CompressionStream을 통해 deflate로 데이터를 압축합니다.
-   * 가능하면 'deflate-raw' 형식을 사용하고, 그렇지 않으면 'deflate'를 사용합니다.
+   * Node.js zlib.deflateRaw와의 상호운용성을 위해 'deflate-raw' 형식만 사용합니다.
    */
   async deflate(data: Uint8Array, _level?: number): Promise<Uint8Array> {
     if (typeof CompressionStream === "undefined") {
@@ -220,7 +220,7 @@ export class BrowserAdapter implements PlatformAdapter {
 
   /**
    * DecompressionStream을 통해 deflate 데이터를 압축 해제합니다.
-   * 가능하면 'deflate-raw' 형식을 사용하고, 그렇지 않으면 'deflate'를 사용합니다.
+   * Node.js zlib.inflateRaw와의 상호운용성을 위해 'deflate-raw' 형식만 사용합니다.
    * maxBytes가 지정되면 제한을 적용합니다.
    */
   async inflate(data: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
