@@ -14,9 +14,10 @@ const dduCharSetV1: CharSetConfig = {
   symbol: DduSetSymbol.DDU_V1,
   charSet: ["뜌", "땨", "이", "우", "야", "!", "?", "."],
   maxRequiredLength: 8,
-  bitLength: 3,
+  bitLength: 6,
   paddingChar: "뭐",
   useRepeatPadding: true,
+  usePowerOfTwo: false,
 };
 
 const oneCharSet: CharSetConfig = {

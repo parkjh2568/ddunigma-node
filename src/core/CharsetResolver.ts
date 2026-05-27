@@ -4,7 +4,7 @@
  * @module core/CharsetResolver
  */
 
-import { buildCodaCharset } from "./codecUtils.js";
+import { buildCodaCharset, URL_SAFE_CONFLICT_CHARS } from "./codecUtils.js";
 import type { DduConstructorOptions, CharSetConfig } from "./types.js";
 import { DduSetSymbol, dduDefaultConstructorOptions } from "./types.js";
 import { getCharSet } from "../presets.js";
@@ -12,7 +12,6 @@ import { getCharSet } from "../presets.js";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const MAX_CHARSET_SIZE = 65536;
-const URL_SAFE_CONFLICT_CHARS = ["-", "_", "."] as const;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -24,6 +23,8 @@ export interface ResolvedCharSet {
   bitLength: number;
   isPredefined: boolean;
   useRepeatPadding?: boolean;
+  bitsPerPadChar?: number;
+  usePowerOfTwo?: boolean;
 }
 
 /** charset 정규화 결과 */
@@ -121,13 +122,19 @@ export function resolveInitialCharSet(
       dduOptions?.dduSetSymbol ?? dduDefaultConstructorOptions.dduSetSymbol ?? DduSetSymbol.DDU;
     const cs = getCharSetOrThrow(symbol);
     const resolvedCharSet = cs.codaChar ? buildCodaCharset(cs.charSet, cs.codaChar) : cs.charSet;
-    return buildMeta(
+    const result = buildMeta(
       resolvedCharSet,
       cs.paddingChar,
       cs.maxRequiredLength,
       true,
       cs.useRepeatPadding,
     );
+    result.bitsPerPadChar = cs.bitsPerPadChar;
+    result.usePowerOfTwo = cs.usePowerOfTwo;
+    if (cs.usePowerOfTwo === false) {
+      result.bitLength = cs.bitLength;
+    }
+    return result;
   } catch (error) {
     if (shouldThrow) throw error;
     return getFallbackCharSet(dduOptions);
@@ -345,5 +352,6 @@ function getFallbackCharSet(dduOptions?: DduConstructorOptions): ResolvedCharSet
     bitLength: cs.bitLength,
     isPredefined: true,
     useRepeatPadding: cs.useRepeatPadding,
+    bitsPerPadChar: cs.bitsPerPadChar,
   };
 }

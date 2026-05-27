@@ -50,4 +50,4 @@ export { HangulObfuscationLayer, createObfuscationLayer } from "./obfuscation/Ob
 
 // ─── WASM ───────────────────────────────────────────────────────────────────
 
-export { preloadWasm, getWasmCodec, getWasmCodecSync } from "./wasm/WasmCodec.js";
+export { preloadWasm, getWasmCodec, getWasmCodecSync } from "./wasm/WasmCodecNode.js";

@@ -29,13 +29,35 @@ const BYTE_MASK: u32 = 0xFF;
 // ─── Global Result Storage ───────────────────────────────────────────────────
 //
 // WASM linear memory doesn't have a convenient way to return variable-length
-// results. We store the last result in a global Vec and expose pointer/length
+// results. We store the last result in a global and expose pointer/length
 // accessors for the host to read.
 
-static mut RESULT_BUF: Vec<u8> = Vec::new();
-static mut RESULT_U16_BUF: Vec<u16> = Vec::new();
-static mut LAST_PADDING_BITS: u32 = 0;
-static mut LAST_RESULT_IS_U16: bool = false;
+/// Single-threaded global codec state.
+struct CodecState {
+    result_buf: Vec<u8>,
+    result_u16_buf: Vec<u16>,
+    last_padding_bits: u32,
+    last_result_is_u16: bool,
+}
+
+static mut STATE: CodecState = CodecState {
+    result_buf: Vec::new(),
+    result_u16_buf: Vec::new(),
+    last_padding_bits: 0,
+    last_result_is_u16: false,
+};
+
+/// Borrow the global codec state.
+///
+/// `wasm32-unknown-unknown` linear memory is single-threaded, and the host
+/// copies every result out synchronously before the next call, so a single
+/// global is sound and reentrancy is impossible. Going through a raw pointer
+/// (`addr_of_mut!`) avoids constructing a reference to the `mut` static itself,
+/// keeping the code clean under the Rust 2024 `static_mut_refs` lint.
+#[inline(always)]
+fn state() -> &'static mut CodecState {
+    unsafe { &mut *core::ptr::addr_of_mut!(STATE) }
+}
 
 // ─── Memory Management ──────────────────────────────────────────────────────
 
@@ -64,12 +86,11 @@ pub unsafe extern "C" fn dealloc(ptr: *mut u8, size: usize) {
 /// For decode: points to u8 array.
 #[no_mangle]
 pub extern "C" fn get_result_ptr() -> *const u8 {
-    unsafe {
-        if LAST_RESULT_IS_U16 {
-            RESULT_U16_BUF.as_ptr() as *const u8
-        } else {
-            RESULT_BUF.as_ptr()
-        }
+    let st = state();
+    if st.last_result_is_u16 {
+        st.result_u16_buf.as_ptr() as *const u8
+    } else {
+        st.result_buf.as_ptr()
     }
 }
 
@@ -78,19 +99,18 @@ pub extern "C" fn get_result_ptr() -> *const u8 {
 /// For decode: number of u8 bytes.
 #[no_mangle]
 pub extern "C" fn get_result_len() -> usize {
-    unsafe {
-        if LAST_RESULT_IS_U16 {
-            RESULT_U16_BUF.len()
-        } else {
-            RESULT_BUF.len()
-        }
+    let st = state();
+    if st.last_result_is_u16 {
+        st.result_u16_buf.len()
+    } else {
+        st.result_buf.len()
     }
 }
 
 /// Get the number of padding bits from the last encode operation.
 #[no_mangle]
 pub extern "C" fn get_padding_bits() -> u32 {
-    unsafe { LAST_PADDING_BITS }
+    state().last_padding_bits
 }
 
 // ─── Encode ──────────────────────────────────────────────────────────────────
@@ -115,11 +135,13 @@ pub unsafe extern "C" fn encode(
     charset_size: u32,
     use_power_of_two: u32,
 ) -> usize {
-    LAST_RESULT_IS_U16 = true;
+    let st = state();
+    st.last_result_is_u16 = true;
+    let out = &mut st.result_u16_buf;
 
     if input_len == 0 {
-        RESULT_U16_BUF.clear();
-        LAST_PADDING_BITS = 0;
+        out.clear();
+        st.last_padding_bits = 0;
         return 0;
     }
 
@@ -134,8 +156,8 @@ pub unsafe extern "C" fn encode(
         (estimated_chunks * 2) as usize
     };
 
-    RESULT_U16_BUF.clear();
-    RESULT_U16_BUF.reserve(estimated_indices);
+    out.clear();
+    out.reserve(estimated_indices);
 
     let mut accumulator: u64 = 0;
     let mut accumulator_bits: u32 = 0;
@@ -150,7 +172,7 @@ pub unsafe extern "C" fn encode(
             while accumulator_bits >= bit_length {
                 accumulator_bits -= bit_length;
                 let index = ((accumulator >> accumulator_bits) & mask) as u16;
-                RESULT_U16_BUF.push(index);
+                out.push(index);
                 accumulator &= (1u64 << accumulator_bits) - 1;
             }
         }
@@ -164,30 +186,30 @@ pub unsafe extern "C" fn encode(
                 let value = (accumulator >> accumulator_bits) as u32;
                 let div = value / charset_size;
                 let rem = value - div * charset_size;
-                RESULT_U16_BUF.push(div as u16);
-                RESULT_U16_BUF.push(rem as u16);
+                out.push(div as u16);
+                out.push(rem as u16);
                 accumulator &= (1u64 << accumulator_bits) - 1;
             }
         }
     }
 
     // Handle remaining bits (padding)
-    LAST_PADDING_BITS = 0;
+    st.last_padding_bits = 0;
     if accumulator_bits > 0 {
-        LAST_PADDING_BITS = bit_length - accumulator_bits;
-        let value = (accumulator << LAST_PADDING_BITS) as u32;
+        st.last_padding_bits = bit_length - accumulator_bits;
+        let value = (accumulator << st.last_padding_bits) as u32;
 
         if is_pot {
-            RESULT_U16_BUF.push(value as u16);
+            out.push(value as u16);
         } else {
             let div = value / charset_size;
             let rem = value - div * charset_size;
-            RESULT_U16_BUF.push(div as u16);
-            RESULT_U16_BUF.push(rem as u16);
+            out.push(div as u16);
+            out.push(rem as u16);
         }
     }
 
-    RESULT_U16_BUF.len()
+    out.len()
 }
 
 // ─── Decode ──────────────────────────────────────────────────────────────────
@@ -214,10 +236,12 @@ pub unsafe extern "C" fn decode(
     use_power_of_two: u32,
     padding_bits: u32,
 ) -> usize {
-    LAST_RESULT_IS_U16 = false;
+    let st = state();
+    st.last_result_is_u16 = false;
+    let out = &mut st.result_buf;
 
     if indices_len == 0 {
-        RESULT_BUF.clear();
+        out.clear();
         return 0;
     }
 
@@ -230,8 +254,8 @@ pub unsafe extern "C" fn decode(
         .saturating_sub(padding_bits as u64)
         / BYTE_BITS as u64) as usize;
 
-    RESULT_BUF.clear();
-    RESULT_BUF.reserve(estimated_bytes + 1);
+    out.clear();
+    out.reserve(estimated_bytes + 1);
 
     let mut accumulator: u64 = 0;
     let mut accumulator_bits: u32 = 0;
@@ -244,7 +268,7 @@ pub unsafe extern "C" fn decode(
             // Validate index range
             if val >= charset_size {
                 // Signal error: return sentinel value
-                RESULT_BUF.clear();
+                out.clear();
                 return 0xFFFFFFFF;
             }
 
@@ -260,7 +284,7 @@ pub unsafe extern "C" fn decode(
             while accumulator_bits >= BYTE_BITS {
                 accumulator_bits -= BYTE_BITS;
                 let byte_val = ((accumulator >> accumulator_bits) & BYTE_MASK as u64) as u8;
-                RESULT_BUF.push(byte_val);
+                out.push(byte_val);
                 accumulator &= (1u64 << accumulator_bits) - 1;
             }
 
@@ -273,14 +297,14 @@ pub unsafe extern "C" fn decode(
 
             // Validate index range
             if v1 >= charset_size || v2 >= charset_size {
-                RESULT_BUF.clear();
+                out.clear();
                 return 0xFFFFFFFF;
             }
 
             let value = v1 * charset_size + v2;
             let max_binary_value = 1u32 << bit_length;
             if value >= max_binary_value {
-                RESULT_BUF.clear();
+                out.clear();
                 return 0xFFFFFFFF;
             }
 
@@ -296,7 +320,7 @@ pub unsafe extern "C" fn decode(
             while accumulator_bits >= BYTE_BITS {
                 accumulator_bits -= BYTE_BITS;
                 let byte_val = ((accumulator >> accumulator_bits) & BYTE_MASK as u64) as u8;
-                RESULT_BUF.push(byte_val);
+                out.push(byte_val);
                 accumulator &= (1u64 << accumulator_bits) - 1;
             }
 
@@ -304,7 +328,7 @@ pub unsafe extern "C" fn decode(
         }
     }
 
-    RESULT_BUF.len()
+    out.len()
 }
 
 // ─── Panic Handler ───────────────────────────────────────────────────────────

@@ -55,6 +55,32 @@ function saltToBuffer(salt: string | Uint8Array | undefined): Buffer {
   return Buffer.from(salt.buffer, salt.byteOffset, salt.byteLength);
 }
 
+/** zlib/brotli의 "출력 버퍼 초과" 계열 에러인지 판별합니다. */
+function isBufferTooLargeError(e: unknown): boolean {
+  const err = e as { message?: string; code?: string };
+  const msg = String(err?.message ?? "").toLowerCase();
+  const code = String(err?.code ?? "");
+  return (
+    code === "ERR_BUFFER_TOO_LARGE" ||
+    msg.includes("output length") ||
+    msg.includes("buffer too large") ||
+    msg.includes("cannot create a buffer larger")
+  );
+}
+
+/**
+ * 압축 해제 중 발생한 에러가 출력 크기 제한 초과면 표준 메시지로 다시 던지고,
+ * 그 외에는 원본 에러를 그대로 전파합니다.
+ */
+function rethrowDecompressLimitError(e: unknown, maxBytes: number, label: string): never {
+  if (isBufferTooLargeError(e)) {
+    throw new Error(`[Ddu64 ${label}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`, {
+      cause: e,
+    });
+  }
+  throw e;
+}
+
 /**
  * PlatformAdapter의 Node.js 구현.
  * 네이티브 Node.js `crypto`와 `zlib` 모듈을 사용하여
@@ -164,20 +190,7 @@ export class NodeAdapter implements PlatformAdapter {
       const result = await inflateRawAsync(Buffer.from(data), options);
       return new Uint8Array(result);
     } catch (e: unknown) {
-      const err = e as { message?: string; code?: string };
-      const msg = String(err?.message ?? "").toLowerCase();
-      const code = String(err?.code ?? "");
-      if (
-        code === "ERR_BUFFER_TOO_LARGE" ||
-        msg.includes("output length") ||
-        msg.includes("buffer too large")
-      ) {
-        throw new Error(
-          `[Ddu64 inflate] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`,
-          { cause: e },
-        );
-      }
-      throw e;
+      rethrowDecompressLimitError(e, maxBytes, "inflate");
     }
   }
 
@@ -190,20 +203,7 @@ export class NodeAdapter implements PlatformAdapter {
         inflateRawSync(Buffer.from(data), { maxOutputLength: maxBytes } as ZlibOptions),
       );
     } catch (e: unknown) {
-      const err = e as { message?: string; code?: string };
-      const msg = String(err?.message ?? "").toLowerCase();
-      const code = String(err?.code ?? "");
-      if (
-        code === "ERR_BUFFER_TOO_LARGE" ||
-        msg.includes("output length") ||
-        msg.includes("buffer too large")
-      ) {
-        throw new Error(
-          `[Ddu64 inflate] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`,
-          { cause: e },
-        );
-      }
-      throw e;
+      rethrowDecompressLimitError(e, maxBytes, "inflate");
     }
   }
 
@@ -239,21 +239,7 @@ export class NodeAdapter implements PlatformAdapter {
       } as BrotliOptions);
       return new Uint8Array(result);
     } catch (e: unknown) {
-      const err = e as { message?: string; code?: string };
-      const msg = String(err?.message ?? "").toLowerCase();
-      const code = String(err?.code ?? "");
-      if (
-        code === "ERR_BUFFER_TOO_LARGE" ||
-        msg.includes("output length") ||
-        msg.includes("buffer too large") ||
-        msg.includes("cannot create a buffer larger")
-      ) {
-        throw new Error(
-          `[Ddu64 brotli] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`,
-          { cause: e },
-        );
-      }
-      throw e;
+      rethrowDecompressLimitError(e, maxBytes, "brotli");
     }
   }
 
@@ -268,21 +254,7 @@ export class NodeAdapter implements PlatformAdapter {
         } as BrotliOptions),
       );
     } catch (e: unknown) {
-      const err = e as { message?: string; code?: string };
-      const msg = String(err?.message ?? "").toLowerCase();
-      const code = String(err?.code ?? "");
-      if (
-        code === "ERR_BUFFER_TOO_LARGE" ||
-        msg.includes("output length") ||
-        msg.includes("buffer too large") ||
-        msg.includes("cannot create a buffer larger")
-      ) {
-        throw new Error(
-          `[Ddu64 brotli] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`,
-          { cause: e },
-        );
-      }
-      throw e;
+      rethrowDecompressLimitError(e, maxBytes, "brotli");
     }
   }
 }

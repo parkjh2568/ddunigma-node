@@ -27,6 +27,9 @@ const PRELOAD_TIMEOUT_MS = 10_000;
 /** 온디맨드 WASM 초기화 타임아웃 (밀리초) */
 const ON_DEMAND_TIMEOUT_MS = 5_000;
 
+/** WASM 바이너리 바이트 로더 */
+export type WasmByteLoader = () => Promise<ArrayBuffer | null>;
+
 // ─── WASM 인스턴스 내보내기 인터페이스 ───────────────────────────────────────
 
 /**
@@ -69,6 +72,9 @@ let initFailed = false;
 
 /** 진행 중인 초기화 Promise (동시 호출 중복 제거) */
 let initPromise: Promise<void> | null = null;
+
+/** 현재 런타임에서 사용할 WASM 바이트 로더 */
+let wasmByteLoader: WasmByteLoader = loadWasmBytesViaFetch;
 
 // ─── WasmCodecImpl ───────────────────────────────────────────────────────────
 
@@ -183,59 +189,17 @@ class WasmCodecImpl implements WasmCodec {
 // ─── WASM 로딩 ───────────────────────────────────────────────────────────────
 
 /**
- * 런타임 환경에 따라 WASM 바이너리 바이트를 로드합니다.
- * 바이너리를 로드할 수 없으면 null을 반환합니다.
+ * fetch 기반 WASM 바이너리 바이트 로더.
  *
- * 로딩 전략:
- * - Node.js: 빌드 산출물 기준 상대 경로에서 파일 시스템 읽기
- * - 브라우저/Deno/Workers: import.meta.url 기준 상대 경로로 fetch
- *
- * 참고: codec.wasm은 빌드 시 dist/에 복사되어야 합니다.
- * 현재는 선택적 가속이므로 WASM 부재 시 JS fallback으로 동작합니다.
+ * 브라우저, Deno, Workers처럼 URL 기반 모듈 로딩을 지원하는 런타임에서 사용합니다.
+ * Node.js 파일시스템 로더는 `WasmCodecNode.ts`에서 별도로 주입합니다.
  */
-async function loadWasmBytes(): Promise<ArrayBuffer | null> {
+async function loadWasmBytesViaFetch(): Promise<ArrayBuffer | null> {
   try {
-    // Node.js: 파일 시스템에서 읽기
-    if (typeof globalThis.process !== "undefined" && globalThis.process.versions?.node) {
-      const { readFile } = await import("node:fs/promises");
-      const { fileURLToPath } = await import("node:url");
-      const { dirname, join } = await import("node:path");
-
-      // 이 모듈 기준 상대 경로 해석
-      const currentDir = dirname(fileURLToPath(import.meta.url));
-      const wasmPath = join(currentDir, "wasm", "codec.wasm");
-
-      // 해석된 경로를 먼저 시도, 그 다음 src/wasm 상대 경로 시도
-      try {
-        const buffer = await readFile(wasmPath);
-        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-      } catch {
-        // 대체 경로 시도 (소스에서 실행 시 또는 이전 배포 레이아웃)
-        const altPath = join(currentDir, "codec.wasm");
-        try {
-          const buffer = await readFile(altPath);
-          return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-        } catch {
-          const legacyPath = join(currentDir, "..", "wasm", "codec.wasm");
-          try {
-            const buffer = await readFile(legacyPath);
-            return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-          } catch {
-            return null;
-          }
-        }
-      }
-    }
-
-    // 브라우저/Deno/Workers: URL에서 fetch
-    if (typeof fetch === "function") {
-      // 모듈 위치 기준 상대 경로로 fetch 시도
-      const response = await fetch(new URL("./wasm/codec.wasm", import.meta.url));
-      if (!response.ok) return null;
-      return await response.arrayBuffer();
-    }
-
-    return null;
+    if (typeof fetch !== "function") return null;
+    const response = await fetch(new URL("./wasm/codec.wasm", import.meta.url));
+    if (!response.ok) return null;
+    return await response.arrayBuffer();
   } catch {
     return null;
   }
@@ -299,7 +263,7 @@ async function initWasm(): Promise<boolean> {
     if (wasmCodecInstance) return true;
     if (initFailed) return false;
 
-    const bytes = await loadWasmBytes();
+    const bytes = await wasmByteLoader();
     if (!bytes) {
       initFailed = true;
       return false;
@@ -447,6 +411,18 @@ export function validateWasmThreshold(threshold: number): number {
     throw new Error(`[Ddu64 config] wasmThreshold must be a finite number, got ${threshold}`);
   }
   return Math.max(MIN_WASM_THRESHOLD, Math.min(MAX_WASM_THRESHOLD, Math.round(threshold)));
+}
+
+/**
+ * WASM 바이트 로더를 교체합니다. 플랫폼별 진입점에서만 사용합니다.
+ * @internal
+ */
+export function _setWasmByteLoader(loader: WasmByteLoader): void {
+  wasmByteLoader = loader;
+  if (!wasmCodecInstance && !initPromise) {
+    initAttempted = false;
+    initFailed = false;
+  }
 }
 
 /**

@@ -219,12 +219,6 @@ export function normalizeCompressionLevel(
 
 // ─── 체크섬 추출 (re-export from wireFormat) ─────────────────────────────────
 
-/**
- * @deprecated wireFormat.ts의 extractChecksum을 직접 사용하세요.
- * 하위 호환성을 위해 re-export합니다.
- */
-export { CHECKSUM_MARKER, extractChecksum } from "./wireFormat.js";
-
 // ─── 텍스트 인코딩 유틸리티 ──────────────────────────────────────────────────
 
 /** 공유 TextEncoder 인스턴스 (상태 없음, 재사용 안전) */

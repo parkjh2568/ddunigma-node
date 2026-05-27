@@ -44,6 +44,10 @@ export interface CharSetConfig {
   paddingChar: string;
   /** 패딩 문자 반복 방식 사용 여부 */
   useRepeatPadding?: boolean;
+  /** 반복 패딩 시 패딩 문자 1개가 나타내는 비트 수 (기본값: 2) */
+  bitsPerPadChar?: number;
+  /** 2의 제곱수 모드 강제 여부 (false로 설정하면 인덱스 쌍 출력 모드 사용) */
+  usePowerOfTwo?: boolean;
 }
 
 export interface CharSetInfo {
@@ -125,9 +129,20 @@ export interface DduEncodeStats {
 export type KeyDerivationAlgorithm = "sha256" | "pbkdf2";
 
 export interface KeyDerivationOptions {
-  /** Key derivation algorithm. `sha256` preserves legacy compatibility. */
+  /**
+   * Key derivation algorithm. Defaults to `sha256` for legacy compatibility.
+   *
+   * ⚠️ Security: the default `sha256` is a single, unsalted hash and is fast to
+   * brute-force. For low-entropy keys (human passwords) protecting production
+   * data, use `pbkdf2` with an application-specific `salt`. Keep `sha256` only
+   * for high-entropy keys (e.g. 32 random bytes) or legacy data compatibility.
+   */
   algorithm?: KeyDerivationAlgorithm;
-  /** Salt for PBKDF2. Provide a stable value to decode across instances. */
+  /**
+   * Salt for PBKDF2. Provide a stable, application-specific value to decode
+   * across instances. If omitted, a fixed default salt is used (weaker — set
+   * your own when security matters).
+   */
   salt?: string | Uint8Array;
   /** PBKDF2 iteration count. Positive values below 10000 are clamped to 10000. */
   iterations?: number;
@@ -175,7 +190,10 @@ export interface DduConstructorOptions extends DduOptions {
   paddingChar?: string;
   /** 필요 문자 수 */
   requiredLength?: number;
-  /** 비트 길이 */
+  /**
+   * 비트 길이.
+   * @deprecated 무시되는 옵션입니다. 심볼당 비트 수는 charset 길이에서 자동 계산됩니다.
+   */
   bitLength?: number;
   /** 2의 제곱수 강제 여부 */
   usePowerOfTwo?: boolean;

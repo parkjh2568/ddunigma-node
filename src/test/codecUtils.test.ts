@@ -8,12 +8,11 @@ import {
   combineCoda,
   buildCodaCharset,
   normalizeCompressionLevel,
-  extractChecksum,
   stringToBytes,
   bytesToString,
-  CHECKSUM_MARKER,
   URL_SAFE_CONFLICT_CHARS,
 } from "../core/codecUtils";
+import { extractChecksum, CHECKSUM_MARKER } from "../core/wireFormat";
 
 describe("core/codecUtils", () => {
   describe("calculateCRC32", () => {

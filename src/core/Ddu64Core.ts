@@ -11,7 +11,15 @@ import {
   createBitPackConfig,
   type BitPackConfig,
 } from "./BitPack.js";
-import { parseFooter, buildFooter, extractChecksum } from "./wireFormat.js";
+import {
+  parseFooter,
+  buildFooter,
+  extractChecksum,
+  COMPRESS_MARKER,
+  BROTLI_MARKER,
+  ENCRYPT_MARKER,
+  PIPELINE_V3_MARKER,
+} from "./wireFormat.js";
 import {
   calculateCRC32,
   toUrlSafe,
@@ -48,6 +56,8 @@ import {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const BYTE_BITS = 8;
+/** 인덱스 배열을 일반 배열 대신 Uint16Array로 할당하기 시작하는 길이 임계값 (메모리/속도 휴리스틱) */
+const TYPED_INDICES_THRESHOLD = 4096;
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 const STANDARD_BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -69,6 +79,9 @@ export class Ddu64Core {
   /** 인코딩에 사용되는 문자 */
   protected readonly dduChar: string[];
 
+  /** 인코딩 문자의 코드포인트 배열 (String.fromCharCode 배치 호출용) */
+  private readonly dduCharCodes: Uint16Array;
+
   /** 패딩 문자 */
   protected readonly paddingChar: string;
 
@@ -77,9 +90,6 @@ export class Ddu64Core {
 
   /** charset 크기가 2의 제곱수인지 여부 */
   protected readonly usePowerOfTwo: boolean;
-
-  /** 인코딩에 사용되는 유효 비트 길이 */
-  private readonly effectiveBitLength: number;
 
   /** 문자 → 인덱스 역방향 룩업 맵 */
   protected readonly dduBinaryLookup: Map<string, number> = new Map();
@@ -125,6 +135,9 @@ export class Ddu64Core {
 
   /** 반복 패딩 모드 사용 여부 */
   private readonly useRepeatPadding: boolean;
+
+  /** 반복 패딩 시 패딩 문자 1개가 나타내는 비트 수 */
+  private readonly bitsPerPadChar: number;
 
   /** BitPack 설정 */
   private readonly bitPackConfig: BitPackConfig;
@@ -200,15 +213,30 @@ export class Ddu64Core {
 
     // 비트 길이 계산
     const dduLength = this.dduChar.length;
-    this.usePowerOfTwo = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
+    const autoIsPow2 = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
+    // preset에서 명시적 usePowerOfTwo가 있으면 존중, 없으면 dduOptions → 자동 감지 순서.
+    // 단, dduOptions.usePowerOfTwo=true여도 charset 크기가 2의 제곱수가 아니면 무시.
+    const requestedPow2 = dduOptions?.usePowerOfTwo;
+    this.usePowerOfTwo =
+      initial.usePowerOfTwo ??
+      (requestedPow2 !== undefined ? requestedPow2 && autoIsPow2 : autoIsPow2);
 
-    const computedBitLength = Math.ceil(Math.log2(dduLength));
-    this.bitLength = this.usePowerOfTwo ? Math.floor(Math.log2(dduLength)) : computedBitLength;
-    this.effectiveBitLength = this.usePowerOfTwo ? this.bitLength : computedBitLength;
+    // preset에서 명시적 bitLength + usePowerOfTwo 조합이 있으면 그것을 사용 (V1 Python 호환용).
+    const presetBitLength =
+      initial.isPredefined && initial.usePowerOfTwo !== undefined ? initial.bitLength : undefined;
+    this.bitLength =
+      presetBitLength ??
+      (this.usePowerOfTwo ? Math.floor(Math.log2(dduLength)) : Math.ceil(Math.log2(dduLength)));
 
     // 역방향 룩업 맵
     for (let i = 0; i < dduLength; i++) {
       this.dduBinaryLookup.set(this.dduChar[i], i);
+    }
+
+    // 코드포인트 배열 (encodeBytes에서 String.fromCharCode 배치 호출용)
+    this.dduCharCodes = new Uint16Array(dduLength);
+    for (let i = 0; i < dduLength; i++) {
+      this.dduCharCodes[i] = this.dduChar[i].charCodeAt(0);
     }
 
     // 커스텀 charset 조합 검증
@@ -239,6 +267,7 @@ export class Ddu64Core {
       this.defaultCompressionAlgorithm,
     );
     this.useRepeatPadding = dduOptions?.useRepeatPadding ?? initial.useRepeatPadding ?? false;
+    this.bitsPerPadChar = initial.bitsPerPadChar ?? 2;
 
     // 난독화
     this.defaultObfuscate = dduOptions?.obfuscate ?? false;
@@ -247,7 +276,11 @@ export class Ddu64Core {
     }
 
     // BitPack 설정
-    this.bitPackConfig = createBitPackConfig(dduLength);
+    this.bitPackConfig = {
+      bitLength: this.bitLength,
+      usePowerOfTwo: this.usePowerOfTwo,
+      charsetSize: dduLength,
+    };
     this.wasmThreshold = validateWasmThreshold(dduOptions?.wasmThreshold ?? DEFAULT_WASM_THRESHOLD);
     this.canUseNativeBase64 = this.usePowerOfTwo && this.dduChar.length === 64;
     if (this.canUseNativeBase64) {
@@ -293,74 +326,12 @@ export class Ddu64Core {
    * @returns 디코딩된 바이트
    */
   decodeToUint8Array(input: string, options?: DduOptions): Uint8Array {
-    const shouldChecksum = options?.checksum ?? this.defaultChecksum;
-    const allowInternalDecompress = options?.compress !== false;
-    const allowInternalDecrypt = options?.encrypt !== false;
-    let workingInput = input;
-    this.reportProgress(options, {
-      processedBytes: 0,
-      totalBytes: input.length,
-      percent: 0,
-      stage: "start",
-    });
+    const prep = this.decodePrelude(input, options);
+    const { extractedChecksum, compressionAlgorithm, isEncrypted, pipelineVersion } = prep;
+    const { allowInternalDecompress, allowInternalDecrypt } = prep;
+    let decoded = prep.decoded;
 
-    // 청크 제거
-    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
-    workingInput = removeChunks(workingInput, chunkSeparator);
-
-    // URL-Safe 역변환
-    if (this.urlSafe) {
-      workingInput = fromUrlSafe(workingInput);
-    }
-
-    // 체크섬 추출
-    let extractedChecksum: string | null = null;
-    if (shouldChecksum) {
-      const result = extractChecksum(workingInput);
-      extractedChecksum = result.checksum;
-      workingInput = result.data;
-    }
-
-    // 역난독화 (청크/URL-safe/체크섬 제거 후, 푸터 파싱 전)
-    if (this.shouldObfuscate(options)) {
-      workingInput = this.getObfuscationLayer().deobfuscate(workingInput);
-    }
-
-    // 푸터 파싱
-    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted, pipelineVersion } =
-      parseFooter(workingInput, this.paddingChar, this.effectiveBitLength);
-
-    if (isEncrypted && allowInternalDecrypt && !this.encryptionKey) {
-      throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
-    }
-
-    // 정렬 확인
-    this.assertEncodedInputAligned(cleanedInput);
-    this.assertCanonicalPadding(cleanedInput, paddingBits);
-
-    // 크기 확인
-    const maxDecodedBytes = this.normalizeLimit(
-      options?.maxDecodedBytes,
-      this.defaultMaxDecodedBytes,
-      true,
-      "maxDecodedBytes",
-    );
-    const estimatedDecodedBytes = this.estimateDecodedBytes(cleanedInput.length, paddingBits);
-    if (estimatedDecodedBytes > maxDecodedBytes) {
-      throw new Error(
-        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`,
-      );
-    }
-
-    // BitPack으로 디코딩
-    this.reportProgress(options, {
-      processedBytes: cleanedInput.length,
-      totalBytes: input.length,
-      percent: 30,
-      stage: "decode",
-    });
-    let decoded = this.decodeChars(cleanedInput, paddingBits);
-
+    // v3 파이프라인: 비트팩 해제 직후 복호화
     if (pipelineVersion === 3 && isEncrypted && this.encryptionKey && allowInternalDecrypt) {
       this.reportProgress(options, {
         processedBytes: decoded.length,
@@ -373,9 +344,13 @@ export class Ddu64Core {
 
     // 압축 해제
     if (
-      compressionAlgorithm &&
-      allowInternalDecompress &&
-      (pipelineVersion === 2 || !isEncrypted || allowInternalDecrypt)
+      this.shouldDecompress(
+        compressionAlgorithm,
+        allowInternalDecompress,
+        isEncrypted,
+        pipelineVersion,
+        allowInternalDecrypt,
+      )
     ) {
       const maxDecompressedBytes = this.normalizeLimit(
         options?.maxDecompressedBytes,
@@ -389,26 +364,20 @@ export class Ddu64Core {
         percent: 70,
         stage: "decompress",
       });
-      decoded = this.decompressSync(decoded, compressionAlgorithm, maxDecompressedBytes);
+      decoded = this.decompressSync(decoded, compressionAlgorithm!, maxDecompressedBytes);
     }
 
     // 체크섬 검증
-    if (extractedChecksum && (pipelineVersion === 2 || !isEncrypted || allowInternalDecrypt)) {
-      this.reportProgress(options, {
-        processedBytes: decoded.length,
-        totalBytes: decoded.length,
-        percent: 85,
-        stage: "checksum",
-      });
-      const calculatedChecksum = calculateCRC32(decoded);
-      if (calculatedChecksum !== extractedChecksum) {
-        throw new Error(
-          `[Ddu64 decode] Checksum mismatch. Expected: ${extractedChecksum}, Got: ${calculatedChecksum}`,
-        );
-      }
-    }
+    this.verifyDecodedChecksum(
+      decoded,
+      extractedChecksum,
+      isEncrypted,
+      pipelineVersion,
+      allowInternalDecrypt,
+      options,
+    );
 
-    // 복호화
+    // v2 파이프라인: 압축 해제/체크섬 후 복호화
     if (pipelineVersion === 2 && isEncrypted && this.encryptionKey && allowInternalDecrypt) {
       this.reportProgress(options, {
         processedBytes: decoded.length,
@@ -499,32 +468,16 @@ export class Ddu64Core {
       isEncrypted = true;
     }
 
-    // 인코딩 (비트 패킹 단계)
-    this.reportProgress(options, {
-      processedBytes: workingData.length,
-      totalBytes: workingData.length,
-      percent: 70,
-      stage: "encode",
-    });
-    let result = this.encodeBytes(workingData, compressionAlgorithm, isEncrypted, options);
-
-    // 후처리 (난독화, 체크섬, URL-safe, 청킹)
-    result = this.applyPostEncoding(
-      result,
-      options,
+    return this.finalizeEncode(
+      workingData,
+      compressionAlgorithm,
+      isEncrypted,
       checksum,
       shouldChecksum,
       chunkSize,
       chunkSeparator,
+      options,
     );
-
-    this.reportProgress(options, {
-      processedBytes: workingData.length,
-      totalBytes: workingData.length,
-      percent: 100,
-      stage: "done",
-    });
-    return result;
   }
 
   /**
@@ -539,74 +492,12 @@ export class Ddu64Core {
    * 비동기 Uint8Array 디코딩 - 브라우저를 포함한 모든 런타임에서 동작합니다.
    */
   async decodeToUint8ArrayAsync(input: string, options?: DduOptions): Promise<Uint8Array> {
-    const shouldChecksum = options?.checksum ?? this.defaultChecksum;
-    const allowInternalDecompress = options?.compress !== false;
-    const allowInternalDecrypt = options?.encrypt !== false;
-    let workingInput = input;
-    this.reportProgress(options, {
-      processedBytes: 0,
-      totalBytes: input.length,
-      percent: 0,
-      stage: "start",
-    });
+    const prep = this.decodePrelude(input, options);
+    const { extractedChecksum, compressionAlgorithm, isEncrypted, pipelineVersion } = prep;
+    const { allowInternalDecompress, allowInternalDecrypt } = prep;
+    let decoded = prep.decoded;
 
-    // 청크 제거
-    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
-    workingInput = removeChunks(workingInput, chunkSeparator);
-
-    // URL-Safe 역변환
-    if (this.urlSafe) {
-      workingInput = fromUrlSafe(workingInput);
-    }
-
-    // 체크섬 추출
-    let extractedChecksum: string | null = null;
-    if (shouldChecksum) {
-      const result = extractChecksum(workingInput);
-      extractedChecksum = result.checksum;
-      workingInput = result.data;
-    }
-
-    // 역난독화 (청크/URL-safe/체크섬 제거 후, 푸터 파싱 전)
-    if (this.shouldObfuscate(options)) {
-      workingInput = this.getObfuscationLayer().deobfuscate(workingInput);
-    }
-
-    // 푸터 파싱
-    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted, pipelineVersion } =
-      parseFooter(workingInput, this.paddingChar, this.effectiveBitLength);
-
-    if (isEncrypted && allowInternalDecrypt && !this.encryptionKey) {
-      throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
-    }
-
-    // 정렬 확인
-    this.assertEncodedInputAligned(cleanedInput);
-    this.assertCanonicalPadding(cleanedInput, paddingBits);
-
-    // 크기 확인
-    const maxDecodedBytes = this.normalizeLimit(
-      options?.maxDecodedBytes,
-      this.defaultMaxDecodedBytes,
-      true,
-      "maxDecodedBytes",
-    );
-    const estimatedDecodedBytes = this.estimateDecodedBytes(cleanedInput.length, paddingBits);
-    if (estimatedDecodedBytes > maxDecodedBytes) {
-      throw new Error(
-        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`,
-      );
-    }
-
-    // 디코딩 (비트 패킹 단계)
-    this.reportProgress(options, {
-      processedBytes: cleanedInput.length,
-      totalBytes: input.length,
-      percent: 30,
-      stage: "decode",
-    });
-    let decoded = this.decodeChars(cleanedInput, paddingBits);
-
+    // v3 파이프라인: 비트팩 해제 직후 복호화
     if (pipelineVersion === 3 && isEncrypted && this.encryptionKey && allowInternalDecrypt) {
       const adapter = await this.getAdapterAsync();
       const keyHash = await this.getKeyHashAsync(adapter);
@@ -621,9 +512,13 @@ export class Ddu64Core {
 
     // 압축 해제
     if (
-      compressionAlgorithm &&
-      allowInternalDecompress &&
-      (pipelineVersion === 2 || !isEncrypted || allowInternalDecrypt)
+      this.shouldDecompress(
+        compressionAlgorithm,
+        allowInternalDecompress,
+        isEncrypted,
+        pipelineVersion,
+        allowInternalDecrypt,
+      )
     ) {
       const maxDecompressedBytes = this.normalizeLimit(
         options?.maxDecompressedBytes,
@@ -632,47 +527,35 @@ export class Ddu64Core {
         "maxDecompressedBytes",
       );
       const adapter = await this.getAdapterAsync();
+      this.reportProgress(options, {
+        processedBytes: decoded.length,
+        totalBytes: decoded.length,
+        percent: 70,
+        stage: "decompress",
+      });
       if (compressionAlgorithm === "brotli") {
         if (!adapter.brotliDecompress) {
           throw new Error(
             "[Ddu64 decompress] Brotli decompression is unavailable in the current runtime.",
           );
         }
-        this.reportProgress(options, {
-          processedBytes: decoded.length,
-          totalBytes: decoded.length,
-          percent: 70,
-          stage: "decompress",
-        });
         decoded = await adapter.brotliDecompress(decoded, maxDecompressedBytes);
       } else {
-        this.reportProgress(options, {
-          processedBytes: decoded.length,
-          totalBytes: decoded.length,
-          percent: 70,
-          stage: "decompress",
-        });
         decoded = await adapter.inflate(decoded, maxDecompressedBytes);
       }
     }
 
     // 체크섬 검증
-    if (extractedChecksum && (pipelineVersion === 2 || !isEncrypted || allowInternalDecrypt)) {
-      this.reportProgress(options, {
-        processedBytes: decoded.length,
-        totalBytes: decoded.length,
-        percent: 85,
-        stage: "checksum",
-      });
-      const calculatedChecksum = calculateCRC32(decoded);
-      if (calculatedChecksum !== extractedChecksum) {
-        throw new Error(
-          `[Ddu64 decode] Checksum mismatch. Expected: ${extractedChecksum}, Got: ${calculatedChecksum}`,
-        );
-      }
-    }
+    this.verifyDecodedChecksum(
+      decoded,
+      extractedChecksum,
+      isEncrypted,
+      pipelineVersion,
+      allowInternalDecrypt,
+      options,
+    );
 
-    // 복호화
+    // v2 파이프라인: 압축 해제/체크섬 후 복호화
     if (pipelineVersion === 2 && isEncrypted && this.encryptionKey && allowInternalDecrypt) {
       const adapter = await this.getAdapterAsync();
       const keyHash = await this.getKeyHashAsync(adapter);
@@ -808,7 +691,34 @@ export class Ddu64Core {
       isEncrypted = true;
     }
 
-    // 인코딩
+    const encoded = this.finalizeEncode(
+      workingData,
+      compressionAlgorithm,
+      isEncrypted,
+      checksum,
+      shouldChecksum,
+      chunkSize,
+      chunkSeparator,
+      options,
+    );
+    return { encoded, compressedSize };
+  }
+
+  /**
+   * 인코딩 마무리: 비트팩 인코딩 + 후처리(난독화/체크섬/URL-safe/청킹).
+   * 동기/비동기 인코딩에서 공유하는 순수 동기 단계입니다.
+   */
+  private finalizeEncode(
+    workingData: Uint8Array,
+    compressionAlgorithm: "deflate" | "brotli" | undefined,
+    isEncrypted: boolean,
+    checksum: string,
+    shouldChecksum: boolean,
+    chunkSize: number | undefined,
+    chunkSeparator: string,
+    options: DduOptions | undefined,
+  ): string {
+    // 인코딩 (비트 패킹 단계)
     this.reportProgress(options, {
       processedBytes: workingData.length,
       totalBytes: workingData.length,
@@ -833,7 +743,7 @@ export class Ddu64Core {
       percent: 100,
       stage: "done",
     });
-    return { encoded: result, compressedSize };
+    return result;
   }
 
   /**
@@ -904,10 +814,24 @@ export class Ddu64Core {
       }
     }
 
-    // 인덱스를 문자로 매핑
-    const parts: string[] = new Array(indices.length);
-    for (let i = 0; i < indices.length; i++) {
-      parts[i] = this.dduChar[indices[i]];
+    // 인덱스를 문자로 매핑 (코드포인트 배열 → String.fromCharCode 배치 호출)
+    const len = indices.length;
+    const codes = new Uint16Array(len);
+    for (let i = 0; i < len; i++) {
+      codes[i] = this.dduCharCodes[indices[i]];
+    }
+
+    // String.fromCharCode.apply는 스택 크기 제한이 있으므로 청크 단위로 호출
+    let payload: string;
+    if (len <= 8192) {
+      payload = String.fromCharCode.apply(null, codes as unknown as number[]);
+    } else {
+      const chunks: string[] = [];
+      for (let offset = 0; offset < len; offset += 8192) {
+        const slice = codes.subarray(offset, Math.min(offset + 8192, len));
+        chunks.push(String.fromCharCode.apply(null, slice as unknown as number[]));
+      }
+      payload = chunks.join("");
     }
 
     // 푸터 생성
@@ -919,10 +843,154 @@ export class Ddu64Core {
           isEncrypted: !!isEncrypted,
           paddingChar: this.paddingChar,
           useRepeatPadding: this.useRepeatPadding && !compressionAlgorithm && !isEncrypted,
+          bitsPerPadChar: this.bitsPerPadChar,
           pipelineVersion: isEncrypted ? 3 : 2,
         });
 
-    return parts.join("") + footer;
+    return payload + footer;
+  }
+
+  /**
+   * 디코딩 전처리: 동기/비동기 디코딩에서 공통으로 쓰는 순수 동기 단계.
+   * 청크 제거 → URL-safe 역변환 → 체크섬 추출 → 역난독화 → 푸터 파싱 →
+   * 검증(정렬/패딩/크기) → 비트팩 해제까지 수행합니다.
+   */
+  private decodePrelude(
+    input: string,
+    options: DduOptions | undefined,
+  ): {
+    decoded: Uint8Array;
+    extractedChecksum: string | null;
+    compressionAlgorithm?: "deflate" | "brotli";
+    isEncrypted: boolean;
+    pipelineVersion: 2 | 3;
+    allowInternalDecompress: boolean;
+    allowInternalDecrypt: boolean;
+  } {
+    const shouldChecksum = options?.checksum ?? this.defaultChecksum;
+    const allowInternalDecompress = options?.compress !== false;
+    const allowInternalDecrypt = options?.encrypt !== false;
+    let workingInput = input;
+    this.reportProgress(options, {
+      processedBytes: 0,
+      totalBytes: input.length,
+      percent: 0,
+      stage: "start",
+    });
+
+    // 청크 제거
+    const chunkSeparator = options?.chunkSeparator ?? this.defaultChunkSeparator;
+    workingInput = removeChunks(workingInput, chunkSeparator);
+
+    // URL-Safe 역변환
+    if (this.urlSafe) {
+      workingInput = fromUrlSafe(workingInput);
+    }
+
+    // 체크섬 추출
+    let extractedChecksum: string | null = null;
+    if (shouldChecksum) {
+      const result = extractChecksum(workingInput);
+      extractedChecksum = result.checksum;
+      workingInput = result.data;
+    }
+
+    // 역난독화 (청크/URL-safe/체크섬 제거 후, 푸터 파싱 전)
+    if (this.shouldObfuscate(options)) {
+      workingInput = this.getObfuscationLayer().deobfuscate(workingInput);
+    }
+
+    // 푸터 파싱
+    const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted, pipelineVersion } =
+      parseFooter(workingInput, this.paddingChar, this.bitLength, this.bitsPerPadChar);
+
+    if (isEncrypted && allowInternalDecrypt && !this.encryptionKey) {
+      throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
+    }
+
+    // 정렬 확인
+    this.assertEncodedInputAligned(cleanedInput);
+    this.assertCanonicalPadding(cleanedInput, paddingBits);
+
+    // 크기 확인
+    const maxDecodedBytes = this.normalizeLimit(
+      options?.maxDecodedBytes,
+      this.defaultMaxDecodedBytes,
+      true,
+      "maxDecodedBytes",
+    );
+    const estimatedDecodedBytes = this.estimateDecodedBytes(cleanedInput.length, paddingBits);
+    if (estimatedDecodedBytes > maxDecodedBytes) {
+      throw new Error(
+        `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`,
+      );
+    }
+
+    // BitPack으로 디코딩
+    this.reportProgress(options, {
+      processedBytes: cleanedInput.length,
+      totalBytes: input.length,
+      percent: 30,
+      stage: "decode",
+    });
+    const decoded = this.decodeChars(cleanedInput, paddingBits);
+
+    return {
+      decoded,
+      extractedChecksum,
+      compressionAlgorithm,
+      isEncrypted,
+      pipelineVersion,
+      allowInternalDecompress,
+      allowInternalDecrypt,
+    };
+  }
+
+  /**
+   * 압축 해제 단계를 실행해야 하는지 결정합니다.
+   * (압축 마커 존재 + 내부 압축 해제 허용 + 파이프라인 단계 조건)
+   */
+  private shouldDecompress(
+    compressionAlgorithm: "deflate" | "brotli" | undefined,
+    allowInternalDecompress: boolean,
+    isEncrypted: boolean,
+    pipelineVersion: 2 | 3,
+    allowInternalDecrypt: boolean,
+  ): compressionAlgorithm is "deflate" | "brotli" {
+    return (
+      !!compressionAlgorithm &&
+      allowInternalDecompress &&
+      (pipelineVersion === 2 || !isEncrypted || allowInternalDecrypt)
+    );
+  }
+
+  /**
+   * 추출된 체크섬이 있으면 복원된 데이터의 CRC32와 비교 검증합니다.
+   * 동기/비동기 디코딩에서 공유하는 순수 동기 단계입니다.
+   */
+  private verifyDecodedChecksum(
+    decoded: Uint8Array,
+    extractedChecksum: string | null,
+    isEncrypted: boolean,
+    pipelineVersion: 2 | 3,
+    allowInternalDecrypt: boolean,
+    options: DduOptions | undefined,
+  ): void {
+    if (!extractedChecksum) return;
+    if (!(pipelineVersion === 2 || !isEncrypted || allowInternalDecrypt)) return;
+
+    this.reportProgress(options, {
+      processedBytes: decoded.length,
+      totalBytes: decoded.length,
+      percent: 85,
+      stage: "checksum",
+    });
+    const calculatedChecksum = calculateCRC32(decoded);
+    if (calculatedChecksum !== extractedChecksum) {
+      throw new Error(
+        `[Ddu64 decode] Checksum mismatch. Expected: ${extractedChecksum}, Got: ${calculatedChecksum}`,
+      );
+    }
   }
 
   /**
@@ -936,7 +1004,7 @@ export class Ddu64Core {
     if (nativeDecoded) return nativeDecoded;
 
     const indices =
-      inputLen >= this.wasmThreshold || inputLen >= 4096
+      inputLen >= this.wasmThreshold || inputLen >= TYPED_INDICES_THRESHOLD
         ? new Uint16Array(inputLen)
         : new Array<number>(inputLen);
 
@@ -973,7 +1041,9 @@ export class Ddu64Core {
     }
 
     const indices =
-      payloadLength >= 4096 ? new Uint16Array(payloadLength) : new Array<number>(payloadLength);
+      payloadLength >= TYPED_INDICES_THRESHOLD
+        ? new Uint16Array(payloadLength)
+        : new Array<number>(payloadLength);
     for (let i = 0; i < payloadLength; i++) {
       indices[i] = BASE64_INDEX_LOOKUP[base64[i]];
     }
@@ -1163,12 +1233,18 @@ export class Ddu64Core {
    */
   private getObfuscationLayer(): ObfuscationLayer {
     if (!this._obfuscationLayer) {
-      // 완전한 알파벳 구성: charset + 패딩 + 모든 가능한 푸터 문자
+      // 완전한 알파벳 구성: charset + 패딩 + 모든 가능한 푸터 문자.
+      // 난독화는 체크섬/URL-safe/청킹 이전 단계에 적용되므로(아래 applyPostEncoding 순서 참조)
+      // 알파벳에는 페이로드 문자와 푸터 마커만 포함하면 됩니다.
       const alphabetSet = new Set<string>(this.dduChar);
       alphabetSet.add(this.paddingChar);
-      // 푸터 마커 문자: ELYSIA, GRISEO, ENC, V3, 숫자 0-7
-      const footerChars = "ELYSIAGRONCV01234567";
-      for (const ch of footerChars) {
+      // 푸터 마커 문자를 wireFormat 상수에서 직접 도출 (수동 동기화 제거)
+      const footerMarkers = COMPRESS_MARKER + BROTLI_MARKER + ENCRYPT_MARKER + PIPELINE_V3_MARKER;
+      for (const ch of footerMarkers) {
+        alphabetSet.add(ch);
+      }
+      // paddingBits 십진 숫자 (0 ~ bitLength-1, 최대 두 자리)
+      for (const ch of "0123456789") {
         alphabetSet.add(ch);
       }
       const alphabet = [...alphabetSet];
@@ -1228,12 +1304,12 @@ export class Ddu64Core {
 
   private estimateDecodedBytes(cleanedInputLen: number, paddingBits: number): number {
     if (cleanedInputLen === 0) return 0;
-    if (paddingBits < 0 || paddingBits >= this.effectiveBitLength) {
+    if (paddingBits < 0 || paddingBits >= this.bitLength) {
       throw new Error(`[Ddu64 decode] Invalid padding bits: ${paddingBits}`);
     }
     const chunkSize = this.usePowerOfTwo ? 1 : 2;
     const numChunks = Math.ceil(cleanedInputLen / chunkSize);
-    const bits = numChunks * this.effectiveBitLength - paddingBits;
+    const bits = numChunks * this.bitLength - paddingBits;
     if (bits < 0) throw new Error(`[Ddu64 decode] Invalid decoded bit length`);
     return Math.ceil(bits / BYTE_BITS);
   }

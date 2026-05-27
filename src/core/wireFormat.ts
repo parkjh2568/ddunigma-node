@@ -79,17 +79,19 @@ export interface FooterParseResult {
  * 메타데이터를 포함합니다. 문자열 끝에서 역방향으로 파싱됩니다:
  *
  * 1. Node 스타일 푸터: `{payload}{padChar}[ELYSIA|GRISEO][ENC]{paddingBits}`
- * 2. V2 반복 패딩: `{payload}{padChar}{padChar}...` (각 패딩 = 2비트)
+ * 2. V2 반복 패딩: `{payload}{padChar}{padChar}...` (각 패딩 문자 = bitsPerPadChar 비트)
  *
  * @param input - 푸터를 포함한 전체 인코딩 문자열
  * @param paddingChar - 인코더가 사용하는 패딩 문자
  * @param effectiveBitLength - charset의 유효 비트 길이 (charset 크기의 log2)
+ * @param bitsPerPadChar - 반복 패딩 시 패딩 문자 1개가 나타내는 비트 수 (기본값: 2)
  * @returns 파싱된 푸터 정보
  */
 export function parseFooter(
   input: string,
   paddingChar: string,
   effectiveBitLength: number,
+  bitsPerPadChar: number = 2,
 ): FooterParseResult {
   const inputLen = input.length;
   const padLen = paddingChar.length;
@@ -179,7 +181,7 @@ export function parseFooter(
     }
   }
 
-  // 단계 2: V2 반복 패딩 시도 (후행 padChar, 각각 2비트를 나타냄)
+  // 단계 2: V2 반복 패딩 시도 (후행 padChar, 각각 bitsPerPadChar 비트를 나타냄)
   if (input.endsWith(paddingChar)) {
     let trailingPadCount = 0;
     let pos = inputLen;
@@ -193,7 +195,7 @@ export function parseFooter(
     }
 
     if (trailingPadCount > 0) {
-      const paddingBits = trailingPadCount * 2;
+      const paddingBits = trailingPadCount * bitsPerPadChar;
       if (paddingBits < effectiveBitLength) {
         return {
           cleanedInput: input.substring(0, pos),
@@ -350,8 +352,10 @@ export interface FooterOptions {
   isEncrypted: boolean;
   /** 패딩 문자 */
   paddingChar: string;
-  /** V2 반복 패딩 모드 사용 여부 (padChar를 paddingBits/2회 반복) */
+  /** V2 반복 패딩 모드 사용 여부 (padChar를 반복) */
   useRepeatPadding?: boolean;
+  /** 반복 패딩 시 패딩 문자 1개가 나타내는 비트 수 (기본값: 2) */
+  bitsPerPadChar?: number;
   /** v3 파이프라인 마커 사용 여부 */
   pipelineVersion?: 2 | 3;
 }
@@ -374,6 +378,7 @@ export function buildFooter(options: FooterOptions): string {
     isEncrypted,
     paddingChar,
     useRepeatPadding,
+    bitsPerPadChar = 2,
     pipelineVersion = 2,
   } = options;
 
@@ -389,9 +394,9 @@ export function buildFooter(options: FooterOptions): string {
     !isEncrypted &&
     pipelineVersion === 2 &&
     paddingBits > 0 &&
-    paddingBits % 2 === 0
+    paddingBits % bitsPerPadChar === 0
   ) {
-    const repeatCount = paddingBits >> 1; // paddingBits / 2
+    const repeatCount = paddingBits / bitsPerPadChar;
     return paddingChar.repeat(repeatCount);
   }
 
