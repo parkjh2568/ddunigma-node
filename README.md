@@ -51,7 +51,7 @@ const input = new Uint8Array([0, 1, 127, 128, 255]);
 
 const encoded = ddu.encode(input);
 const bytes = ddu.decodeToUint8Array(encoded);
-const buffer = ddu.decodeToBuffer(encoded); // Node.js Buffer
+const buffer = ddu.decodeToBuffer(encoded); // Node.js entry only
 ```
 
 ## Presets
@@ -127,6 +127,8 @@ const decoded = ddu.decode(encoded);
 ```
 
 압축은 원본보다 작아질 때만 적용됩니다. 압축 결과가 더 크면 비압축으로 저장됩니다.
+브라우저 진입점은 `deflate-raw`를 지원하는 CompressionStream/DecompressionStream 런타임에서 압축을 사용합니다.
+브라우저 Brotli는 런타임 지원 여부를 feature detection으로 확인하며, Web API 특성상 `compressionLevel`은 적용되지 않을 수 있습니다.
 
 ## Encryption
 
@@ -150,6 +152,9 @@ const dduPbkdf2 = new Ddu64({
   },
 });
 ```
+
+PBKDF2 `iterations`는 기본값이 `210_000`이며, `10_000` 미만의 양수는 `10_000`으로 보정됩니다.
+0 이하 또는 유한하지 않은 값은 기본값으로 대체됩니다.
 
 ## Checksum
 
@@ -231,7 +236,7 @@ const decodedStream = encodedStream.pipeThrough(createReadableDecodeStream(ddu))
 ```typescript
 import { Ddu64, preloadWasm } from "@ddunigma/node";
 
-await preloadWasm(); // 선택적 사전 로드
+await preloadWasm(); // 동기 encode/decode hot path에서 WASM을 쓰려면 먼저 완료되어야 함
 
 const ddu = new Ddu64({
   wasmThreshold: 4096, // 이 크기 이상일 때 WASM 사용
@@ -240,7 +245,8 @@ const ddu = new Ddu64({
 const encoded = ddu.encode(new Uint8Array(1024 * 1024));
 ```
 
-WASM을 사용할 수 없으면 JavaScript로 자동 폴백됩니다.
+`encode()`/`decode()`의 동기 hot path는 이미 로드된 WASM만 사용합니다.
+`preloadWasm()`이 완료되지 않았거나 WASM을 사용할 수 없으면 JavaScript로 폴백됩니다.
 
 ## Progress Callback
 
@@ -277,6 +283,8 @@ const ddu = new Ddu64({
 
 ## API
 
+### Node Entry
+
 ```typescript
 class Ddu64 {
   encode(data: string | Uint8Array, options?: DduOptions): string;
@@ -293,6 +301,45 @@ class Ddu64 {
   getCharSetInfo(): CharSetInfo;
 }
 ```
+
+### Browser Entry
+
+```typescript
+class Ddu64 {
+  encode(data: string | Uint8Array, options?: DduOptions): string;
+  decode(encoded: string, options?: DduOptions): string;
+  decodeToUint8Array(encoded: string, options?: DduOptions): Uint8Array;
+
+  encodeAsync(data: string | Uint8Array, options?: DduOptions): Promise<string>;
+  decodeAsync(encoded: string, options?: DduOptions): Promise<string>;
+  decodeToUint8ArrayAsync(encoded: string, options?: DduOptions): Promise<Uint8Array>;
+
+  getStats(data: string | Uint8Array, options?: DduOptions): DduEncodeStats;
+  getCharSetInfo(): CharSetInfo;
+}
+```
+
+브라우저 진입점(`@ddunigma/node/browser`)은 `Buffer` API를 노출하지 않습니다.
+
+### Core Entry
+
+```typescript
+class Ddu64 {
+  encode(data: string | Uint8Array, options?: DduOptions): string;
+  decode(encoded: string, options?: DduOptions): string;
+  decodeToUint8Array(encoded: string, options?: DduOptions): Uint8Array;
+
+  encodeAsync(data: string | Uint8Array, options?: DduOptions): Promise<string>;
+  decodeAsync(encoded: string, options?: DduOptions): Promise<string>;
+  decodeToUint8ArrayAsync(encoded: string, options?: DduOptions): Promise<Uint8Array>;
+
+  getStats(data: string | Uint8Array, options?: DduOptions): DduEncodeStats;
+  getCharSetInfo(): CharSetInfo;
+}
+```
+
+코어 진입점(`@ddunigma/node/core`)은 플랫폼 어댑터를 자동 로드하지 않습니다.
+압축 또는 암호화가 필요한 async 호출에는 `adapter`를 명시적으로 전달하세요.
 
 ## Constructor Options
 

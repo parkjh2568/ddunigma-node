@@ -12,6 +12,20 @@
 import { describe, it, expect } from "vitest";
 import { BrowserAdapter } from "../adapters/BrowserAdapter.js";
 
+function supportsCompressionFormat(format: string): boolean {
+  if (typeof CompressionStream === "undefined" || typeof DecompressionStream === "undefined") {
+    return false;
+  }
+
+  try {
+    new CompressionStream(format as CompressionFormat);
+    new DecompressionStream(format as CompressionFormat);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("BrowserAdapter", () => {
   const adapter = new BrowserAdapter();
 
@@ -24,8 +38,8 @@ describe("BrowserAdapter", () => {
       expect(adapter.supportsSyncCompression).toBe(false);
     });
 
-    it("reports supportsBrotli as false", () => {
-      expect(adapter.supportsBrotli).toBe(false);
+    it("reports supportsBrotli from CompressionStream feature detection", () => {
+      expect(adapter.supportsBrotli).toBe(supportsCompressionFormat("brotli"));
     });
 
     it('reports runtime as "browser"', () => {
@@ -54,16 +68,16 @@ describe("BrowserAdapter", () => {
       expect(adapter.inflateSync).toBeUndefined();
     });
 
-    it("brotliCompress is undefined", () => {
-      expect(adapter.brotliCompress).toBeUndefined();
+    it("brotliCompress is async when present", () => {
+      expect(adapter.brotliCompress).toBeTypeOf("function");
     });
 
     it("brotliCompressSync is undefined", () => {
       expect(adapter.brotliCompressSync).toBeUndefined();
     });
 
-    it("brotliDecompress is undefined", () => {
-      expect(adapter.brotliDecompress).toBeUndefined();
+    it("brotliDecompress is async when present", () => {
+      expect(adapter.brotliDecompress).toBeTypeOf("function");
     });
 
     it("brotliDecompressSync is undefined", () => {
@@ -274,6 +288,24 @@ describe("BrowserAdapter", () => {
       const compressed = await adapter.deflate(original);
 
       const decompressed = await adapter.inflate(compressed, 10000);
+      expect(decompressed).toEqual(original);
+    });
+  });
+
+  describe("brotliCompress / brotliDecompress", () => {
+    it("round-trips when runtime supports browser Brotli", async () => {
+      const original = new TextEncoder().encode("Hello Brotli ".repeat(100));
+
+      if (!adapter.supportsBrotli) {
+        await expect(adapter.brotliCompress(original)).rejects.toThrow(
+          "Brotli compression is unsupported",
+        );
+        return;
+      }
+
+      const compressed = await adapter.brotliCompress(original);
+      const decompressed = await adapter.brotliDecompress(compressed);
+
       expect(decompressed).toEqual(original);
     });
   });

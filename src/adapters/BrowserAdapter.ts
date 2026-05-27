@@ -4,7 +4,7 @@
  * 압축에 CompressionStream/DecompressionStream을 사용합니다.
  *
  * 이 어댑터는 동기 암호화 또는 압축 연산을 지원하지 않습니다.
- * Brotli도 브라우저 환경에서는 사용할 수 없습니다.
+ * Brotli는 CompressionStream/DecompressionStream에서 지원되는 런타임에서만 사용할 수 있습니다.
  *
  * @module adapters/BrowserAdapter
  */
@@ -14,6 +14,45 @@ import type { KeyDerivationOptions, PlatformAdapter } from "../core/types.js";
 const DEFAULT_PBKDF2_ITERATIONS = 210_000;
 const MIN_PBKDF2_ITERATIONS = 10_000;
 const DEFAULT_PBKDF2_SALT = "ddunigma:pbkdf2:v1";
+
+type BrowserCompressionFormat = "deflate-raw" | "brotli";
+
+const compressionSupportCache = new Map<BrowserCompressionFormat, boolean>();
+
+function supportsCompressionFormat(format: BrowserCompressionFormat): boolean {
+  const cached = compressionSupportCache.get(format);
+  if (cached !== undefined) return cached;
+
+  if (typeof CompressionStream === "undefined" || typeof DecompressionStream === "undefined") {
+    compressionSupportCache.set(format, false);
+    return false;
+  }
+
+  try {
+    new CompressionStream(format as CompressionFormat);
+    new DecompressionStream(format as CompressionFormat);
+    compressionSupportCache.set(format, true);
+    return true;
+  } catch {
+    compressionSupportCache.set(format, false);
+    return false;
+  }
+}
+
+function requireCompressionFormat(
+  format: BrowserCompressionFormat,
+  operation: "compress" | "decompress",
+): CompressionFormat {
+  if (!supportsCompressionFormat(format)) {
+    const label = format === "brotli" ? "Brotli" : "Deflate raw";
+    throw new Error(
+      `[Ddu64 ${operation}] ${label} ${operation}ion is unsupported in the current runtime. ` +
+        `CompressionStream/DecompressionStream does not support "${format}".`,
+    );
+  }
+
+  return format as CompressionFormat;
+}
 
 function normalizePbkdf2Iterations(iterations: number | undefined): number {
   if (iterations === undefined) return DEFAULT_PBKDF2_ITERATIONS;
@@ -31,12 +70,13 @@ function saltToBytes(salt: string | Uint8Array | undefined): Uint8Array {
  * Web API를 사용하여 PlatformAdapter를 구현하는 BrowserAdapter:
  * - AES-256-GCM 및 SHA-256을 위한 Web Crypto API(SubtleCrypto)
  * - 안전한 랜덤 바이트를 위한 crypto.getRandomValues
- * - deflate 압축을 위한 CompressionStream/DecompressionStream
+ * - deflate-raw 압축을 위한 CompressionStream/DecompressionStream
+ * - 런타임이 지원하는 경우 Brotli 압축
  */
 export class BrowserAdapter implements PlatformAdapter {
   readonly supportsSyncCrypto = false;
   readonly supportsSyncCompression = false;
-  readonly supportsBrotli = false;
+  readonly supportsBrotli = supportsCompressionFormat("brotli");
   readonly runtime = "browser" as const;
 
   // ─── Crypto ──────────────────────────────────────────────────────────────
@@ -173,32 +213,9 @@ export class BrowserAdapter implements PlatformAdapter {
       );
     }
 
-    const format = this.getDeflateFormat();
+    const format = this.getDeflateFormat("compress");
     const cs = new CompressionStream(format);
-    const writer = cs.writable.getWriter();
-    const reader = cs.readable.getReader();
-
-    writer.write(data as unknown as BufferSource);
-    writer.close();
-
-    const chunks: Uint8Array[] = [];
-    let totalLength = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      totalLength += value.length;
-    }
-
-    const result = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    return result;
+    return this.writeAndReadStream(cs, data);
   }
 
   /**
@@ -214,14 +231,79 @@ export class BrowserAdapter implements PlatformAdapter {
       );
     }
 
-    const format = this.getDeflateFormat();
+    const format = this.getDeflateFormat("decompress");
     const ds = new DecompressionStream(format);
-    const writer = ds.writable.getWriter();
-    const reader = ds.readable.getReader();
+    return this.writeAndReadStream(ds, data, maxBytes);
+  }
 
-    writer.write(data as unknown as BufferSource);
-    writer.close();
+  // ─── Brotli ──────────────────────────────────────────────────────────────
 
+  /**
+   * CompressionStream을 통해 Brotli로 데이터를 압축합니다.
+   * 브라우저 Web API는 Brotli 품질 레벨을 받지 않으므로 level 값은 무시됩니다.
+   */
+  async brotliCompress(data: Uint8Array, _level?: number): Promise<Uint8Array> {
+    const format = requireCompressionFormat("brotli", "compress");
+    const cs = new CompressionStream(format);
+    return this.writeAndReadStream(cs, data);
+  }
+
+  /**
+   * DecompressionStream을 통해 Brotli 데이터를 압축 해제합니다.
+   */
+  async brotliDecompress(data: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
+    const format = requireCompressionFormat("brotli", "decompress");
+    const ds = new DecompressionStream(format);
+    return this.writeAndReadStream(ds, data, maxBytes);
+  }
+
+  // brotliCompressSync, brotliDecompressSync는 의도적으로 정의하지 않습니다.
+  // 브라우저 CompressionStream API가 비동기 스트림 기반이기 때문입니다.
+
+  // ─── 동기 메서드 (미지원) ────────────────────────────────────────────────
+
+  // deriveKeySync, encryptSync, decryptSync, deflateSync, inflateSync는
+  // 의도적으로 정의하지 않습니다 (미구현).
+  // 인터페이스에서 선택적(?)으로 표시되어 있으므로 단순히 부재합니다.
+
+  // ─── 비공개 헬퍼 ─────────────────────────────────────────────────────────
+
+  /**
+   * CompressionStream에 적합한 deflate 형식을 결정합니다.
+   * Node.js zlib.deflateRaw와의 상호운용성을 위해 'deflate-raw'만 사용합니다.
+   */
+  private getDeflateFormat(operation: "compress" | "decompress"): CompressionFormat {
+    return requireCompressionFormat("deflate-raw", operation);
+  }
+
+  private async writeAndReadStream(
+    stream: CompressionStream | DecompressionStream,
+    data: Uint8Array,
+    maxBytes?: number,
+  ): Promise<Uint8Array> {
+    const writer = stream.writable.getWriter();
+    const reader = stream.readable.getReader();
+
+    const writePromise = (async () => {
+      await writer.write(data as unknown as BufferSource);
+      await writer.close();
+    })();
+    const readPromise = this.readAllChunks(reader, maxBytes);
+
+    try {
+      const [result] = await Promise.all([readPromise, writePromise]);
+      return result;
+    } catch (error) {
+      await reader.cancel(error).catch(() => undefined);
+      await writer.abort(error).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async readAllChunks(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    maxBytes?: number,
+  ): Promise<Uint8Array> {
     const chunks: Uint8Array[] = [];
     let totalLength = 0;
 
@@ -247,30 +329,5 @@ export class BrowserAdapter implements PlatformAdapter {
     }
 
     return result;
-  }
-
-  // ─── Brotli (미지원) ─────────────────────────────────────────────────────
-
-  // brotliCompress, brotliCompressSync, brotliDecompress, brotliDecompressSync는
-  // 의도적으로 정의하지 않습니다 (미구현).
-  // 인터페이스에서 선택적(?)으로 표시되어 있으므로 단순히 부재합니다.
-
-  // ─── 동기 메서드 (미지원) ────────────────────────────────────────────────
-
-  // deriveKeySync, encryptSync, decryptSync, deflateSync, inflateSync는
-  // 의도적으로 정의하지 않습니다 (미구현).
-  // 인터페이스에서 선택적(?)으로 표시되어 있으므로 단순히 부재합니다.
-
-  // ─── 비공개 헬퍼 ─────────────────────────────────────────────────────────
-
-  /**
-   * CompressionStream에 적합한 deflate 형식을 결정합니다.
-   * Node.js zlib.deflateRaw와의 상호운용성을 위해 'deflate-raw'를 선호합니다.
-   */
-  private getDeflateFormat(): "deflate-raw" | "deflate" {
-    // 'deflate-raw'는 최신 브라우저와 Node.js에서 지원됩니다
-    // 'deflate-raw'가 인식되지 않으면 'deflate'(zlib 헤더 포함)로 폴백
-    // 실제로 CompressionStream을 지원하는 모든 환경은 'deflate-raw'도 지원합니다
-    return "deflate-raw";
   }
 }

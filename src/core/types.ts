@@ -129,7 +129,7 @@ export interface KeyDerivationOptions {
   algorithm?: KeyDerivationAlgorithm;
   /** Salt for PBKDF2. Provide a stable value to decode across instances. */
   salt?: string | Uint8Array;
-  /** PBKDF2 iteration count. Values below 10000 are clamped unless throwOnError is enabled. */
+  /** PBKDF2 iteration count. Positive values below 10000 are clamped to 10000. */
   iterations?: number;
   /** Hash function used by PBKDF2. */
   hash?: "SHA-256" | "SHA-384" | "SHA-512";

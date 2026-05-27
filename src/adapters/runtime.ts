@@ -13,16 +13,16 @@ export type RuntimeId = "node" | "browser" | "edge" | "deno" | "bun" | "unknown"
  * 감지는 순수하게 globalThis 검사에 기반하며 Node.js 내장 모듈을 임포트하지 않습니다.
  */
 export function detectRuntime(): RuntimeId {
-  if (typeof globalThis.process !== "undefined" && globalThis.process?.versions?.node) {
-    return "node";
-  }
-
   if ((globalThis as any).Deno?.version?.deno) {
     return "deno";
   }
 
   if ((globalThis as any).Bun?.version) {
     return "bun";
+  }
+
+  if (typeof globalThis.process !== "undefined" && globalThis.process?.versions?.node) {
+    return "node";
   }
 
   if (typeof globalThis.crypto !== "undefined" && globalThis.crypto?.subtle) {

@@ -115,18 +115,18 @@ describe("detectRuntime", () => {
       );
     });
 
-    it("prioritizes Node.js over Deno when both are present", () => {
+    it("prioritizes Deno over Node.js when both are present", () => {
       // Node.js process is already present; add Deno
       (globalThis as any).Deno = { version: { deno: "1.40.0" } };
 
-      expect(detectRuntime()).toBe("node");
+      expect(detectRuntime()).toBe("deno");
     });
 
-    it("prioritizes Node.js over Bun when both are present", () => {
+    it("prioritizes Bun over Node.js when both are present", () => {
       // Node.js process is already present; add Bun
       (globalThis as any).Bun = { version: "1.0.0" };
 
-      expect(detectRuntime()).toBe("node");
+      expect(detectRuntime()).toBe("bun");
     });
 
     it("prioritizes Deno over Bun when both are present (no Node.js)", () => {
