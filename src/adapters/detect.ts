@@ -9,50 +9,8 @@
  */
 
 import type { PlatformAdapter } from "../core/types.js";
-
-/** 감지된 런타임 환경 식별자 */
-export type RuntimeId = "node" | "browser" | "edge" | "deno" | "bun" | "unknown";
-
-/**
- * 현재 JavaScript 런타임 환경을 감지합니다.
- *
- * 감지 순서:
- * 1. Node.js: `globalThis.process?.versions?.node` 존재
- * 2. Deno: `(globalThis as any).Deno?.version?.deno` 존재
- * 3. Bun: `(globalThis as any).Bun?.version` 존재
- * 4. Web Crypto (브라우저/엣지): `globalThis.crypto?.subtle` 존재
- * 5. 그 외: 에러 throw
- *
- * @returns 감지된 런타임 식별자
- * @throws 적합한 crypto 제공자를 찾지 못한 경우 에러
- */
-export function detectRuntime(): RuntimeId {
-  // Node.js 확인
-  if (typeof globalThis.process !== "undefined" && globalThis.process?.versions?.node) {
-    return "node";
-  }
-
-  // Deno 확인
-  if ((globalThis as any).Deno?.version?.deno) {
-    return "deno";
-  }
-
-  // Bun 확인
-  if ((globalThis as any).Bun?.version) {
-    return "bun";
-  }
-
-  // Web Crypto 확인 (브라우저/엣지)
-  if (typeof globalThis.crypto !== "undefined" && globalThis.crypto?.subtle) {
-    return "browser";
-  }
-
-  // 적합한 제공자를 찾지 못함
-  throw new Error(
-    "[ddunigma] No suitable crypto provider found. " +
-      "Detected runtime lacks both Node.js crypto module and Web Crypto API (SubtleCrypto).",
-  );
-}
+export { detectRuntime, type RuntimeId } from "./runtime.js";
+import { detectRuntime } from "./runtime.js";
 
 /**
  * 현재 런타임에 적합한 PlatformAdapter를 가져옵니다.

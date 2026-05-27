@@ -12,7 +12,6 @@ import { Ddu64Core } from "../core/Ddu64Core.js";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
 import { BrowserAdapter } from "../adapters/BrowserAdapter.js";
 import { DduSetSymbol } from "../core/types.js";
-import { setWorkerPoolSize } from "../workers/WorkerPool.js";
 import { createReadableEncodeStream, createReadableDecodeStream } from "../streams/WebStreams.js";
 import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
 import { parseFooter } from "../core/wireFormat.js";
@@ -574,56 +573,17 @@ describe("Property-Based Tests", () => {
     });
   });
 
-  // ─── Property 9: Worker/메인스레드 동등성 ─────────────────────────────────
-  describe("Property 9: Worker/메인스레드 동등성", () => {
-    it("Worker가 사용 불가능한 상태에서 메인스레드 fallback이 정상 동작", async () => {
-      // 워커 풀은 현재 메인스레드 fallback을 사용
+  // ─── Property 9: async 경로 동등성 ────────────────────────────────────────
+  describe("Property 9: async 경로 동등성", () => {
+    it("비동기 인코딩/디코딩이 동기 경로와 동일하게 라운드트립", async () => {
       const encoder = new Ddu64Node();
 
       await fc.assert(
         fc.asyncProperty(fc.uint8Array({ minLength: 1, maxLength: 2000 }), async (data) => {
-          // 비동기 인코딩 (워커 사용 불가 시 메인스레드 fallback)
           const encoded = await encoder.encodeAsync(data);
           const decoded = await encoder.decodeToUint8ArrayAsync(encoded);
           expect(decoded).toEqual(data);
         }),
-        { numRuns: NUM_RUNS },
-      );
-    });
-  });
-
-  // ─── Property 10: Worker 풀 크기 검증 ─────────────────────────────────────
-  describe("Property 10: Worker 풀 크기 검증", () => {
-    it("유효 범위(1-64) 내 정수는 성공, 범위 외 또는 비정수는 throw", () => {
-      fc.assert(
-        fc.property(fc.integer({ min: 1, max: 64 }), (n) => {
-          // 유효 범위 내 정수는 에러 없이 설정 가능
-          expect(() => setWorkerPoolSize(n)).not.toThrow();
-        }),
-        { numRuns: NUM_RUNS },
-      );
-    });
-
-    it("범위 밖 정수는 throw", () => {
-      fc.assert(
-        fc.property(
-          fc.oneof(fc.integer({ min: -1000, max: 0 }), fc.integer({ min: 65, max: 10000 })),
-          (n) => {
-            expect(() => setWorkerPoolSize(n)).toThrow();
-          },
-        ),
-        { numRuns: NUM_RUNS },
-      );
-    });
-
-    it("비정수 값은 throw", () => {
-      fc.assert(
-        fc.property(
-          fc.double({ min: 0.1, max: 63.9, noNaN: true }).filter((n) => !Number.isInteger(n)),
-          (n) => {
-            expect(() => setWorkerPoolSize(n)).toThrow();
-          },
-        ),
         { numRuns: NUM_RUNS },
       );
     });

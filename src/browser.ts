@@ -11,9 +11,11 @@
  * @packageDocumentation
  */
 
-// ─── 코어 인코더 ─────────────────────────────────────────────────────────────
+import { BrowserAdapter } from "./adapters/BrowserAdapter.js";
 
-export { Ddu64Core as Ddu64 } from "./core/Ddu64Core.js";
+// ─── 브라우저 인코더 ─────────────────────────────────────────────────────────
+
+export { Ddu64Browser as Ddu64, Ddu64Browser } from "./Ddu64Browser.js";
 export { Ddu64Core } from "./core/Ddu64Core.js";
 
 // ─── Charset 빌더 ────────────────────────────────────────────────────────────
@@ -26,7 +28,11 @@ export { BrowserAdapter } from "./adapters/BrowserAdapter.js";
 
 // ─── 런타임 감지 ─────────────────────────────────────────────────────────────
 
-export { detectRuntime, getAdapter } from "./adapters/detect.js";
+export { detectRuntime } from "./adapters/runtime.js";
+
+export async function getAdapter(): Promise<BrowserAdapter> {
+  return new BrowserAdapter();
+}
 
 // ─── Web Streams ─────────────────────────────────────────────────────────────
 
@@ -54,8 +60,7 @@ export type {
   PlatformAdapter,
   ObfuscationLayer,
   WasmCodec,
-  WorkerPool,
-  EncoderConfig,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
+  DduTextEncoding,
 } from "./core/types.js";

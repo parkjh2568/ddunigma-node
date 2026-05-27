@@ -24,9 +24,8 @@ export type {
   PlatformAdapter,
   ObfuscationLayer,
   WasmCodec,
-  WorkerPool,
-  EncoderConfig,
   TestVector,
+  DduTextEncoding,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
 } from "./core/types.js";
@@ -48,10 +47,6 @@ export { detectRuntime, getAdapter } from "./adapters/detect.js";
 // ─── 난독화 ──────────────────────────────────────────────────────────────────
 
 export { HangulObfuscationLayer, createObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
-
-// ─── 워커 풀 ─────────────────────────────────────────────────────────────────
-
-export { setWorkerPoolSize } from "./workers/WorkerPool.js";
 
 // ─── WASM ───────────────────────────────────────────────────────────────────
 

@@ -38,7 +38,6 @@ import type {
   DduProgressInfo,
   KeyDerivationOptions,
 } from "./types.js";
-import { setWorkerPoolSize } from "../workers/WorkerPool.js";
 import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
 import {
   getWasmCodecSync,
@@ -337,6 +336,7 @@ export class Ddu64Core {
 
     // 정렬 확인
     this.assertEncodedInputAligned(cleanedInput);
+    this.assertCanonicalPadding(cleanedInput, paddingBits);
 
     // 크기 확인
     const maxDecodedBytes = this.normalizeLimit(
@@ -432,7 +432,6 @@ export class Ddu64Core {
    * 비동기 인코딩 - 브라우저를 포함한 모든 런타임에서 동작합니다.
    */
   async encodeAsync(input: Uint8Array | string, options?: DduOptions): Promise<string> {
-    const adapter = await this.getAdapterAsync();
     const shouldCompress = options?.compress ?? this.defaultCompress;
     const shouldChecksum = options?.checksum ?? this.defaultChecksum;
     const shouldEncrypt = (options?.encrypt ?? true) && !!this.encryptionKey;
@@ -461,6 +460,7 @@ export class Ddu64Core {
         options?.compressionLevel ?? this.defaultCompressionLevel,
         algo,
       );
+      const adapter = await this.getAdapterAsync();
       this.reportProgress(options, {
         processedBytes: workingData.length,
         totalBytes: workingData.length,
@@ -487,6 +487,7 @@ export class Ddu64Core {
     // 암호화
     let isEncrypted = false;
     if (shouldEncrypt) {
+      const adapter = await this.getAdapterAsync();
       const keyHash = await this.getKeyHashAsync(adapter);
       this.reportProgress(options, {
         processedBytes: workingData.length,
@@ -538,7 +539,6 @@ export class Ddu64Core {
    * 비동기 Uint8Array 디코딩 - 브라우저를 포함한 모든 런타임에서 동작합니다.
    */
   async decodeToUint8ArrayAsync(input: string, options?: DduOptions): Promise<Uint8Array> {
-    const adapter = await this.getAdapterAsync();
     const shouldChecksum = options?.checksum ?? this.defaultChecksum;
     const allowInternalDecompress = options?.compress !== false;
     const allowInternalDecrypt = options?.encrypt !== false;
@@ -582,6 +582,7 @@ export class Ddu64Core {
 
     // 정렬 확인
     this.assertEncodedInputAligned(cleanedInput);
+    this.assertCanonicalPadding(cleanedInput, paddingBits);
 
     // 크기 확인
     const maxDecodedBytes = this.normalizeLimit(
@@ -607,6 +608,7 @@ export class Ddu64Core {
     let decoded = this.decodeChars(cleanedInput, paddingBits);
 
     if (pipelineVersion === 3 && isEncrypted && this.encryptionKey && allowInternalDecrypt) {
+      const adapter = await this.getAdapterAsync();
       const keyHash = await this.getKeyHashAsync(adapter);
       this.reportProgress(options, {
         processedBytes: decoded.length,
@@ -629,6 +631,7 @@ export class Ddu64Core {
         true,
         "maxDecompressedBytes",
       );
+      const adapter = await this.getAdapterAsync();
       if (compressionAlgorithm === "brotli") {
         if (!adapter.brotliDecompress) {
           throw new Error(
@@ -671,6 +674,7 @@ export class Ddu64Core {
 
     // 복호화
     if (pipelineVersion === 2 && isEncrypted && this.encryptionKey && allowInternalDecrypt) {
+      const adapter = await this.getAdapterAsync();
       const keyHash = await this.getKeyHashAsync(adapter);
       this.reportProgress(options, {
         processedBytes: decoded.length,
@@ -737,18 +741,6 @@ export class Ddu64Core {
       charsetSize: this.dduChar.length,
       bitLength: this.bitLength,
     };
-  }
-
-  // ─── 정적 메서드 ──────────────────────────────────────────────────────────
-
-  /**
-   * 대용량 인코딩/디코딩 연산을 오프로드하기 위한 전역 워커 풀 크기를 설정합니다.
-   *
-   * @param n - 워커 수 (정수, 1–64)
-   * @throws n이 정수가 아니거나 [1, 64] 범위를 벗어난 경우 에러
-   */
-  static setWorkerPoolSize(n: number): void {
-    setWorkerPoolSize(n);
   }
 
   // ─── 내부 인코딩/디코딩 ────────────────────────────────────────────────
@@ -874,6 +866,7 @@ export class Ddu64Core {
 
     // 청킹
     if (chunkSize && chunkSize > 0) {
+      this.assertSafeChunkSeparator(result, chunkSeparator);
       result = splitIntoChunks(result, chunkSize, chunkSeparator);
     }
 
@@ -1149,9 +1142,11 @@ export class Ddu64Core {
 
   private async getAdapterAsync(): Promise<PlatformAdapter> {
     if (this.adapter) return this.adapter;
-    const { getAdapter } = await import("../adapters/detect.js");
-    this.adapter = await getAdapter();
-    return this.adapter;
+    throw new Error(
+      "[Ddu64 adapter] No platform adapter available. " +
+        "Use @ddunigma/node or @ddunigma/node/browser, " +
+        "or provide an adapter via options.adapter.",
+    );
   }
 
   private async getKeyHashAsync(adapter: PlatformAdapter): Promise<Uint8Array> {
@@ -1216,6 +1211,21 @@ export class Ddu64Core {
     return Math.floor(value);
   }
 
+  private assertSafeChunkSeparator(encoded: string, separator: string): void {
+    if (separator.length === 0 || this.isLineBreakSeparator(separator)) return;
+
+    if (encoded.includes(separator)) {
+      throw new Error(
+        `[Ddu64 chunking] Unsafe chunkSeparator "${separator}" appears in encoded output. ` +
+          "Use a separator that cannot be produced by the charset, footer, checksum, or URL-safe output.",
+      );
+    }
+  }
+
+  private isLineBreakSeparator(separator: string): boolean {
+    return separator === "\n" || separator === "\r\n" || separator === "\r";
+  }
+
   private estimateDecodedBytes(cleanedInputLen: number, paddingBits: number): number {
     if (cleanedInputLen === 0) return 0;
     if (paddingBits < 0 || paddingBits >= this.effectiveBitLength) {
@@ -1236,6 +1246,40 @@ export class Ddu64Core {
           `[Ddu64 decode] Invalid encoded length for variable charset. Expected multiple of ${chunkSize}, got ${cleanedInput.length}`,
         );
       }
+    }
+  }
+
+  private assertCanonicalPadding(cleanedInput: string, paddingBits: number): void {
+    if (paddingBits === 0) return;
+    if (cleanedInput.length === 0) {
+      throw new Error("[Ddu64 decode] Invalid padding bits without payload");
+    }
+
+    const paddingMask = (1 << paddingBits) - 1;
+    let lastValue: number;
+
+    if (this.usePowerOfTwo) {
+      const lastChar = cleanedInput[cleanedInput.length - 1];
+      const value = this.dduBinaryLookup.get(lastChar);
+      if (value === undefined) {
+        throw new Error(
+          `[Ddu64 decode] Invalid character "${lastChar}" at ${cleanedInput.length - 1}`,
+        );
+      }
+      lastValue = value;
+    } else {
+      const first = cleanedInput[cleanedInput.length - 2];
+      const second = cleanedInput[cleanedInput.length - 1];
+      const firstValue = this.dduBinaryLookup.get(first);
+      const secondValue = this.dduBinaryLookup.get(second);
+      if (firstValue === undefined || secondValue === undefined) {
+        throw new Error("[Ddu64 decode] Invalid character in final encoded chunk");
+      }
+      lastValue = firstValue * this.dduChar.length + secondValue;
+    }
+
+    if ((lastValue & paddingMask) !== 0) {
+      throw new Error("[Ddu64 decode] Invalid non-zero padding bits in final symbol");
     }
   }
 }

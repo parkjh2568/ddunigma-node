@@ -207,6 +207,7 @@ const decoded = await ddu.decodeAsync(encoded);
 ```
 
 Node.js에서도 async 메서드를 사용할 수 있습니다. 브라우저 진입점(`@ddunigma/node/browser`)은 Node.js 내장 모듈을 임포트하지 않습니다.
+코어 진입점(`@ddunigma/node/core`)은 기본 인코딩/디코딩만 포함하며, 압축/암호화가 필요하면 명시적으로 어댑터를 전달하세요.
 
 ## Web Streams
 
@@ -290,8 +291,6 @@ class Ddu64 {
 
   getStats(data: string | Uint8Array, options?: DduOptions): DduEncodeStats;
   getCharSetInfo(): CharSetInfo;
-
-  static setWorkerPoolSize(n: number): void;
 }
 ```
 
@@ -348,7 +347,7 @@ new Ddu64(dduChar, paddingChar, options?);
 | Import Path              | 용도                                  |
 | ------------------------ | ------------------------------------- |
 | `@ddunigma/node`         | Node.js 전체 기능 (동기+비동기)       |
-| `@ddunigma/node/browser` | 브라우저 최적화 (Node.js 모듈 미포함) |
+| `@ddunigma/node/browser` | 브라우저 최적화 (BrowserAdapter 기본) |
 | `@ddunigma/node/core`    | 최소 코어 (인코딩/디코딩만)           |
 
 ## Build & Test

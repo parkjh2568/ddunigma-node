@@ -13,6 +13,20 @@ export enum DduSetSymbol {
   ONECHARSET = "oneCharSet",
 }
 
+export type DduTextEncoding =
+  | "utf-8"
+  | "utf8"
+  | "latin1"
+  | "ascii"
+  | "base64"
+  | "base64url"
+  | "hex"
+  | "binary"
+  | "ucs2"
+  | "ucs-2"
+  | "utf16le"
+  | "utf-16le";
+
 // ─── Charset Types ───────────────────────────────────────────────────────────
 
 export interface CharSetConfig {
@@ -42,7 +56,7 @@ export interface CharSetInfo {
   /** 2의 제곱수 charset 여부 */
   usePowerOfTwo: boolean;
   /** 문자열 인코딩 방식 */
-  encoding: BufferEncoding;
+  encoding: DduTextEncoding;
   /** 기본 압축 사용 여부 */
   defaultCompress: boolean;
   /** 기본 최대 디코딩 바이트 수 */
@@ -126,8 +140,6 @@ export interface KeyDerivationOptions {
 export interface DduOptions {
   /** 압축 사용 여부 (zlib deflate 또는 brotli) */
   compress?: boolean;
-  /** decode stream에서 footer 기반 자동 감지 사용 여부 (기본값: true) */
-  streamAutoDetect?: boolean;
   /** 내부 암/복호화 사용 여부 (기본값: true, 스트림 파이프라인 내부 제어용) */
   encrypt?: boolean;
   /** 압축 알고리즘 (기본값: "deflate") */
@@ -179,8 +191,6 @@ export interface DduConstructorOptions extends DduOptions {
    * @default false
    */
   throwOnError?: boolean;
-  /** Buffer 인코딩 방식 */
-  encoding?: BufferEncoding;
   /** URL-Safe 모드 (특수문자를 URL 안전 문자로 변환) */
   urlSafe?: boolean;
   /** 암호화 키 (AES-256-GCM) */
@@ -195,12 +205,8 @@ export interface DduConstructorOptions extends DduOptions {
   /** 명시적 플랫폼 어댑터 (자동 감지 대신 사용) */
   adapter?: PlatformAdapter;
 
-  /** 한글 난독화 활성화 (encryptionKey 필요) */
-  obfuscate?: boolean;
-
   /** WASM 임계값 (바이트 단위, 기본값: 4096, 범위: 1024-1048576) */
   wasmThreshold?: number;
-
 }
 
 export const dduDefaultConstructorOptions: DduConstructorOptions = {
@@ -293,45 +299,6 @@ export interface WasmCodec {
 
   /** WASM 모듈이 초기화되어 사용 가능한지 확인 */
   readonly ready: boolean;
-}
-
-// ─── Worker Pool ─────────────────────────────────────────────────────────────
-
-/**
- * 인코딩/디코딩 연산을 위해 워커 스레드에 전달되는 설정.
- */
-export interface EncoderConfig {
-  charSet: string[];
-  paddingChar: string;
-  bitLength: number;
-  usePowerOfTwo: boolean;
-  compress?: boolean;
-  compressionAlgorithm?: "deflate" | "brotli";
-  compressionLevel?: number;
-  encrypt?: boolean;
-  encryptionKeyHash?: Uint8Array;
-  checksum?: boolean;
-  urlSafe?: boolean;
-  chunkSize?: number;
-  chunkSeparator?: string;
-  useRepeatPadding?: boolean;
-}
-
-/**
- * 대용량 페이로드의 인코딩/디코딩 연산을 오프로드하는 워커 스레드 풀 인터페이스.
- */
-export interface WorkerPool {
-  /** 워커 스레드를 사용하여 인코딩 */
-  encode(input: Uint8Array, config: EncoderConfig): Promise<string>;
-
-  /** 워커 스레드를 사용하여 디코딩 */
-  decode(input: string, config: EncoderConfig): Promise<Uint8Array>;
-
-  /** 풀의 워커 스레드 수를 설정 (1-64) */
-  setPoolSize(n: number): void;
-
-  /** 모든 워커 스레드를 종료하고 리소스를 정리 */
-  terminate(): Promise<void>;
 }
 
 // ─── Obfuscation Layer ───────────────────────────────────────────────────────

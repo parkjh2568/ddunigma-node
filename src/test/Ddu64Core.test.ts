@@ -245,6 +245,31 @@ describe("Ddu64Core", () => {
       const decoded = encoder.decode(encoded);
       expect(decoded).toBe(input);
     });
+
+    it("should reject chunk separators that can appear in encoded output", () => {
+      const encoder = createEncoder({
+        dduSetSymbol: DduSetSymbol.ONECHARSET,
+        chunkSize: 4,
+        chunkSeparator: "b",
+      });
+
+      expect(() => encoder.encode("hello world")).toThrow("Unsafe chunkSeparator");
+    });
+  });
+
+  describe("Canonical padding", () => {
+    it("should reject non-zero padding bits in the final symbol", () => {
+      const encoder = createEncoder({ dduSetSymbol: DduSetSymbol.ONECHARSET });
+      const encoded = encoder.encode(new Uint8Array([0x41]));
+      const info = encoder.getCharSetInfo();
+      const footerStart = encoded.lastIndexOf(info.paddingChar);
+      const payload = encoded.slice(0, footerStart);
+      const footer = encoded.slice(footerStart);
+      const lastValue = info.charSet.indexOf(payload[payload.length - 1]);
+      const tampered = payload.slice(0, -1) + info.charSet[lastValue + 1] + footer;
+
+      expect(() => encoder.decodeToUint8Array(tampered)).toThrow("padding bits");
+    });
   });
 
   describe("Async methods", () => {
@@ -576,59 +601,6 @@ describe("Ddu64Core", () => {
       expect(encoderStages).toContain("done");
       expect(decoderStages).toContain("decode");
       expect(decoderStages).toContain("done");
-    });
-  });
-
-  describe("Worker integration (API surface)", () => {
-    describe("setWorkerPoolSize", () => {
-      it("should accept valid pool size (1)", () => {
-        expect(() => Ddu64Core.setWorkerPoolSize(1)).not.toThrow();
-      });
-
-      it("should accept valid pool size (64)", () => {
-        expect(() => Ddu64Core.setWorkerPoolSize(64)).not.toThrow();
-      });
-
-      it("should accept valid pool size (4)", () => {
-        expect(() => Ddu64Core.setWorkerPoolSize(4)).not.toThrow();
-      });
-
-      it("should throw for pool size less than 1", () => {
-        expect(() => Ddu64Core.setWorkerPoolSize(0)).toThrow(/Pool size must be between/);
-      });
-
-      it("should throw for pool size greater than 64", () => {
-        expect(() => Ddu64Core.setWorkerPoolSize(65)).toThrow(/Pool size must be between/);
-      });
-
-      it("should throw for non-integer pool size", () => {
-        expect(() => Ddu64Core.setWorkerPoolSize(2.5)).toThrow(/Pool size must be an integer/);
-      });
-
-      it("should throw for negative pool size", () => {
-        expect(() => Ddu64Core.setWorkerPoolSize(-1)).toThrow(/Pool size must be between/);
-      });
-    });
-
-    describe("workerThreshold constructor option", () => {
-      it("should accept default workerThreshold (no option specified)", () => {
-        const encoder = createEncoder();
-        // Should construct without error
-        expect(encoder.encode("test").length).toBeGreaterThan(0);
-      });
-
-      it("should accept valid workerThreshold values without error", () => {
-        const encoder = createEncoder({ workerThreshold: 65536 });
-        expect(encoder.encode("test").length).toBeGreaterThan(0);
-      });
-
-      it("should not break existing async encode/decode behavior", async () => {
-        const encoder = createEncoder({ workerThreshold: 65536 });
-        const input = "Async with worker threshold test";
-        const encoded = await encoder.encodeAsync(input);
-        const decoded = await encoder.decodeAsync(encoded);
-        expect(decoded).toBe(input);
-      });
     });
   });
 });

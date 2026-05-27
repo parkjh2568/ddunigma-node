@@ -37,8 +37,7 @@ export type {
   PlatformAdapter,
   ObfuscationLayer,
   WasmCodec,
-  WorkerPool,
-  EncoderConfig,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
+  DduTextEncoding,
 } from "./core/types.js";
