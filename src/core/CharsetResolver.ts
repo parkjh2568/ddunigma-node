@@ -5,7 +5,7 @@
  */
 
 import { buildCodaCharset, URL_SAFE_CONFLICT_CHARS } from "./codecUtils.js";
-import type { DduConstructorOptions, CharSetConfig } from "./types.js";
+import type { DduConstructorOptions, CharSetConfig, EncodingProfile } from "./types.js";
 import { DduSetSymbol, dduDefaultConstructorOptions } from "./types.js";
 import { getCharSet } from "../presets.js";
 
@@ -25,6 +25,7 @@ export interface ResolvedCharSet {
   useRepeatPadding?: boolean;
   bitsPerPadChar?: number;
   usePowerOfTwo?: boolean;
+  encodingProfile?: EncodingProfile;
 }
 
 /** charset 정규화 결과 */
@@ -129,10 +130,18 @@ export function resolveInitialCharSet(
       true,
       cs.useRepeatPadding,
     );
-    result.bitsPerPadChar = cs.bitsPerPadChar;
-    result.usePowerOfTwo = cs.usePowerOfTwo;
-    if (cs.usePowerOfTwo === false) {
-      result.bitLength = cs.bitLength;
+    const profile = cs.encodingProfile;
+    if (profile) {
+      result.encodingProfile = profile;
+      result.bitLength = profile.bitLength;
+      result.usePowerOfTwo = profile.usePowerOfTwo;
+      result.bitsPerPadChar = profile.bitsPerPadChar;
+    } else {
+      result.bitsPerPadChar = cs.bitsPerPadChar;
+      result.usePowerOfTwo = cs.usePowerOfTwo;
+      if (cs.usePowerOfTwo === false) {
+        result.bitLength = cs.bitLength;
+      }
     }
     return result;
   } catch (error) {
@@ -349,9 +358,11 @@ function getFallbackCharSet(dduOptions?: DduConstructorOptions): ResolvedCharSet
     charSet,
     padding: cs.paddingChar,
     requiredLength: cs.maxRequiredLength,
-    bitLength: cs.bitLength,
+    bitLength: cs.encodingProfile?.bitLength ?? cs.bitLength,
     isPredefined: true,
     useRepeatPadding: cs.useRepeatPadding,
-    bitsPerPadChar: cs.bitsPerPadChar,
+    bitsPerPadChar: cs.encodingProfile?.bitsPerPadChar ?? cs.bitsPerPadChar,
+    usePowerOfTwo: cs.encodingProfile?.usePowerOfTwo ?? cs.usePowerOfTwo,
+    encodingProfile: cs.encodingProfile,
   };
 }

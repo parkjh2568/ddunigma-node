@@ -57,6 +57,7 @@ export type {
   DduProgressInfo,
   CharSetConfig,
   CharSetInfo,
+  EncodingProfile,
   PlatformAdapter,
   ObfuscationLayer,
   WasmCodec,

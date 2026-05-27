@@ -79,7 +79,7 @@ export interface FooterParseResult {
  * 메타데이터를 포함합니다. 문자열 끝에서 역방향으로 파싱됩니다:
  *
  * 1. Node 스타일 푸터: `{payload}{padChar}[ELYSIA|GRISEO][ENC]{paddingBits}`
- * 2. V2 반복 패딩: `{payload}{padChar}{padChar}...` (각 패딩 문자 = bitsPerPadChar 비트)
+ * 2. 반복 패딩: `{payload}{padChar}{padChar}...` (각 패딩 문자 = bitsPerPadChar 비트)
  *
  * @param input - 푸터를 포함한 전체 인코딩 문자열
  * @param paddingChar - 인코더가 사용하는 패딩 문자
@@ -365,7 +365,7 @@ export interface FooterOptions {
  *
  * 두 가지 모드를 지원합니다:
  * 1. Node 스타일: `{padChar}{compressionMarker}{encryptMarker}{paddingBits}`
- * 2. V2 반복 패딩: `{padChar}`를 `paddingBits / 2`회 반복
+ * 2. 반복 패딩: `{padChar}`를 `paddingBits / bitsPerPadChar`회 반복
  *    (압축/암호화 마커가 필요 없을 때만)
  *
  * @param options - 푸터 생성 옵션

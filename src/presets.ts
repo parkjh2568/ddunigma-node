@@ -18,6 +18,11 @@ const dduCharSetV1: CharSetConfig = {
   paddingChar: "뭐",
   useRepeatPadding: true,
   usePowerOfTwo: false,
+  encodingProfile: {
+    bitLength: 6,
+    usePowerOfTwo: false,
+    bitsPerPadChar: 2,
+  },
 };
 
 const oneCharSet: CharSetConfig = {

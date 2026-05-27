@@ -79,6 +79,41 @@ describe("구버전 호환성 테스트", () => {
       expect(currentEncoded).toBe(legacyEncoded);
     });
 
+    it("DDU_V1 프리셋 - 6비트 쌍 인코딩 프로필 유지", () => {
+      const encoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+      const info = encoder.getCharSetInfo();
+
+      expect(info.charSet).toEqual(["뜌", "땨", "이", "우", "야", "!", "?", "."]);
+      expect(info.bitLength).toBe(6);
+      expect(info.usePowerOfTwo).toBe(false);
+      expect(encoder.encode(new Uint8Array([65]))).toBe("이뜌이뜌뭐뭐");
+    });
+
+    it("DDU_V1 프리셋 - 바이너리 패딩 경계 fixture", () => {
+      const encoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+      const vectors: [number[], string][] = [
+        [[0], "뜌뜌뜌뜌뭐뭐"],
+        [[0, 255], "뜌뜌땨..야뭐"],
+        [[0, 255, 170], "뜌뜌땨..?!이"],
+      ];
+
+      for (const [bytes, expected] of vectors) {
+        const input = new Uint8Array(bytes);
+        const encoded = encoder.encode(input);
+        expect(encoded).toBe(expected);
+        expect(Array.from(encoder.decodeToUint8Array(encoded))).toEqual(bytes);
+      }
+    });
+
+    it("DDU_V1 프리셋 - 압축 마커 라운드트립", () => {
+      const encoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+      const input = "A".repeat(1000);
+      const encoded = encoder.encode(input, { compress: true });
+
+      expect(encoded).toContain("ELYSIA");
+      expect(encoder.decode(encoded, { compress: true })).toBe(input);
+    });
+
     it("ONECHARSET 프리셋 - Hello World!", () => {
       const encoder = new Ddu64Node(undefined, undefined, {
         dduSetSymbol: DduSetSymbol.ONECHARSET,
@@ -117,6 +152,58 @@ describe("구버전 호환성 테스트", () => {
       // 라운드트립
       const decoded = encoder.decode(currentEncoded);
       expect(decoded).toBe(input);
+    });
+  });
+
+  // ─── Python 크로스 플랫폼 호환 벡터 ────────────────────────────────────────
+
+  describe("Python 크로스 플랫폼 호환 벡터", () => {
+    const v2Vectors: [string, string][] = [
+      ["안녕하세요", "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊"],
+      ["hello", "욲뜟잉듖욷뜟뎾뭐"],
+      ["A", "이이뭐뭐"],
+      ["AB", "이잊땨뭐"],
+      ["ABC", "이잊땩뜓"],
+      ["test 123!", "웅뜟잉댣웅뜎뜌댝땾얃땾약"],
+      ["가나다라", "뎪듇뜎뜌뎪뎨땪우뎪뎨듓얒뎪뎩댯뎾"],
+    ];
+
+    const v1Vectors: [string, string][] = [
+      ["안녕하세요", ".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야"],
+      ["hello", "우이뜌?이!!야우우뜌?.야뭐"],
+      ["A", "이뜌이뜌뭐뭐"],
+      ["AB", "이뜌이야땨뜌뭐"],
+      ["ABC", "이뜌이야땨땨뜌우"],
+      ["test 123!", "우!뜌?이!?우우!뜌이뜌뜌?땨땨야야우땨야야땨"],
+      ["가나다라", ".이!우뜌이뜌뜌.이.뜌땨이우뜌.이.뜌!?야야.이.땨??.야"],
+    ];
+
+    describe("V2 (DDU)", () => {
+      const encoder = new Ddu64Node();
+
+      for (const [input, expected] of v2Vectors) {
+        it(`"${input}" 인코딩 일치`, () => {
+          expect(encoder.encode(input)).toBe(expected);
+        });
+
+        it(`"${input}" 디코딩 일치`, () => {
+          expect(encoder.decode(expected)).toBe(input);
+        });
+      }
+    });
+
+    describe("V1 (DDU_V1)", () => {
+      const encoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+
+      for (const [input, expected] of v1Vectors) {
+        it(`"${input}" 인코딩 일치`, () => {
+          expect(encoder.encode(input)).toBe(expected);
+        });
+
+        it(`"${input}" 디코딩 일치`, () => {
+          expect(encoder.decode(expected)).toBe(input);
+        });
+      }
     });
   });
 

@@ -217,8 +217,6 @@ export function normalizeCompressionLevel(
     : Math.min(9, Math.max(0, normalized));
 }
 
-// ─── 체크섬 추출 (re-export from wireFormat) ─────────────────────────────────
-
 // ─── 텍스트 인코딩 유틸리티 ──────────────────────────────────────────────────
 
 /** 공유 TextEncoder 인스턴스 (상태 없음, 재사용 안전) */

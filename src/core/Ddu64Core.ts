@@ -8,7 +8,6 @@
 import {
   bitPackEncode,
   bitPackDecode,
-  createBitPackConfig,
   type BitPackConfig,
 } from "./BitPack.js";
 import {
@@ -58,6 +57,8 @@ import {
 const BYTE_BITS = 8;
 /** 인덱스 배열을 일반 배열 대신 Uint16Array로 할당하기 시작하는 길이 임계값 (메모리/속도 휴리스틱) */
 const TYPED_INDICES_THRESHOLD = 4096;
+const STRING_CHUNK_SIZE = 8192;
+const FULL_CODE_BUFFER_THRESHOLD = 1 << 20;
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 const STANDARD_BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -93,6 +94,9 @@ export class Ddu64Core {
 
   /** 문자 → 인덱스 역방향 룩업 맵 */
   protected readonly dduBinaryLookup: Map<string, number> = new Map();
+
+  /** UTF-16 코드 유닛 → 인덱스 direct lookup (단일 BMP 심볼 전용) */
+  private readonly dduCharCodeLookup: Int32Array;
 
   /** 미리 정의된 charset 사용 여부 */
   private readonly isPredefinedCharSet: boolean;
@@ -214,23 +218,30 @@ export class Ddu64Core {
     // 비트 길이 계산
     const dduLength = this.dduChar.length;
     const autoIsPow2 = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
-    // preset에서 명시적 usePowerOfTwo가 있으면 존중, 없으면 dduOptions → 자동 감지 순서.
+    // preset 인코딩 프로필은 레거시 와이어 포맷을 고정하므로 사용자 옵션보다 우선합니다.
     // 단, dduOptions.usePowerOfTwo=true여도 charset 크기가 2의 제곱수가 아니면 무시.
     const requestedPow2 = dduOptions?.usePowerOfTwo;
+    const encodingProfile = initial.encodingProfile;
     this.usePowerOfTwo =
+      encodingProfile?.usePowerOfTwo ??
       initial.usePowerOfTwo ??
       (requestedPow2 !== undefined ? requestedPow2 && autoIsPow2 : autoIsPow2);
 
-    // preset에서 명시적 bitLength + usePowerOfTwo 조합이 있으면 그것을 사용 (V1 Python 호환용).
+    // DDU_V1은 8개 심볼로 6비트 값을 두 글자 쌍으로 표현하는 Python 호환 프로필입니다.
     const presetBitLength =
-      initial.isPredefined && initial.usePowerOfTwo !== undefined ? initial.bitLength : undefined;
+      encodingProfile?.bitLength ??
+      (initial.isPredefined && initial.usePowerOfTwo !== undefined ? initial.bitLength : undefined);
     this.bitLength =
       presetBitLength ??
       (this.usePowerOfTwo ? Math.floor(Math.log2(dduLength)) : Math.ceil(Math.log2(dduLength)));
 
     // 역방향 룩업 맵
+    this.dduCharCodeLookup = new Int32Array(65536);
+    this.dduCharCodeLookup.fill(-1);
     for (let i = 0; i < dduLength; i++) {
-      this.dduBinaryLookup.set(this.dduChar[i], i);
+      const char = this.dduChar[i];
+      this.dduBinaryLookup.set(char, i);
+      this.dduCharCodeLookup[char.charCodeAt(0)] = i;
     }
 
     // 코드포인트 배열 (encodeBytes에서 String.fromCharCode 배치 호출용)
@@ -267,7 +278,7 @@ export class Ddu64Core {
       this.defaultCompressionAlgorithm,
     );
     this.useRepeatPadding = dduOptions?.useRepeatPadding ?? initial.useRepeatPadding ?? false;
-    this.bitsPerPadChar = initial.bitsPerPadChar ?? 2;
+    this.bitsPerPadChar = encodingProfile?.bitsPerPadChar ?? initial.bitsPerPadChar ?? 2;
 
     // 난독화
     this.defaultObfuscate = dduOptions?.obfuscate ?? false;
@@ -816,20 +827,35 @@ export class Ddu64Core {
 
     // 인덱스를 문자로 매핑 (코드포인트 배열 → String.fromCharCode 배치 호출)
     const len = indices.length;
-    const codes = new Uint16Array(len);
-    for (let i = 0; i < len; i++) {
-      codes[i] = this.dduCharCodes[indices[i]];
-    }
-
-    // String.fromCharCode.apply는 스택 크기 제한이 있으므로 청크 단위로 호출
     let payload: string;
-    if (len <= 8192) {
-      payload = String.fromCharCode.apply(null, codes as unknown as number[]);
+    if (len <= FULL_CODE_BUFFER_THRESHOLD) {
+      const codes = new Uint16Array(len);
+      for (let i = 0; i < len; i++) {
+        codes[i] = this.dduCharCodes[indices[i]];
+      }
+
+      if (len <= STRING_CHUNK_SIZE) {
+        payload = String.fromCharCode.apply(null, codes as unknown as number[]);
+      } else {
+        const chunks = new Array<string>(Math.ceil(len / STRING_CHUNK_SIZE));
+        let chunkIndex = 0;
+        for (let offset = 0; offset < len; offset += STRING_CHUNK_SIZE) {
+          const slice = codes.subarray(offset, Math.min(offset + STRING_CHUNK_SIZE, len));
+          chunks[chunkIndex++] = String.fromCharCode.apply(null, slice as unknown as number[]);
+        }
+        payload = chunks.join("");
+      }
     } else {
-      const chunks: string[] = [];
-      for (let offset = 0; offset < len; offset += 8192) {
-        const slice = codes.subarray(offset, Math.min(offset + 8192, len));
-        chunks.push(String.fromCharCode.apply(null, slice as unknown as number[]));
+      const codes = new Uint16Array(STRING_CHUNK_SIZE);
+      const chunks = new Array<string>(Math.ceil(len / STRING_CHUNK_SIZE));
+      let chunkIndex = 0;
+      for (let offset = 0; offset < len; offset += STRING_CHUNK_SIZE) {
+        const chunkLen = Math.min(STRING_CHUNK_SIZE, len - offset);
+        for (let i = 0; i < chunkLen; i++) {
+          codes[i] = this.dduCharCodes[indices[offset + i]];
+        }
+        const view = chunkLen === codes.length ? codes : codes.subarray(0, chunkLen);
+        chunks[chunkIndex++] = String.fromCharCode.apply(null, view as unknown as number[]);
       }
       payload = chunks.join("");
     }
@@ -1009,10 +1035,9 @@ export class Ddu64Core {
         : new Array<number>(inputLen);
 
     for (let i = 0; i < inputLen; i++) {
-      const char = cleanedInput[i];
-      const val = this.dduBinaryLookup.get(char);
-      if (val === undefined) {
-        throw new Error(`[Ddu64 decode] Invalid character "${char}" at ${i}`);
+      const val = this.dduCharCodeLookup[cleanedInput.charCodeAt(i)];
+      if (val < 0) {
+        throw new Error(`[Ddu64 decode] Invalid character "${cleanedInput[i]}" at ${i}`);
       }
       indices[i] = val;
     }
@@ -1336,8 +1361,8 @@ export class Ddu64Core {
 
     if (this.usePowerOfTwo) {
       const lastChar = cleanedInput[cleanedInput.length - 1];
-      const value = this.dduBinaryLookup.get(lastChar);
-      if (value === undefined) {
+      const value = this.dduCharCodeLookup[lastChar.charCodeAt(0)];
+      if (value < 0) {
         throw new Error(
           `[Ddu64 decode] Invalid character "${lastChar}" at ${cleanedInput.length - 1}`,
         );
@@ -1346,9 +1371,9 @@ export class Ddu64Core {
     } else {
       const first = cleanedInput[cleanedInput.length - 2];
       const second = cleanedInput[cleanedInput.length - 1];
-      const firstValue = this.dduBinaryLookup.get(first);
-      const secondValue = this.dduBinaryLookup.get(second);
-      if (firstValue === undefined || secondValue === undefined) {
+      const firstValue = this.dduCharCodeLookup[first.charCodeAt(0)];
+      const secondValue = this.dduCharCodeLookup[second.charCodeAt(0)];
+      if (firstValue < 0 || secondValue < 0) {
         throw new Error("[Ddu64 decode] Invalid character in final encoded chunk");
       }
       lastValue = firstValue * this.dduChar.length + secondValue;

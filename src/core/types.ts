@@ -29,6 +29,15 @@ export type DduTextEncoding =
 
 // ─── Charset Types ───────────────────────────────────────────────────────────
 
+export interface EncodingProfile {
+  /** 논리 심볼당 비트 수 */
+  bitLength: number;
+  /** 2의 제곱수 charset 직접 인덱스 모드 여부 */
+  usePowerOfTwo: boolean;
+  /** 반복 패딩 시 패딩 문자 1개가 나타내는 비트 수 */
+  bitsPerPadChar?: number;
+}
+
 export interface CharSetConfig {
   /** charset 식별 심볼 */
   symbol: DduSetSymbol;
@@ -48,6 +57,8 @@ export interface CharSetConfig {
   bitsPerPadChar?: number;
   /** 2의 제곱수 모드 강제 여부 (false로 설정하면 인덱스 쌍 출력 모드 사용) */
   usePowerOfTwo?: boolean;
+  /** 프리셋별 인코딩 프로필. 레거시 와이어 호환성을 고정할 때 사용 */
+  encodingProfile?: EncodingProfile;
 }
 
 export interface CharSetInfo {
