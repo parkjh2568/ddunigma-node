@@ -68,6 +68,10 @@ function rethrowDecompressLimitError(e: unknown, maxBytes: number, label: string
 
 function toBufferView(data: Uint8Array): Buffer {
   if (Buffer.isBuffer(data)) return data;
+  // SharedArrayBuffer는 일부 Node.js native API에서 거부될 수 있으므로 복사
+  if (data.buffer instanceof SharedArrayBuffer) {
+    return Buffer.from(data);
+  }
   return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 }
 

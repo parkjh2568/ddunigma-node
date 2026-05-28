@@ -145,33 +145,43 @@ export function wrapDdu64Error(
   const message = toErrorMessage(error);
   const lower = message.toLowerCase();
 
-  if (lower.includes("checksum")) return new Ddu64ChecksumError(message, error);
-  if (lower.includes("obfuscation")) return new Ddu64ObfuscationError(message, error);
-  if (lower.includes("adapter") || lower.includes("sync") || lower.includes("provider")) {
-    return new Ddu64AdapterError(message, fallbackOperation, error);
-  }
-  if (lower.includes("encryptionkey") || lower.includes("encrypted payload requires")) {
-    return fallbackOperation === "encode"
-      ? new Ddu64EncryptionError(message, error)
-      : new Ddu64DecryptionError(message, error);
-  }
-  if (lower.includes("decrypt") || lower.includes("decryption") || lower.includes("incorrect key")) {
-    return new Ddu64DecryptionError(message, error);
-  }
-  if (lower.includes("encrypt")) {
-    return new Ddu64EncryptionError(message, error);
-  }
-  if (lower.includes("decompress") || lower.includes("inflate")) {
-    return new Ddu64DecompressionError(message, error);
-  }
-  if (lower.includes("compress") || lower.includes("brotli")) {
-    return new Ddu64CompressionError(message, error);
-  }
-  if (lower.includes("limit") || lower.includes("exceeds")) {
-    return new Ddu64LimitError(message, fallbackOperation, error);
-  }
-  if (lower.includes("charset") || lower.includes("character")) {
-    return new Ddu64CharsetError(message, error);
+  // 내부 에러([Ddu64 ...] prefix)만 키워드 기반 분류 적용.
+  // 외부/사용자 에러는 키워드 매칭 없이 fallback operation으로 분류.
+  const isInternalError = lower.startsWith("[ddu64") || lower.startsWith("[bitpack");
+
+  if (isInternalError) {
+    if (lower.includes("checksum")) return new Ddu64ChecksumError(message, error);
+    if (lower.includes("obfuscation")) return new Ddu64ObfuscationError(message, error);
+    if (lower.includes("adapter") || lower.includes("sync") || lower.includes("provider")) {
+      return new Ddu64AdapterError(message, fallbackOperation, error);
+    }
+    if (lower.includes("encryptionkey") || lower.includes("encrypted payload requires")) {
+      return fallbackOperation === "encode"
+        ? new Ddu64EncryptionError(message, error)
+        : new Ddu64DecryptionError(message, error);
+    }
+    if (
+      lower.includes("decrypt") ||
+      lower.includes("decryption") ||
+      lower.includes("incorrect key")
+    ) {
+      return new Ddu64DecryptionError(message, error);
+    }
+    if (lower.includes("encrypt")) {
+      return new Ddu64EncryptionError(message, error);
+    }
+    if (lower.includes("decompress") || lower.includes("inflate")) {
+      return new Ddu64DecompressionError(message, error);
+    }
+    if (lower.includes("compress") || lower.includes("brotli")) {
+      return new Ddu64CompressionError(message, error);
+    }
+    if (lower.includes("limit") || lower.includes("exceeds")) {
+      return new Ddu64LimitError(message, fallbackOperation, error);
+    }
+    if (lower.includes("charset") || lower.includes("character") || lower.includes("invalid")) {
+      return new Ddu64CharsetError(message, error);
+    }
   }
 
   if (fallbackOperation === "stream") return new Ddu64StreamError(message, error);

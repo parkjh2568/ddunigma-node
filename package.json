@@ -56,14 +56,14 @@
         }
       },
       "import": {
-        "types": "./dist/browser.d.ts",
-        "default": "./dist/browser.js"
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
       },
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       },
-      "default": "./dist/browser.js"
+      "default": "./dist/index.js"
     },
     "./browser": {
       "import": {

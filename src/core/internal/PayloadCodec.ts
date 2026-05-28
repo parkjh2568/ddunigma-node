@@ -7,20 +7,16 @@
 import { bitPackDecode, bitPackEncode, type BitPackConfig } from "../BitPack.js";
 import type { DduOptions } from "../types.js";
 import { getWasmCodecSync } from "../../wasm/WasmCodec.js";
-import {
-  decodeNativeBase64,
-  encodeNativeBase64,
-} from "./NativeBase64FastPath.js";
+import { decodeNativeBase64, encodeNativeBase64 } from "./NativeBase64FastPath.js";
 import { indicesToString } from "./IndexStringMapper.js";
 import { buildEncodeFooter } from "./EncodeFinalize.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
 
 /**
- * 인덱스 배열을 Uint16Array로 할당하기 시작하는 JS fallback 임계값.
- * wasmThreshold는 WASM 사용 여부, 이 값은 JS 경로의 컨테이너 선택만 담당합니다.
+ * wasmThreshold 이상에서 Uint16Array를 사용하여 인덱스를 저장합니다.
+ * WASM 경로와 동일한 임계값을 사용하여 의미를 통합합니다.
  */
-const TYPED_INDICES_THRESHOLD = 4096;
 
 export interface PayloadCodecContext {
   bitLength: number;
@@ -89,11 +85,8 @@ export function decodePayload(
     : null;
   if (nativeDecoded) return nativeDecoded;
 
-  const shouldUseTypedIndices =
-    shouldUseWasm(inputLen, context) || inputLen >= TYPED_INDICES_THRESHOLD;
-  const indices = shouldUseTypedIndices
-    ? new Uint16Array(inputLen)
-    : new Array<number>(inputLen);
+  const shouldUseTypedIndices = inputLen >= context.wasmThreshold;
+  const indices = shouldUseTypedIndices ? new Uint16Array(inputLen) : new Array<number>(inputLen);
 
   for (let i = 0; i < inputLen; i++) {
     const val = context.dduCharCodeLookup[cleanedInput.charCodeAt(i)];
