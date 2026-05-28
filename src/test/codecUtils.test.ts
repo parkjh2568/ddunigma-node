@@ -7,6 +7,7 @@ import {
   removeChunks,
   combineCoda,
   buildCodaCharset,
+  constantTimeEquals,
   normalizeCompressionLevel,
   stringToBytes,
   bytesToString,
@@ -44,6 +45,20 @@ describe("core/codecUtils", () => {
     it("should produce consistent results for same input", () => {
       const input = new Uint8Array([1, 2, 3, 4, 5]);
       expect(calculateCRC32(input)).toBe(calculateCRC32(input));
+    });
+  });
+
+  describe("constantTimeEquals", () => {
+    it("should return true for identical strings", () => {
+      expect(constantTimeEquals("cbf43926", "cbf43926")).toBe(true);
+    });
+
+    it("should return false for different strings", () => {
+      expect(constantTimeEquals("cbf43926", "00000000")).toBe(false);
+    });
+
+    it("should return false for different lengths", () => {
+      expect(constantTimeEquals("abc", "abcd")).toBe(false);
     });
   });
 

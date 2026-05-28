@@ -12,6 +12,7 @@
 import { Ddu64Core } from "./core/Ddu64Core.js";
 import { NodeAdapter } from "./adapters/NodeAdapter.js";
 import type { DduConstructorOptions, DduOptions } from "./core/types.js";
+import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
 
 /**
  * Node.js 전용 Ddu64 인코더/디코더.
@@ -34,24 +35,14 @@ export class Ddu64Node extends Ddu64Core {
     paddingChar?: string,
     dduOptions?: DduConstructorOptions,
   ) {
-    // 오버로드: new Ddu64({ ...options }) 형태 지원
-    if (
-      dduChar !== null &&
-      dduChar !== undefined &&
-      typeof dduChar === "object" &&
-      !Array.isArray(dduChar)
-    ) {
-      dduOptions = dduChar as DduConstructorOptions;
-      dduChar = undefined;
-      paddingChar = undefined;
-    }
+    const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
 
     // 명시적으로 제공된 어댑터가 없으면 NodeAdapter를 자동 주입
     const options: DduConstructorOptions = {
-      ...dduOptions,
-      adapter: dduOptions?.adapter ?? new NodeAdapter(),
+      ...resolved.dduOptions,
+      adapter: resolved.dduOptions?.adapter ?? new NodeAdapter(),
     };
-    super(dduChar, paddingChar, options);
+    super(resolved.dduChar, resolved.paddingChar, options);
   }
 
   /**
@@ -60,6 +51,7 @@ export class Ddu64Node extends Ddu64Core {
    * @param input - 디코딩할 인코딩된 문자열
    * @param options - 디코딩 옵션
    * @returns 디코딩된 Buffer
+   * @group Sync
    */
   decodeToBuffer(input: string, options?: DduOptions): Buffer {
     const uint8 = this.decodeToUint8Array(input, options);
@@ -72,6 +64,7 @@ export class Ddu64Node extends Ddu64Core {
    * @param input - 디코딩할 인코딩된 문자열
    * @param options - 디코딩 옵션
    * @returns 디코딩된 Buffer로 resolve되는 Promise
+   * @group Async
    */
   async decodeToBufferAsync(input: string, options?: DduOptions): Promise<Buffer> {
     const uint8 = await this.decodeToUint8ArrayAsync(input, options);

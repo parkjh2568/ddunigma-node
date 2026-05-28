@@ -34,6 +34,24 @@ export type {
 // ─── 유틸리티 ────────────────────────────────────────────────────────────────
 
 export { CharsetBuilder } from "./core/CharsetBuilder.js";
+export {
+  Ddu64Error,
+  Ddu64ErrorCode,
+  Ddu64EncodeError,
+  Ddu64DecodeError,
+  Ddu64CompressionError,
+  Ddu64DecompressionError,
+  Ddu64EncryptionError,
+  Ddu64DecryptionError,
+  Ddu64ChecksumError,
+  Ddu64CharsetError,
+  Ddu64LimitError,
+  Ddu64AdapterError,
+  Ddu64ObfuscationError,
+  Ddu64StreamError,
+  isDdu64Error,
+} from "./core/errors.js";
+export type { Ddu64Operation, Ddu64ErrorOptions } from "./core/errors.js";
 
 // ─── Web Streams ─────────────────────────────────────────────────────────────
 

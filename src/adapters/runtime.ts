@@ -37,8 +37,5 @@ export function detectRuntime(): RuntimeId {
     return "browser";
   }
 
-  throw new Error(
-    "[ddunigma] No suitable crypto provider found. " +
-      "Detected runtime lacks both Node.js crypto module and Web Crypto API (SubtleCrypto).",
-  );
+  return "unknown";
 }

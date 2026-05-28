@@ -23,6 +23,7 @@ import {
   type StreamHeaderMeta,
 } from "../core/wireFormat.js";
 import type { CharSetInfo, DduOptions } from "../core/types.js";
+import { wrapDdu64Error } from "../core/errors.js";
 
 // ─── 인코딩 TransformStream ─────────────────────────────────────────────────
 
@@ -172,7 +173,7 @@ export function createReadableEncodeStream(
           totalLength = 0;
         }
       } catch (err) {
-        controller.error(err instanceof Error ? err : new Error(String(err)));
+        controller.error(wrapDdu64Error(err, "stream"));
       }
     },
   });
@@ -303,7 +304,7 @@ export function createReadableDecodeStream(
         }
         textBuffer = "";
       } catch (err) {
-        controller.error(err instanceof Error ? err : new Error(String(err)));
+        controller.error(wrapDdu64Error(err, "stream"));
       }
     },
   });

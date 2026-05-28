@@ -279,6 +279,27 @@ const ddu = new Ddu64({
 });
 ```
 
+## Custom Errors
+
+```typescript
+import { Ddu64, Ddu64ErrorCode, isDdu64Error } from "@ddunigma/node";
+
+const ddu = new Ddu64({ checksum: true });
+
+try {
+  ddu.decode(tamperedInput);
+} catch (err) {
+  if (isDdu64Error(err) && err.code === Ddu64ErrorCode.ChecksumMismatch) {
+    // 체크섬 불일치 처리
+  }
+}
+```
+
+인코딩, 디코딩, 압축, 암호화, 체크섬, charset, 크기 제한, adapter, stream 실패는
+`Ddu64Error` 계열로 래핑됩니다. 모든 공개 진입점(`@ddunigma/node`,
+`@ddunigma/node/browser`, `@ddunigma/node/core`)에서 같은 에러 타입과
+`Ddu64ErrorCode`를 export합니다.
+
 ---
 
 ## API
@@ -391,18 +412,25 @@ new Ddu64(dduChar, paddingChar, options?);
 
 ## Entry Points
 
-| Import Path              | 용도                                  |
-| ------------------------ | ------------------------------------- |
-| `@ddunigma/node`         | Node.js 전체 기능 (동기+비동기)       |
-| `@ddunigma/node/browser` | 브라우저 최적화 (BrowserAdapter 기본) |
-| `@ddunigma/node/core`    | 최소 코어 (인코딩/디코딩만)           |
+| Runtime / Target                | Import Path              | 용도                                  |
+| ------------------------------- | ------------------------ | ------------------------------------- |
+| Node.js server/CLI              | `@ddunigma/node`         | Node.js 전체 기능 (동기+비동기)       |
+| Browser / Vite / webpack        | `@ddunigma/node/browser` | 브라우저 최적화 (BrowserAdapter 기본) |
+| Cloudflare Workers / Deno / Bun | `@ddunigma/node/browser` | Node.js 내장 모듈 없는 Web API 경로   |
+| Adapter 직접 주입 최소 번들     | `@ddunigma/node/core`    | 최소 코어 (인코딩/디코딩만)           |
+
+브라우저, Deno, Workers, Bun처럼 Node.js 내장 모듈을 사용할 수 없는 환경에서는
+루트 진입점 대신 `@ddunigma/node/browser`를 사용하세요. 루트 진입점은 Node.js용
+`Buffer` API와 Node adapter를 함께 노출합니다.
 
 ## Build & Test
 
 ```bash
 pnpm test
+pnpm typecheck
 pnpm build
 pnpm lint
+pnpm pack:check
 pnpm bench
 ```
 

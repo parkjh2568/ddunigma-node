@@ -66,6 +66,11 @@ function rethrowDecompressLimitError(e: unknown, maxBytes: number, label: string
   throw e;
 }
 
+function toBufferView(data: Uint8Array): Buffer {
+  if (Buffer.isBuffer(data)) return data;
+  return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+}
+
 /**
  * PlatformAdapter의 Node.js 구현.
  * 네이티브 Node.js `crypto`와 `zlib` 모듈을 사용하여
@@ -153,7 +158,7 @@ export class NodeAdapter implements PlatformAdapter {
     if (level !== undefined) {
       options.level = level;
     }
-    const result = await deflateRawAsync(Buffer.from(data), options);
+    const result = await deflateRawAsync(toBufferView(data), options);
     return new Uint8Array(result);
   }
 
@@ -162,17 +167,17 @@ export class NodeAdapter implements PlatformAdapter {
     if (level !== undefined) {
       options.level = level;
     }
-    return new Uint8Array(deflateRawSync(Buffer.from(data), options));
+    return new Uint8Array(deflateRawSync(toBufferView(data), options));
   }
 
   async inflate(data: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
     if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
-      const result = await inflateRawAsync(Buffer.from(data));
+      const result = await inflateRawAsync(toBufferView(data));
       return new Uint8Array(result);
     }
     const options: ZlibOptions = { maxOutputLength: maxBytes };
     try {
-      const result = await inflateRawAsync(Buffer.from(data), options);
+      const result = await inflateRawAsync(toBufferView(data), options);
       return new Uint8Array(result);
     } catch (e: unknown) {
       rethrowDecompressLimitError(e, maxBytes, "inflate");
@@ -181,11 +186,11 @@ export class NodeAdapter implements PlatformAdapter {
 
   inflateSync(data: Uint8Array, maxBytes?: number): Uint8Array {
     if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
-      return new Uint8Array(inflateRawSync(Buffer.from(data)));
+      return new Uint8Array(inflateRawSync(toBufferView(data)));
     }
     try {
       return new Uint8Array(
-        inflateRawSync(Buffer.from(data), { maxOutputLength: maxBytes } as ZlibOptions),
+        inflateRawSync(toBufferView(data), { maxOutputLength: maxBytes } as ZlibOptions),
       );
     } catch (e: unknown) {
       rethrowDecompressLimitError(e, maxBytes, "inflate");
@@ -199,7 +204,7 @@ export class NodeAdapter implements PlatformAdapter {
         [zlibConstants.BROTLI_PARAM_QUALITY]: Math.max(0, Math.min(11, level)),
       };
     }
-    const result = await brotliCompressAsync(Buffer.from(data), options);
+    const result = await brotliCompressAsync(toBufferView(data), options);
     return new Uint8Array(result);
   }
 
@@ -210,16 +215,16 @@ export class NodeAdapter implements PlatformAdapter {
         [zlibConstants.BROTLI_PARAM_QUALITY]: Math.max(0, Math.min(11, level)),
       };
     }
-    return new Uint8Array(zlibBrotliCompressSync(Buffer.from(data), options));
+    return new Uint8Array(zlibBrotliCompressSync(toBufferView(data), options));
   }
 
   async brotliDecompress(data: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
     if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
-      const result = await brotliDecompressAsync(Buffer.from(data));
+      const result = await brotliDecompressAsync(toBufferView(data));
       return new Uint8Array(result);
     }
     try {
-      const result = await brotliDecompressAsync(Buffer.from(data), {
+      const result = await brotliDecompressAsync(toBufferView(data), {
         maxOutputLength: maxBytes,
       } as BrotliOptions);
       return new Uint8Array(result);
@@ -230,11 +235,11 @@ export class NodeAdapter implements PlatformAdapter {
 
   brotliDecompressSync(data: Uint8Array, maxBytes?: number): Uint8Array {
     if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
-      return new Uint8Array(zlibBrotliDecompressSync(Buffer.from(data)));
+      return new Uint8Array(zlibBrotliDecompressSync(toBufferView(data)));
     }
     try {
       return new Uint8Array(
-        zlibBrotliDecompressSync(Buffer.from(data), {
+        zlibBrotliDecompressSync(toBufferView(data), {
           maxOutputLength: maxBytes,
         } as BrotliOptions),
       );

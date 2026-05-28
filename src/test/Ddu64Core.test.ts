@@ -6,6 +6,14 @@ import { describe, it, expect } from "vitest";
 import { Ddu64Core } from "../core/Ddu64Core.js";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
 import { DduSetSymbol } from "../core/types.js";
+import {
+  Ddu64AdapterError,
+  Ddu64ChecksumError,
+  Ddu64CharsetError,
+  Ddu64DecryptionError,
+  Ddu64ErrorCode,
+  isDdu64Error,
+} from "../core/errors.js";
 
 // Helper: create encoder with NodeAdapter for sync operations
 function createEncoder(
@@ -92,7 +100,7 @@ describe("Ddu64Core", () => {
         encryptionKey: "secret",
       });
       // Sync encode with encryption should throw since no adapter
-      expect(() => encoder.encode("test")).toThrow();
+      expect(() => encoder.encode("test")).toThrow(Ddu64AdapterError);
     });
   });
 
@@ -206,7 +214,45 @@ describe("Ddu64Core", () => {
       // Tamper with the encoded data (change a character before CHK)
       const chkIdx = encoded.indexOf("CHK");
       const tampered = encoded.slice(0, chkIdx) + "CHK" + "00000000";
-      expect(() => encoder.decode(tampered)).toThrow("Checksum mismatch");
+      expect(() => encoder.decode(tampered)).toThrow(Ddu64ChecksumError);
+      try {
+        encoder.decode(tampered);
+      } catch (err) {
+        expect(isDdu64Error(err)).toBe(true);
+        expect((err as Ddu64ChecksumError).code).toBe(Ddu64ErrorCode.ChecksumMismatch);
+      }
+    });
+  });
+
+  describe("Custom errors", () => {
+    it("wraps invalid decode input as a typed charset error", () => {
+      const encoder = createEncoder();
+
+      expect(() => encoder.decodeToUint8Array("!!!")).toThrow(Ddu64CharsetError);
+
+      try {
+        encoder.decodeToUint8Array("!!!");
+      } catch (err) {
+        expect(isDdu64Error(err)).toBe(true);
+        expect((err as Ddu64CharsetError).code).toBe(Ddu64ErrorCode.InvalidCharset);
+        expect(err).toBeInstanceOf(Ddu64CharsetError);
+      }
+    });
+
+    it("wraps async decryption failure as a typed decryption error", async () => {
+      const encoder = createEncoder({ encryptionKey: "key-one" });
+      const decoder = createEncoder({ encryptionKey: "key-two" });
+      const encoded = await encoder.encodeAsync("secret");
+
+      await expect(decoder.decodeAsync(encoded)).rejects.toThrow(Ddu64DecryptionError);
+
+      try {
+        await decoder.decodeAsync(encoded);
+      } catch (err) {
+        expect(isDdu64Error(err)).toBe(true);
+        expect((err as Ddu64DecryptionError).code).toBe(Ddu64ErrorCode.DecryptionFailed);
+        expect(err).toBeInstanceOf(Ddu64DecryptionError);
+      }
     });
   });
 

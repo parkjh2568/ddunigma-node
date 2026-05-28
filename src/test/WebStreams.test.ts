@@ -21,6 +21,12 @@ import {
   parseStreamHeader,
   WIRE_FORMAT_VERSION,
 } from "../core/wireFormat.js";
+import {
+  Ddu64ChecksumError,
+  Ddu64DecryptionError,
+  Ddu64ErrorCode,
+  isDdu64Error,
+} from "../core/errors.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -382,8 +388,14 @@ describe("WebStreams", () => {
 
       const corruptedChecksum = encoded.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
       await expect(decodeViaStream(encoder, corruptedChecksum, { checksum: true })).rejects.toThrow(
-        /Checksum mismatch/,
+        Ddu64ChecksumError,
       );
+      try {
+        await decodeViaStream(encoder, corruptedChecksum, { checksum: true });
+      } catch (err) {
+        expect(isDdu64Error(err)).toBe(true);
+        expect((err as Ddu64ChecksumError).code).toBe(Ddu64ErrorCode.ChecksumMismatch);
+      }
     });
 
     it("round-trips with brotli compression and encryption", async () => {
@@ -429,7 +441,13 @@ describe("WebStreams", () => {
       const encoded = await encodeViaStream(encEncoder, input, { encrypt: true });
 
       const decEncoder = createEncoder({ encryptionKey: "key-two" });
-      await expectDecodeError(decEncoder, encoded);
+      await expect(decodeViaStream(decEncoder, encoded)).rejects.toThrow(Ddu64DecryptionError);
+      try {
+        await decodeViaStream(decEncoder, encoded);
+      } catch (err) {
+        expect(isDdu64Error(err)).toBe(true);
+        expect((err as Ddu64DecryptionError).code).toBe(Ddu64ErrorCode.DecryptionFailed);
+      }
     });
   });
 });

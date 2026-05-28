@@ -189,6 +189,28 @@ describe("구버전 호환성 테스트", () => {
     });
   });
 
+  describe("V1/V2 async 호환성 가드", () => {
+    const asyncVectors = compatVectors.slice(0, 8);
+
+    it("V2 기본 생성자는 기존 벡터를 async로도 디코딩", async () => {
+      const encoder = new Ddu64Node();
+
+      for (const vec of asyncVectors) {
+        await expect(encoder.decodeAsync(vec.v2)).resolves.toBe(vec.input);
+        await expect(encoder.encodeAsync(vec.input)).resolves.toBe(vec.v2);
+      }
+    });
+
+    it("V1 DDU_V1 생성자는 기존 벡터를 async로도 디코딩", async () => {
+      const encoder = new Ddu64Node({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+
+      for (const vec of asyncVectors) {
+        await expect(encoder.decodeAsync(vec.v1)).resolves.toBe(vec.input);
+        await expect(encoder.encodeAsync(vec.input)).resolves.toBe(vec.v1);
+      }
+    });
+  });
+
   // ─── 고급 기능 호환성 ──────────────────────────────────────────────────────
 
   describe("고급 기능 호환성", () => {

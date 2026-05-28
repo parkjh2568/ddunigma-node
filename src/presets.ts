@@ -1,4 +1,4 @@
-import { CharSetConfig, DduSetSymbol } from "./core/types";
+import { CharSetConfig, DduSetSymbol } from "./core/types.js";
 
 const dduCharSet: CharSetConfig = {
   symbol: DduSetSymbol.DDU,

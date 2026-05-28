@@ -1,9 +1,25 @@
 import { performance } from "node:perf_hooks";
-import { CharsetBuilder, Ddu64, DduSetSymbol, preloadWasm } from "../src/index.js";
+import {
+  CharsetBuilder,
+  createReadableDecodeStream,
+  createReadableEncodeStream,
+  Ddu64,
+  DduSetSymbol,
+  preloadWasm,
+} from "../src/index.js";
 
 type BenchCase = {
   name: string;
-  mode: "native-base64" | "js-bitpack" | "wasm-bitpack" | "variable-charset" | "pipeline";
+  mode:
+    | "native-base64"
+    | "js-bitpack"
+    | "wasm-bitpack"
+    | "variable-charset"
+    | "pipeline"
+    | "legacy-v1"
+    | "large-js"
+    | "large-wasm"
+    | "stream";
   encoder: Ddu64;
   input: Uint8Array | string;
   iterations: number;
@@ -45,6 +61,20 @@ function time(fn: () => void): number {
   return performance.now() - started;
 }
 
+async function timeAsync(fn: () => Promise<void>): Promise<number> {
+  const started = performance.now();
+  await fn();
+  return performance.now() - started;
+}
+
+function inputByteLength(input: Uint8Array | string): number {
+  return typeof input === "string" ? textEncoder.encode(input).length : input.length;
+}
+
+function inputToBytes(input: Uint8Array | string): Uint8Array {
+  return typeof input === "string" ? textEncoder.encode(input) : input;
+}
+
 function withoutNativeBase64<T>(disabled: boolean | undefined, fn: () => T): T {
   if (!disabled) return fn();
 
@@ -59,10 +89,7 @@ function withoutNativeBase64<T>(disabled: boolean | undefined, fn: () => T): T {
 }
 
 function runCase(testCase: BenchCase): BenchResult {
-  const inputBytes =
-    typeof testCase.input === "string"
-      ? textEncoder.encode(testCase.input).length
-      : testCase.input.length;
+  const inputBytes = inputByteLength(testCase.input);
 
   let encoded = "";
   withoutNativeBase64(testCase.disableNativeBase64, () => {
@@ -99,6 +126,96 @@ function runCase(testCase: BenchCase): BenchResult {
   };
 }
 
+async function encodeViaStream(encoder: Ddu64, input: Uint8Array | string): Promise<string> {
+  const inputBytes = inputToBytes(input);
+  const stream = createReadableEncodeStream(encoder);
+  const inputStream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const chunkSize = 16 * 1024;
+      for (let offset = 0; offset < inputBytes.length; offset += chunkSize) {
+        controller.enqueue(inputBytes.slice(offset, offset + chunkSize));
+      }
+      controller.close();
+    },
+  });
+
+  const reader = inputStream.pipeThrough(stream).getReader();
+  let encoded = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    encoded += value;
+  }
+  return encoded;
+}
+
+async function decodeViaStream(encoder: Ddu64, encoded: string): Promise<Uint8Array> {
+  const stream = createReadableDecodeStream(encoder);
+  const inputStream = new ReadableStream<string>({
+    start(controller) {
+      const chunkSize = 16 * 1024;
+      for (let offset = 0; offset < encoded.length; offset += chunkSize) {
+        controller.enqueue(encoded.slice(offset, offset + chunkSize));
+      }
+      controller.close();
+    },
+  });
+
+  const reader = inputStream.pipeThrough(stream).getReader();
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalLength += value.length;
+  }
+
+  const decoded = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    decoded.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return decoded;
+}
+
+async function runStreamCase(testCase: BenchCase): Promise<BenchResult> {
+  const inputBytes = inputByteLength(testCase.input);
+
+  let encoded = await encodeViaStream(testCase.encoder, testCase.input);
+  await decodeViaStream(testCase.encoder, encoded);
+
+  const encodeMs = await timeAsync(async () => {
+    for (let i = 0; i < testCase.iterations; i++) {
+      encoded = await encodeViaStream(testCase.encoder, testCase.input);
+    }
+  });
+
+  const decodeMs = await timeAsync(async () => {
+    for (let i = 0; i < testCase.iterations; i++) {
+      await decodeViaStream(testCase.encoder, encoded);
+    }
+  });
+
+  const totalMb = (inputBytes * testCase.iterations) / (1024 * 1024);
+  const totalSeconds = (encodeMs + decodeMs) / 1000;
+
+  return {
+    name: testCase.name,
+    mode: testCase.mode,
+    encodeMs,
+    decodeMs,
+    encodedChars: encoded.length,
+    mbps: totalSeconds > 0 ? totalMb / totalSeconds : 0,
+  };
+}
+
+async function runBenchCase(testCase: BenchCase): Promise<BenchResult> {
+  if (testCase.mode === "stream") return runStreamCase(testCase);
+  return runCase(testCase);
+}
+
 async function main(): Promise<void> {
   let wasmReady = false;
   try {
@@ -112,6 +229,7 @@ async function main(): Promise<void> {
   const smallText = makeText(16 * 1024);
   const largeText = makeText(256 * 1024);
   const binary = makeBinary(256 * 1024);
+  const largeBinary = makeBinary(8 * 1024 * 1024);
   const { charset: variableCharset, padding: variablePadding } = CharsetBuilder.base64()
     .limit(50)
     .buildWithPadding();
@@ -141,6 +259,14 @@ async function main(): Promise<void> {
       disableNativeBase64: true,
     },
     {
+      name: "DDU_V1 text 256KB",
+      mode: "legacy-v1",
+      encoder: new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 }),
+      input: largeText,
+      iterations: 10,
+      disableNativeBase64: true,
+    },
+    {
       name: "ONECHARSET binary 256KB",
       mode: "wasm-bitpack",
       encoder: new Ddu64({ dduSetSymbol: DduSetSymbol.ONECHARSET }),
@@ -153,6 +279,22 @@ async function main(): Promise<void> {
       encoder: new Ddu64(variableCharset, variablePadding),
       input: binary,
       iterations: 10,
+    },
+    {
+      name: "DDU binary 8MB",
+      mode: "large-js",
+      encoder: new Ddu64({ wasmThreshold: Number.MAX_SAFE_INTEGER }),
+      input: largeBinary,
+      iterations: 2,
+      disableNativeBase64: true,
+    },
+    {
+      name: "DDU binary 8MB",
+      mode: "large-wasm",
+      encoder: new Ddu64({ wasmThreshold: 1024 }),
+      input: largeBinary,
+      iterations: 2,
+      disableNativeBase64: true,
     },
     {
       name: "DDU text 16KB",
@@ -179,11 +321,21 @@ async function main(): Promise<void> {
       input: largeText,
       iterations: 10,
     },
+    {
+      name: "DDU WebStreams text 256KB",
+      mode: "stream",
+      encoder: new Ddu64(),
+      input: largeText,
+      iterations: 5,
+    },
   ];
 
   globalThis.gc?.();
 
-  const results = cases.map(runCase);
+  const results: BenchResult[] = [];
+  for (const testCase of cases) {
+    results.push(await runBenchCase(testCase));
+  }
   const nameWidth = Math.max(...results.map((result) => result.name.length), "case".length);
   const modeWidth = Math.max(...results.map((result) => result.mode.length), "mode".length);
 

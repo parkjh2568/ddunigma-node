@@ -330,5 +330,3 @@ pub unsafe extern "C" fn decode(
 
     out.len()
 }
-
-// ─── Panic Handler ───────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { detectRuntime, type RuntimeId } from "../adapters/detect.js";
+import { detectRuntime, getAdapter, type RuntimeId } from "../adapters/detect.js";
 
 describe("detectRuntime", () => {
   describe("in Node.js environment (default vitest runtime)", () => {
@@ -83,7 +83,7 @@ describe("detectRuntime", () => {
       expect(detectRuntime()).toBe("browser");
     });
 
-    it("throws when no runtime indicators are present", () => {
+    it('returns "unknown" when no runtime indicators are present', () => {
       Object.defineProperty(globalThis, "process", {
         value: undefined,
         writable: true,
@@ -95,24 +95,7 @@ describe("detectRuntime", () => {
         configurable: true,
       });
 
-      expect(() => detectRuntime()).toThrow("[ddunigma] No suitable crypto provider found.");
-    });
-
-    it("throws with descriptive error message mentioning both providers", () => {
-      Object.defineProperty(globalThis, "process", {
-        value: undefined,
-        writable: true,
-        configurable: true,
-      });
-      Object.defineProperty(globalThis, "crypto", {
-        value: undefined,
-        writable: true,
-        configurable: true,
-      });
-
-      expect(() => detectRuntime()).toThrow(
-        "Detected runtime lacks both Node.js crypto module and Web Crypto API (SubtleCrypto).",
-      );
+      expect(detectRuntime()).toBe("unknown");
     });
 
     it("prioritizes Deno over Node.js when both are present", () => {
@@ -207,11 +190,44 @@ describe("detectRuntime", () => {
 });
 
 describe("getAdapter", () => {
+  const originalProcess = globalThis.process;
+  const originalCrypto = globalThis.crypto;
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, "process", {
+      value: originalProcess,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, "crypto", {
+      value: originalCrypto,
+      writable: true,
+      configurable: true,
+    });
+  });
+
   it("returns a PlatformAdapter for the current Node.js runtime", async () => {
     // In the test environment (Node.js), getAdapter should resolve
     // This will attempt to import NodeAdapter.ts which may not exist yet
     // For now, we just verify detectRuntime works correctly
     const runtime = detectRuntime();
     expect(runtime).toBe("node");
+  });
+
+  it("throws with descriptive error when runtime is unknown", async () => {
+    Object.defineProperty(globalThis, "process", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, "crypto", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+
+    await expect(getAdapter()).rejects.toThrow(
+      "Detected runtime lacks both Node.js crypto module and Web Crypto API (SubtleCrypto).",
+    );
   });
 });

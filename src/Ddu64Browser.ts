@@ -10,6 +10,7 @@
 import { Ddu64Core } from "./core/Ddu64Core.js";
 import { BrowserAdapter } from "./adapters/BrowserAdapter.js";
 import type { DduConstructorOptions } from "./core/types.js";
+import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
 
 export class Ddu64Browser extends Ddu64Core {
   constructor(
@@ -17,21 +18,12 @@ export class Ddu64Browser extends Ddu64Core {
     paddingChar?: string,
     dduOptions?: DduConstructorOptions,
   ) {
-    if (
-      dduChar !== null &&
-      dduChar !== undefined &&
-      typeof dduChar === "object" &&
-      !Array.isArray(dduChar)
-    ) {
-      dduOptions = dduChar as DduConstructorOptions;
-      dduChar = undefined;
-      paddingChar = undefined;
-    }
+    const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
 
     const options: DduConstructorOptions = {
-      ...dduOptions,
-      adapter: dduOptions?.adapter ?? new BrowserAdapter(),
+      ...resolved.dduOptions,
+      adapter: resolved.dduOptions?.adapter ?? new BrowserAdapter(),
     };
-    super(dduChar, paddingChar, options);
+    super(resolved.dduChar, resolved.paddingChar, options);
   }
 }
