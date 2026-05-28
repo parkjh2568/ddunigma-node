@@ -12,8 +12,10 @@
 
 import { describe, it, expect } from "vitest";
 import { Ddu64Core } from "../core/Ddu64Core.js";
+import { Ddu64Node as Ddu64 } from "../Ddu64Node.js";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
 import { createReadableEncodeStream, createReadableDecodeStream } from "../streams/WebStreams.js";
+import { DduSetSymbol, type DduConstructorOptions } from "../core/types.js";
 import {
   getStreamHeaderLength,
   parseStreamHeader,
@@ -22,11 +24,10 @@ import {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function createEncoder(opts?: { encryptionKey?: string; compress?: boolean }) {
+function createEncoder(opts: DduConstructorOptions = {}) {
   return new Ddu64Core(undefined, undefined, {
+    ...opts,
     adapter: new NodeAdapter(),
-    encryptionKey: opts?.encryptionKey,
-    compress: opts?.compress,
   });
 }
 
@@ -250,6 +251,30 @@ describe("WebStreams", () => {
       expect(decoded).toEqual(input);
     });
 
+    it("round-trips V2 default constructor streams", async () => {
+      const encoder = new Ddu64();
+      const input = new TextEncoder().encode("V2 default stream compatibility: 안녕하세요 12345");
+
+      expect(encoder.getCharSetInfo().usePowerOfTwo).toBe(true);
+
+      const encoded = await encodeViaStream(encoder, input);
+      const decoded = await decodeViaStream(encoder, encoded);
+
+      expect(decoded).toEqual(input);
+    });
+
+    it("round-trips V1 constructor streams without corrupting non-power-of-two chunks", async () => {
+      const encoder = new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+      const input = new TextEncoder().encode("V1 stream compatibility: 안녕하세요 12345");
+
+      expect(encoder.getCharSetInfo().usePowerOfTwo).toBe(false);
+
+      const encoded = await encodeViaStream(encoder, input);
+      const decoded = await decodeViaStream(encoder, encoded);
+
+      expect(decoded).toEqual(input);
+    });
+
     it("round-trips empty data correctly", async () => {
       const encoder = createEncoder();
       const input = new Uint8Array(0);
@@ -343,6 +368,22 @@ describe("WebStreams", () => {
       const decoded = await decodeViaStream(encoder, encoded);
 
       expect(decoded).toEqual(input);
+    });
+
+    it("round-trips and verifies checksum when checksum is enabled", async () => {
+      const encoder = createEncoder();
+      const input = new TextEncoder().encode("Checksum protected stream payload");
+
+      const encoded = await encodeViaStream(encoder, input, { checksum: true });
+      expect(encoded).toMatch(/CHK[0-9a-f]{8}$/i);
+
+      const decoded = await decodeViaStream(encoder, encoded, { checksum: true });
+      expect(decoded).toEqual(input);
+
+      const corruptedChecksum = encoded.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+      await expect(decodeViaStream(encoder, corruptedChecksum, { checksum: true })).rejects.toThrow(
+        /Checksum mismatch/,
+      );
     });
 
     it("round-trips with brotli compression and encryption", async () => {

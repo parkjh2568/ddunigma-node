@@ -28,32 +28,17 @@ import {
 } from "zlib";
 import { promisify } from "util";
 import type { KeyDerivationOptions, PlatformAdapter } from "../core/types.js";
+import {
+  normalizePbkdf2HashForNode,
+  normalizePbkdf2Iterations,
+  pbkdf2SaltToBytes,
+} from "./keyDerivation.js";
 
 const deflateRawAsync = promisify(deflateRaw);
 const inflateRawAsync = promisify(inflateRaw);
 const brotliCompressAsync = promisify(zlibBrotliCompress);
 const brotliDecompressAsync = promisify(zlibBrotliDecompress);
 const pbkdf2Async = promisify(pbkdf2);
-
-const DEFAULT_PBKDF2_ITERATIONS = 210_000;
-const MIN_PBKDF2_ITERATIONS = 10_000;
-const DEFAULT_PBKDF2_SALT = "ddunigma:pbkdf2:v1";
-
-function normalizePbkdf2Hash(hash: KeyDerivationOptions["hash"]): string {
-  return (hash ?? "SHA-256").toLowerCase().replace("-", "");
-}
-
-function normalizePbkdf2Iterations(iterations: number | undefined): number {
-  if (iterations === undefined) return DEFAULT_PBKDF2_ITERATIONS;
-  if (!Number.isFinite(iterations) || iterations <= 0) return DEFAULT_PBKDF2_ITERATIONS;
-  return Math.max(MIN_PBKDF2_ITERATIONS, Math.floor(iterations));
-}
-
-function saltToBuffer(salt: string | Uint8Array | undefined): Buffer {
-  if (salt === undefined) return Buffer.from(DEFAULT_PBKDF2_SALT, "utf-8");
-  if (typeof salt === "string") return Buffer.from(salt, "utf-8");
-  return Buffer.from(salt.buffer, salt.byteOffset, salt.byteLength);
-}
 
 /** zlib/brotli의 "출력 버퍼 초과" 계열 에러인지 판별합니다. */
 function isBufferTooLargeError(e: unknown): boolean {
@@ -98,10 +83,10 @@ export class NodeAdapter implements PlatformAdapter {
     if (options?.algorithm === "pbkdf2") {
       const derived = await pbkdf2Async(
         key,
-        saltToBuffer(options.salt),
+        pbkdf2SaltToBytes(options.salt),
         normalizePbkdf2Iterations(options.iterations),
         32,
-        normalizePbkdf2Hash(options.hash),
+        normalizePbkdf2HashForNode(options.hash),
       );
       return new Uint8Array(derived);
     }
@@ -113,10 +98,10 @@ export class NodeAdapter implements PlatformAdapter {
       return new Uint8Array(
         pbkdf2Sync(
           key,
-          saltToBuffer(options.salt),
+          pbkdf2SaltToBytes(options.salt),
           normalizePbkdf2Iterations(options.iterations),
           32,
-          normalizePbkdf2Hash(options.hash),
+          normalizePbkdf2HashForNode(options.hash),
         ),
       );
     }

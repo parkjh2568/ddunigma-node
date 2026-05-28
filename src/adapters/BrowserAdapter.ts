@@ -10,14 +10,28 @@
  */
 
 import type { KeyDerivationOptions, PlatformAdapter } from "../core/types.js";
-
-const DEFAULT_PBKDF2_ITERATIONS = 210_000;
-const MIN_PBKDF2_ITERATIONS = 10_000;
-const DEFAULT_PBKDF2_SALT = "ddunigma:pbkdf2:v1";
+import {
+  normalizePbkdf2HashForWebCrypto,
+  normalizePbkdf2Iterations,
+  pbkdf2SaltToBytes,
+} from "./keyDerivation.js";
 
 type BrowserCompressionFormat = "deflate-raw" | "brotli";
 
 const compressionSupportCache = new Map<BrowserCompressionFormat, boolean>();
+
+function toArrayBuffer(data: Uint8Array): ArrayBuffer {
+  if (data.buffer instanceof ArrayBuffer) {
+    if (data.byteOffset === 0 && data.byteLength === data.buffer.byteLength) {
+      return data.buffer;
+    }
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  }
+
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return copy.buffer;
+}
 
 function supportsCompressionFormat(format: BrowserCompressionFormat): boolean {
   const cached = compressionSupportCache.get(format);
@@ -54,18 +68,6 @@ function requireCompressionFormat(
   return format as CompressionFormat;
 }
 
-function normalizePbkdf2Iterations(iterations: number | undefined): number {
-  if (iterations === undefined) return DEFAULT_PBKDF2_ITERATIONS;
-  if (!Number.isFinite(iterations) || iterations <= 0) return DEFAULT_PBKDF2_ITERATIONS;
-  return Math.max(MIN_PBKDF2_ITERATIONS, Math.floor(iterations));
-}
-
-function saltToBytes(salt: string | Uint8Array | undefined): Uint8Array {
-  if (salt === undefined) return new TextEncoder().encode(DEFAULT_PBKDF2_SALT);
-  if (typeof salt === "string") return new TextEncoder().encode(salt);
-  return salt;
-}
-
 /**
  * Web API를 사용하여 PlatformAdapter를 구현하는 BrowserAdapter:
  * - AES-256-GCM 및 SHA-256을 위한 Web Crypto API(SubtleCrypto)
@@ -96,9 +98,9 @@ export class BrowserAdapter implements PlatformAdapter {
       const bits = await crypto.subtle.deriveBits(
         {
           name: "PBKDF2",
-          salt: saltToBytes(options.salt) as BufferSource,
+          salt: pbkdf2SaltToBytes(options.salt) as BufferSource,
           iterations: normalizePbkdf2Iterations(options.iterations),
-          hash: options.hash ?? "SHA-256",
+          hash: normalizePbkdf2HashForWebCrypto(options.hash),
         },
         keyMaterial,
         256,
@@ -122,7 +124,7 @@ export class BrowserAdapter implements PlatformAdapter {
 
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      keyHash as unknown as ArrayBuffer,
+      toArrayBuffer(keyHash),
       { name: "AES-GCM" },
       false,
       ["encrypt"],
@@ -132,7 +134,7 @@ export class BrowserAdapter implements PlatformAdapter {
     const encryptedBuffer = await crypto.subtle.encrypt(
       { name: "AES-GCM", iv, tagLength: 128 },
       cryptoKey,
-      data as unknown as ArrayBuffer,
+      toArrayBuffer(data),
     );
 
     const encrypted = new Uint8Array(encryptedBuffer);
@@ -173,7 +175,7 @@ export class BrowserAdapter implements PlatformAdapter {
 
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      keyHash as unknown as ArrayBuffer,
+      toArrayBuffer(keyHash),
       { name: "AES-GCM" },
       false,
       ["decrypt"],
@@ -183,7 +185,7 @@ export class BrowserAdapter implements PlatformAdapter {
       const decryptedBuffer = await crypto.subtle.decrypt(
         { name: "AES-GCM", iv, tagLength: 128 },
         cryptoKey,
-        webCryptoInput as unknown as ArrayBuffer,
+        toArrayBuffer(webCryptoInput),
       );
 
       return new Uint8Array(decryptedBuffer);
@@ -285,7 +287,7 @@ export class BrowserAdapter implements PlatformAdapter {
     const reader = stream.readable.getReader();
 
     const writePromise = (async () => {
-      await writer.write(data as unknown as BufferSource);
+      await writer.write(new Uint8Array(toArrayBuffer(data)));
       await writer.close();
     })();
     const readPromise = this.readAllChunks(reader, maxBytes);

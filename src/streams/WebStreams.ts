@@ -6,8 +6,8 @@
  * 모든 최신 브라우저와 Node.js에서 사용 가능합니다.
  *
  * 스트리밍 모드:
- * - 압축/암호화 비활성화 시: 진정한 청크 단위 스트리밍 (메모리 효율적)
- * - 압축/암호화 활성화 시: 전체 축적 후 일괄 처리 (알고리즘 제약)
+ * - 압축/암호화/체크섬 비활성화 + 2의 제곱수 charset: 진정한 청크 단위 스트리밍
+ * - 그 외: 전체 축적 후 일괄 처리 (알고리즘/와이어 포맷 제약)
  *
  * 스트림 헤더 형식: [pad]DDS1[D|B|N][1|0][pad]
  * D=deflate, B=brotli, N=없음 (압축), 1/0 (암호화).
@@ -22,7 +22,7 @@ import {
   getStreamHeaderLength,
   type StreamHeaderMeta,
 } from "../core/wireFormat.js";
-import type { DduOptions } from "../core/types.js";
+import type { CharSetInfo, DduOptions } from "../core/types.js";
 
 // ─── 인코딩 TransformStream ─────────────────────────────────────────────────
 
@@ -30,8 +30,8 @@ import type { DduOptions } from "../core/types.js";
  * 바이너리 데이터를 charset 인코딩 문자열로 변환하는
  * Web Streams API TransformStream을 생성합니다.
  *
- * 압축/암호화가 비활성화된 경우, 각 청크를 즉시 인코딩하여 출력합니다.
- * 압축/암호화가 활성화된 경우, 전체 데이터를 축적한 후 flush에서 처리합니다.
+ * 압축/암호화/체크섬이 비활성화되고 charset이 2의 제곱수일 때 각 청크를 즉시 인코딩합니다.
+ * 그 외에는 전체 데이터를 축적한 후 flush에서 처리합니다.
  *
  * @param encoder - 인코딩에 사용할 Ddu64Core 인스턴스
  * @param options - 인코딩 옵션 (compress, encrypt, compressionAlgorithm 등)
@@ -44,13 +44,17 @@ export function createReadableEncodeStream(
   const info = encoder.getCharSetInfo();
   const shouldCompress = options?.compress ?? info.defaultCompress;
   const shouldEncrypt = (options?.encrypt ?? true) && info.hasEncryptionKey;
+  const shouldChecksum = options?.checksum ?? info.defaultChecksum;
   const compressionAlgorithm = shouldCompress
     ? (options?.compressionAlgorithm ?? info.defaultCompressionAlgorithm)
     : undefined;
   const paddingChar = info.paddingChar;
 
-  // 압축/암호화가 없으면 청크 단위 스트리밍 가능
-  const canStreamChunks = !shouldCompress && !shouldEncrypt;
+  const canStreamChunks = canUseChunkStreaming(info, {
+    compressed: shouldCompress,
+    encrypted: shouldEncrypt,
+    checksum: shouldChecksum,
+  });
 
   let headerEmitted = false;
   let chunks: Uint8Array[] = [];
@@ -108,7 +112,7 @@ export function createReadableEncodeStream(
           residualBytes = null;
         }
       } else {
-        // 축적 모드: 압축/암호화 시 전체 데이터 필요
+        // 축적 모드: 압축/암호화/체크섬 또는 비-2의 제곱수 charset은 전체 데이터 필요
         chunks.push(chunk);
         totalLength += chunk.length;
       }
@@ -157,7 +161,7 @@ export function createReadableEncodeStream(
               ...options,
               compress: shouldCompress,
               encrypt: shouldEncrypt,
-              checksum: false,
+              checksum: shouldChecksum,
               chunkSize: undefined,
               chunkSeparator: undefined,
             });
@@ -183,8 +187,8 @@ export function createReadableEncodeStream(
  * 스트림은 DDS1 스트림 헤더를 파싱하여 압축 및 암호화 설정을 감지한 후
  * 페이로드를 그에 맞게 디코딩합니다.
  *
- * 압축/암호화가 없는 스트림의 경우, 헤더 파싱 후 각 청크를 즉시 디코딩합니다.
- * 압축/암호화가 있는 스트림의 경우, 전체 페이로드를 축적 후 일괄 디코딩합니다.
+ * 압축/암호화/체크섬이 없고 charset이 2의 제곱수인 스트림은 헤더 파싱 후 각 청크를 즉시 디코딩합니다.
+ * 그 외에는 전체 페이로드를 축적 후 일괄 디코딩합니다.
  *
  * @param encoder - 디코딩에 사용할 Ddu64Core 인스턴스
  * @param options - 디코딩 옵션
@@ -197,6 +201,7 @@ export function createReadableDecodeStream(
   const info = encoder.getCharSetInfo();
   const paddingChar = info.paddingChar;
   const headerLength = getStreamHeaderLength(paddingChar);
+  const shouldChecksum = options?.checksum ?? info.defaultChecksum;
 
   let textBuffer = "";
   let headerParsed = false;
@@ -228,13 +233,17 @@ export function createReadableDecodeStream(
         }
 
         headerParsed = true;
-        canStreamDecode = !headerMeta.compressionAlgorithm && !headerMeta.encrypted;
+        canStreamDecode = canUseChunkStreaming(info, {
+          compressed: !!headerMeta.compressionAlgorithm,
+          encrypted: headerMeta.encrypted,
+          checksum: shouldChecksum,
+        });
 
         // 헤더 제거
         textBuffer = textBuffer.slice(headerLength);
       }
 
-      // 청크 단위 디코딩: 압축/암호화 없을 때만
+      // 청크 단위 디코딩: 압축/암호화/체크섬이 없고 2의 제곱수 charset일 때만
       if (headerParsed && canStreamDecode && textBuffer.length > 0) {
         // 비트 정렬 단위로 디코딩 (charset 문자 단위)
         // 6비트 charset, power-of-two: 1문자 = 6비트, 4문자 = 24비트 = 3바이트
@@ -284,7 +293,7 @@ export function createReadableDecodeStream(
           compress: !!detectedCompression,
           compressionAlgorithm: detectedCompression,
           encrypt: detectedEncryption,
-          checksum: false,
+          checksum: shouldChecksum,
           chunkSize: undefined,
           chunkSeparator: undefined,
         });
@@ -301,6 +310,15 @@ export function createReadableDecodeStream(
 }
 
 // ─── 유틸리티 ────────────────────────────────────────────────────────────────
+
+/** 청크 단위 스트리밍을 안전하게 사용할 수 있는지 판별합니다. */
+function canUseChunkStreaming(
+  info: CharSetInfo,
+  state: { compressed: boolean; encrypted: boolean; checksum: boolean },
+): boolean {
+  // 비-2의 제곱수 charset은 논리 심볼 하나가 문자 2개로 표현될 수 있어 전체 payload 단위로 처리합니다.
+  return info.usePowerOfTwo && !state.compressed && !state.encrypted && !state.checksum;
+}
 
 /** 두 양의 정수의 최소공배수 */
 function lcm(a: number, b: number): number {
