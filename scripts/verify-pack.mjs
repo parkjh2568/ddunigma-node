@@ -116,6 +116,15 @@ async function runBrowserBundleSmoke(packageDir) {
   const entries = [
     writeSmokeFile(
       packageDir,
+      "__browser-root-bundle-smoke.mjs",
+      `
+        import { Ddu64 } from "@ddunigma/node";
+        const encoder = new Ddu64();
+        encoder.decode(encoder.encode("browser root bundle smoke"));
+      `,
+    ),
+    writeSmokeFile(
+      packageDir,
       "__browser-bundle-smoke.mjs",
       `
         import { Ddu64 } from "@ddunigma/node/browser";
@@ -218,6 +227,7 @@ try {
   const expectedMain = packageJson.main;
   const expectedModule = packageJson.module;
   const expectedTypes = packageJson.types;
+  const expectedBrowser = packageJson.browser;
   if (!filePaths.includes(expectedMain)) {
     fail(`package.json main is not published: ${expectedMain}`);
   }
@@ -226,6 +236,9 @@ try {
   }
   if (!filePaths.includes(expectedTypes)) {
     fail(`package.json types is not published: ${expectedTypes}`);
+  }
+  if (!filePaths.includes(expectedBrowser.replace(/^\.\//, ""))) {
+    fail(`package.json browser is not published: ${expectedBrowser}`);
   }
 
   const actualPack = run(

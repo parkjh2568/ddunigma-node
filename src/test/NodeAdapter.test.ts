@@ -52,6 +52,17 @@ describe("NodeAdapter", () => {
       expect(decrypted).toEqual(plaintext);
     });
 
+    it("authenticates optional AES-GCM AAD", () => {
+      const plaintext = new TextEncoder().encode("authenticated metadata");
+      const aad = new TextEncoder().encode("wire:v4;compress=deflate");
+      const encrypted = adapter.encryptSync(plaintext, keyHash, aad);
+
+      expect(adapter.decryptSync(encrypted, keyHash, aad)).toEqual(plaintext);
+      expect(() =>
+        adapter.decryptSync(encrypted, keyHash, new TextEncoder().encode("wire:v3")),
+      ).toThrow();
+    });
+
     it("encrypted payload format is IV(12) + authTag(16) + ciphertext", () => {
       const plaintext = new Uint8Array([1, 2, 3, 4, 5]);
       const encrypted = adapter.encryptSync(plaintext, keyHash);

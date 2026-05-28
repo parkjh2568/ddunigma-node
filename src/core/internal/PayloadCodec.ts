@@ -33,6 +33,7 @@ export interface PayloadCodecContext {
   paddingChar: string;
   useRepeatPadding: boolean;
   bitsPerPadChar: number;
+  encryptedPipelineVersion: 3 | 4;
 }
 
 export function encodePayload(
@@ -64,6 +65,7 @@ export function encodePayload(
     paddingChar: context.paddingChar,
     useRepeatPadding: context.useRepeatPadding,
     bitsPerPadChar: context.bitsPerPadChar,
+    pipelineVersion: context.encryptedPipelineVersion,
     omitFooter: options?.omitFooter,
   });
 

@@ -8,7 +8,7 @@
  */
 
 import { splitIntoChunks, toUrlSafe } from "../codecUtils.js";
-import { buildFooter, CHECKSUM_MARKER } from "../wireFormat.js";
+import { buildFooter, CHECKSUM_MARKER, type PipelineVersion } from "../wireFormat.js";
 import type { DduOptions, ObfuscationLayer } from "../types.js";
 
 export interface BuildEncodeFooterOptions {
@@ -18,6 +18,7 @@ export interface BuildEncodeFooterOptions {
   paddingChar: string;
   useRepeatPadding: boolean;
   bitsPerPadChar: number;
+  pipelineVersion: PipelineVersion;
   omitFooter?: boolean;
 }
 
@@ -45,7 +46,7 @@ export function buildEncodeFooter(options: BuildEncodeFooterOptions): string {
     useRepeatPadding:
       options.useRepeatPadding && !options.compressionAlgorithm && !options.isEncrypted,
     bitsPerPadChar: options.bitsPerPadChar,
-    pipelineVersion: options.isEncrypted ? 3 : 2,
+    pipelineVersion: options.isEncrypted ? options.pipelineVersion : 2,
   });
 }
 
@@ -71,4 +72,3 @@ export function applyPostEncoding(options: ApplyPostEncodingOptions): string {
 
   return result;
 }
-

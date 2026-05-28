@@ -18,6 +18,7 @@ interface EncodePipelineBaseContext {
   defaultCompressionAlgorithm: CompressionAlgorithm;
   hasEncryptionKey: boolean;
   reportProgress(info: DduProgressInfo): void;
+  getEncryptionAAD(compressionAlgorithm: CompressionAlgorithm | undefined): Uint8Array;
   finalize(
     workingData: Uint8Array,
     compressionAlgorithm: CompressionAlgorithm | undefined,
@@ -31,12 +32,12 @@ interface EncodePipelineBaseContext {
 
 export interface SyncEncodePipelineContext extends EncodePipelineBaseContext {
   compress(data: Uint8Array, algorithm: CompressionAlgorithm, level: number): Uint8Array;
-  encrypt(data: Uint8Array): Uint8Array;
+  encrypt(data: Uint8Array, aad: Uint8Array): Uint8Array;
 }
 
 export interface AsyncEncodePipelineContext extends EncodePipelineBaseContext {
   compress(data: Uint8Array, algorithm: CompressionAlgorithm, level: number): Promise<Uint8Array>;
-  encrypt(data: Uint8Array): Promise<Uint8Array>;
+  encrypt(data: Uint8Array, aad: Uint8Array): Promise<Uint8Array>;
 }
 
 export interface EncodePipelineResult {
@@ -75,7 +76,7 @@ export function runSyncEncodePipeline(
   let isEncrypted = false;
   if (settings.shouldEncrypt) {
     reportEncrypt(context, workingData.length);
-    workingData = context.encrypt(workingData);
+    workingData = context.encrypt(workingData, context.getEncryptionAAD(compressionAlgorithm));
     isEncrypted = true;
   }
 
@@ -122,7 +123,7 @@ export async function runAsyncEncodePipeline(
   let isEncrypted = false;
   if (settings.shouldEncrypt) {
     reportEncrypt(context, workingData.length);
-    workingData = await context.encrypt(workingData);
+    workingData = await context.encrypt(workingData, context.getEncryptionAAD(compressionAlgorithm));
     isEncrypted = true;
   }
 
@@ -182,4 +183,3 @@ function reportEncrypt(context: EncodePipelineBaseContext, bytes: number): void 
     stage: "encrypt",
   });
 }
-

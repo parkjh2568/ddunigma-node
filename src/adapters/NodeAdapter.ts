@@ -113,13 +113,16 @@ export class NodeAdapter implements PlatformAdapter {
     return new Uint8Array(createHash("sha256").update(key).digest());
   }
 
-  async encrypt(data: Uint8Array, keyHash: Uint8Array): Promise<Uint8Array> {
-    return this.encryptSync(data, keyHash);
+  async encrypt(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Promise<Uint8Array> {
+    return this.encryptSync(data, keyHash, aad);
   }
 
-  encryptSync(data: Uint8Array, keyHash: Uint8Array): Uint8Array {
+  encryptSync(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Uint8Array {
     const iv = cryptoRandomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", keyHash, iv);
+    if (aad && aad.length > 0) {
+      cipher.setAAD(toBufferView(aad));
+    }
     const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
     const authTag = cipher.getAuthTag();
     // 와이어 포맷: IV(12) + authTag(16) + 암호문
@@ -130,11 +133,11 @@ export class NodeAdapter implements PlatformAdapter {
     return result;
   }
 
-  async decrypt(data: Uint8Array, keyHash: Uint8Array): Promise<Uint8Array> {
-    return this.decryptSync(data, keyHash);
+  async decrypt(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Promise<Uint8Array> {
+    return this.decryptSync(data, keyHash, aad);
   }
 
-  decryptSync(data: Uint8Array, keyHash: Uint8Array): Uint8Array {
+  decryptSync(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Uint8Array {
     if (data.length < 28) {
       throw new Error("[Ddu64 decrypt] Invalid encrypted data: too short");
     }
@@ -142,6 +145,9 @@ export class NodeAdapter implements PlatformAdapter {
     const authTag = data.subarray(12, 28);
     const encrypted = data.subarray(28);
     const decipher = createDecipheriv("aes-256-gcm", keyHash, iv);
+    if (aad && aad.length > 0) {
+      decipher.setAAD(toBufferView(aad));
+    }
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
     return new Uint8Array(decrypted);

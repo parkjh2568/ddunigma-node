@@ -4,6 +4,8 @@ import {
   COMPRESS_MARKER,
   BROTLI_MARKER,
   ENCRYPT_MARKER,
+  PIPELINE_V3_MARKER,
+  PIPELINE_V4_MARKER,
   CHECKSUM_MARKER,
   parseFooter,
   extractChecksum,
@@ -11,6 +13,7 @@ import {
   parseStreamHeader,
   getStreamHeaderLength,
   buildFooter,
+  buildEncryptionAAD,
 } from "../core/wireFormat";
 
 describe("wireFormat constants", () => {
@@ -18,6 +21,8 @@ describe("wireFormat constants", () => {
     expect(COMPRESS_MARKER).toBe("ELYSIA");
     expect(BROTLI_MARKER).toBe("GRISEO");
     expect(ENCRYPT_MARKER).toBe("ENC");
+    expect(PIPELINE_V3_MARKER).toBe("V3");
+    expect(PIPELINE_V4_MARKER).toBe("V4");
     expect(CHECKSUM_MARKER).toBe("CHK");
     expect(WIRE_FORMAT_VERSION).toBe("DDS1");
   });
@@ -85,13 +90,23 @@ describe("parseFooter", () => {
   });
 
   it("parses footer with v3 pipeline marker", () => {
-    const input = "ABCDEF" + pad + COMPRESS_MARKER + ENCRYPT_MARKER + "V3" + "4";
+    const input = "ABCDEF" + pad + COMPRESS_MARKER + ENCRYPT_MARKER + PIPELINE_V3_MARKER + "4";
     const result = parseFooter(input, pad, bitLength);
     expect(result.cleanedInput).toBe("ABCDEF");
     expect(result.paddingBits).toBe(4);
     expect(result.compressionAlgorithm).toBe("deflate");
     expect(result.isEncrypted).toBe(true);
     expect(result.pipelineVersion).toBe(3);
+  });
+
+  it("parses footer with v4 pipeline marker", () => {
+    const input = "ABCDEF" + pad + BROTLI_MARKER + ENCRYPT_MARKER + PIPELINE_V4_MARKER + "1";
+    const result = parseFooter(input, pad, bitLength);
+    expect(result.cleanedInput).toBe("ABCDEF");
+    expect(result.paddingBits).toBe(1);
+    expect(result.compressionAlgorithm).toBe("brotli");
+    expect(result.isEncrypted).toBe(true);
+    expect(result.pipelineVersion).toBe(4);
   });
 
   it("parses footer with brotli and encryption markers", () => {
@@ -341,7 +356,18 @@ describe("buildFooter", () => {
       paddingChar: pad,
       pipelineVersion: 3,
     });
-    expect(result).toBe(pad + BROTLI_MARKER + ENCRYPT_MARKER + "V3" + "3");
+    expect(result).toBe(pad + BROTLI_MARKER + ENCRYPT_MARKER + PIPELINE_V3_MARKER + "3");
+  });
+
+  it("builds v4 footer with encryption marker", () => {
+    const result = buildFooter({
+      paddingBits: 3,
+      compressionAlgorithm: "brotli",
+      isEncrypted: true,
+      paddingChar: pad,
+      pipelineVersion: 4,
+    });
+    expect(result).toBe(pad + BROTLI_MARKER + ENCRYPT_MARKER + PIPELINE_V4_MARKER + "3");
   });
 
   it("builds V2 repeat-padding footer", () => {
@@ -351,7 +377,7 @@ describe("buildFooter", () => {
       paddingChar: pad,
       useRepeatPadding: true,
     });
-    // 4 bits / 2 = 2 pad chars
+    // 4 bits / bitsPerPadChar(2) = 2 pad chars
     expect(result).toBe(pad + pad);
   });
 
@@ -374,6 +400,23 @@ describe("buildFooter", () => {
       paddingChar: pad,
     });
     expect(result).toBe(pad + COMPRESS_MARKER + ENCRYPT_MARKER + "0");
+  });
+});
+
+describe("buildEncryptionAAD", () => {
+  it("binds v4 encryption to the selected compression marker", () => {
+    const decoder = new TextDecoder();
+    const none = decoder.decode(buildEncryptionAAD({ pipelineVersion: 4 }));
+    const deflate = decoder.decode(
+      buildEncryptionAAD({ compressionAlgorithm: "deflate", pipelineVersion: 4 }),
+    );
+    const brotli = decoder.decode(
+      buildEncryptionAAD({ compressionAlgorithm: "brotli", pipelineVersion: 4 }),
+    );
+
+    expect(none).toBe("ddunigma:wire:v4;enc=1;compress=none");
+    expect(deflate).toBe("ddunigma:wire:v4;enc=1;compress=deflate");
+    expect(brotli).toBe("ddunigma:wire:v4;enc=1;compress=brotli");
   });
 });
 

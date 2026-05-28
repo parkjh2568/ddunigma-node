@@ -143,14 +143,14 @@ console.log("══════════════════════�
 
 {
   try {
-    new Ddu64("우따야야", "뭐", { useBuildErrorReturn: true });
+    new Ddu64("우따야야", "뭐", { throwOnError: true });
     reportTest("중복 문자 감지", false, "에러가 발생해야 함");
   } catch (err: any) {
     reportTest("중복 문자 감지", err.message.includes("duplicate"));
   }
 
   try {
-    new Ddu64("A", "=", { useBuildErrorReturn: true });
+    new Ddu64("A", "=", { throwOnError: true });
     reportTest("단일 문자 charset 거부", false, "에러가 발생해야 함");
   } catch (err: any) {
     reportTest("단일 문자 charset 거부", err.message.includes("At least 2"));
@@ -264,7 +264,7 @@ console.log("══════════════════════�
 
 {
   try {
-    new Ddu64("ABC", undefined as any, { useBuildErrorReturn: true });
+    new Ddu64("ABC", undefined as any, { throwOnError: true });
     reportTest("에러 메시지 접두사", false, "에러가 발생해야 함");
   } catch (err: any) {
     reportTest("에러 메시지 접두사", err.message.includes("[Ddu64 Constructor]"));

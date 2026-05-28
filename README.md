@@ -17,7 +17,7 @@ V2 추가사항
 
 ## Requirements
 
-- **Node.js >= 18.0.0**
+- **Node.js >= 20.0.0**
 
 ## Install
 
@@ -211,7 +211,7 @@ const encoded = await ddu.encodeAsync("browser text");
 const decoded = await ddu.decodeAsync(encoded);
 ```
 
-Node.js에서도 async 메서드를 사용할 수 있습니다. 브라우저 진입점(`@ddunigma/node/browser`)은 Node.js 내장 모듈을 임포트하지 않습니다.
+Node.js에서도 async 메서드를 사용할 수 있습니다. v4부터 루트 진입점(`@ddunigma/node`)은 런타임 조건형 export를 사용하므로 브라우저 번들러에서는 BrowserAdapter 경로로 해석됩니다. 명시적인 브라우저 경로가 필요하면 `@ddunigma/node/browser`를 사용하세요.
 코어 진입점(`@ddunigma/node/core`)은 기본 인코딩/디코딩만 포함하며, 압축/암호화가 필요하면 명시적으로 어댑터를 전달하세요.
 
 ## Web Streams
@@ -412,16 +412,14 @@ new Ddu64(dduChar, paddingChar, options?);
 
 ## Entry Points
 
-| Runtime / Target                | Import Path              | 용도                                  |
-| ------------------------------- | ------------------------ | ------------------------------------- |
-| Node.js server/CLI              | `@ddunigma/node`         | Node.js 전체 기능 (동기+비동기)       |
-| Browser / Vite / webpack        | `@ddunigma/node/browser` | 브라우저 최적화 (BrowserAdapter 기본) |
-| Cloudflare Workers / Deno / Bun | `@ddunigma/node/browser` | Node.js 내장 모듈 없는 Web API 경로   |
-| Adapter 직접 주입 최소 번들     | `@ddunigma/node/core`    | 최소 코어 (인코딩/디코딩만)           |
+| Runtime / Target                | Import Path                         | 용도                                  |
+| ------------------------------- | ----------------------------------- | ------------------------------------- |
+| Node.js server/CLI              | `@ddunigma/node`                    | Node.js 전체 기능 (동기+비동기)       |
+| Browser / Vite / webpack        | `@ddunigma/node` 또는 `/browser`    | 브라우저 최적화 (BrowserAdapter 기본) |
+| Cloudflare Workers / Deno / Bun | `@ddunigma/node` 또는 `/browser`    | Node.js 내장 모듈 없는 Web API 경로   |
+| Adapter 직접 주입 최소 번들     | `@ddunigma/node/core`               | 최소 코어 (인코딩/디코딩만)           |
 
-브라우저, Deno, Workers, Bun처럼 Node.js 내장 모듈을 사용할 수 없는 환경에서는
-루트 진입점 대신 `@ddunigma/node/browser`를 사용하세요. 루트 진입점은 Node.js용
-`Buffer` API와 Node adapter를 함께 노출합니다.
+루트 진입점은 v4부터 `browser`/`worker`/`deno`/`bun`/`node` 조건을 가진 conditional export입니다. Node.js에서는 기존처럼 `Buffer` API와 NodeAdapter를 노출하고, 브라우저 계열 번들러에서는 Node.js 내장 모듈 없는 BrowserAdapter 경로로 해석됩니다.
 
 ## Build & Test
 

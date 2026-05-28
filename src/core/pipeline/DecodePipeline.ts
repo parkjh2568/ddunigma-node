@@ -19,12 +19,12 @@ export interface DecodePipelineContext {
 }
 
 export interface SyncDecodePipelineContext extends DecodePipelineContext {
-  decrypt(data: Uint8Array): Uint8Array;
+  decrypt(data: Uint8Array, aad?: Uint8Array): Uint8Array;
   decompress(data: Uint8Array, algorithm: CompressionAlgorithm, maxBytes: number): Uint8Array;
 }
 
 export interface AsyncDecodePipelineContext extends DecodePipelineContext {
-  decrypt(data: Uint8Array): Promise<Uint8Array>;
+  decrypt(data: Uint8Array, aad?: Uint8Array): Promise<Uint8Array>;
   decompress(
     data: Uint8Array,
     algorithm: CompressionAlgorithm,
@@ -62,7 +62,7 @@ export async function runAsyncDecodePipeline(
       percent: 55,
       stage: "decrypt",
     });
-    decoded = await context.decrypt(decoded);
+    decoded = await context.decrypt(decoded, prep.encryptionAAD);
   }
 
   if (shouldDecompress(prep)) {
@@ -85,7 +85,7 @@ export async function runAsyncDecodePipeline(
       percent: 90,
       stage: "decrypt",
     });
-    decoded = await context.decrypt(decoded);
+    decoded = await context.decrypt(decoded, prep.encryptionAAD);
   }
 
   reportDone(context, decoded);
@@ -104,7 +104,7 @@ function runPreDecompressDecrypt(
     percent: 55,
     stage: "decrypt",
   });
-  return context.decrypt(decoded);
+  return context.decrypt(decoded, prep.encryptionAAD);
 }
 
 function runDecompress(
@@ -136,7 +136,7 @@ function runPostChecksumDecrypt(
     percent: 90,
     stage: "decrypt",
   });
-  return context.decrypt(decoded);
+  return context.decrypt(decoded, prep.encryptionAAD);
 }
 
 function shouldRunPreDecompressDecrypt(
@@ -144,7 +144,7 @@ function shouldRunPreDecompressDecrypt(
   context: DecodePipelineContext,
 ): boolean {
   return (
-    prep.pipelineVersion === 3 &&
+    (prep.pipelineVersion === 3 || prep.pipelineVersion === 4) &&
     prep.isEncrypted &&
     !!context.encryptionKey &&
     prep.allowInternalDecrypt

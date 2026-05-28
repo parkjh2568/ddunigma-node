@@ -8,7 +8,7 @@
  *
  * ### 단일 페이로드 푸터
  * ```
- * [encoded_chars] [pad] [ELYSIA|GRISEO|∅] [ENC|∅] [V3|∅] [0-7]
+ * [encoded_chars] [pad] [ELYSIA|GRISEO|∅] [ENC|∅] [V3|V4|∅] [0-7]
  *                  ↑패딩 ↑압축 마커         ↑암호화 ↑파이프 ↑비트
  *
  * 선택: CHK[8 hex chars]  (복원된 원본 데이터의 CRC32)
@@ -25,6 +25,8 @@
  * ```
  * IV (12 bytes) │ authTag (16 bytes) │ ciphertext (N bytes)
  * 최소 합계: 28 bytes
+ *
+ * V4 암호화 페이로드는 AES-GCM AAD로 와이어 포맷 버전과 압축 마커를 인증합니다.
  * ```
  *
  * @module core/wireFormat
@@ -53,8 +55,15 @@ export const ENCRYPT_MARKER = "ENC";
 /** 압축 후 암호화 파이프라인을 나타내는 v3 마커 */
 export const PIPELINE_V3_MARKER = "V3";
 
+/** AES-GCM AAD로 와이어 메타데이터를 인증하는 v4 마커 */
+export const PIPELINE_V4_MARKER = "V4";
+
 /** 체크섬 마커 접두사 (뒤에 8자리 16진수 CRC32가 따름) */
 export const CHECKSUM_MARKER = "CHK";
+
+export type PipelineVersion = 2 | 3 | 4;
+
+const aadEncoder = /* @__PURE__ */ new TextEncoder();
 
 // ─── 푸터 파싱 ────────────────────────────────────────────────────────────────
 
@@ -69,7 +78,7 @@ export interface FooterParseResult {
   /** 페이로드가 암호화되었는지 여부 */
   isEncrypted: boolean;
   /** 단일 페이로드 파이프라인 버전 */
-  pipelineVersion: 2 | 3;
+  pipelineVersion: PipelineVersion;
 }
 
 /**
@@ -78,7 +87,7 @@ export interface FooterParseResult {
  * 푸터는 인코딩된 페이로드 뒤에 추가되며 압축, 암호화, 패딩에 대한
  * 메타데이터를 포함합니다. 문자열 끝에서 역방향으로 파싱됩니다:
  *
- * 1. Node 스타일 푸터: `{payload}{padChar}[ELYSIA|GRISEO][ENC]{paddingBits}`
+ * 1. Node 스타일 푸터: `{payload}{padChar}[ELYSIA|GRISEO][ENC][V3|V4]{paddingBits}`
  * 2. 반복 패딩: `{payload}{padChar}{padChar}...` (각 패딩 문자 = bitsPerPadChar 비트)
  *
  * @param input - 푸터를 포함한 전체 인코딩 문자열
@@ -136,9 +145,15 @@ export function parseFooter(
     let pos = digitsStart;
     let isEncrypted = false;
     let compressionAlgorithm: "deflate" | "brotli" | undefined;
-    let pipelineVersion: 2 | 3 = 2;
+    let pipelineVersion: PipelineVersion = 2;
 
     if (
+      pos >= PIPELINE_V4_MARKER.length &&
+      input.substring(pos - PIPELINE_V4_MARKER.length, pos) === PIPELINE_V4_MARKER
+    ) {
+      pipelineVersion = 4;
+      pos -= PIPELINE_V4_MARKER.length;
+    } else if (
       pos >= PIPELINE_V3_MARKER.length &&
       input.substring(pos - PIPELINE_V3_MARKER.length, pos) === PIPELINE_V3_MARKER
     ) {
@@ -356,8 +371,8 @@ export interface FooterOptions {
   useRepeatPadding?: boolean;
   /** 반복 패딩 시 패딩 문자 1개가 나타내는 비트 수 (기본값: 2) */
   bitsPerPadChar?: number;
-  /** v3 파이프라인 마커 사용 여부 */
-  pipelineVersion?: 2 | 3;
+  /** 단일 페이로드 파이프라인 버전 */
+  pipelineVersion?: PipelineVersion;
 }
 
 /**
@@ -412,7 +427,20 @@ export function buildFooter(options: FooterOptions): string {
     paddingChar +
     compressionMarker +
     (isEncrypted ? ENCRYPT_MARKER : "") +
-    (pipelineVersion === 3 ? PIPELINE_V3_MARKER : "") +
+    (pipelineVersion === 4
+      ? PIPELINE_V4_MARKER
+      : pipelineVersion === 3
+        ? PIPELINE_V3_MARKER
+        : "") +
     paddingBits.toString()
+  );
+}
+
+export function buildEncryptionAAD(options: {
+  compressionAlgorithm?: "deflate" | "brotli";
+  pipelineVersion: 4;
+}): Uint8Array {
+  return aadEncoder.encode(
+    `ddunigma:wire:v4;enc=1;compress=${options.compressionAlgorithm ?? "none"}`,
   );
 }

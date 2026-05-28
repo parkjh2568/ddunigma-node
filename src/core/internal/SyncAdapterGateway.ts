@@ -31,6 +31,7 @@ export function requireSyncAdapter(adapter: PlatformAdapter | undefined): Platfo
 export function encryptSyncWithAdapter(
   context: SyncAdapterGatewayContext,
   data: Uint8Array,
+  aad?: Uint8Array,
 ): Uint8Array {
   const adapter = requireSyncAdapter(context.adapter);
   if (!adapter.encryptSync) {
@@ -39,12 +40,13 @@ export function encryptSyncWithAdapter(
     );
   }
   const keyHash = getSyncKeyHash(context, adapter, "encrypt");
-  return adapter.encryptSync(data, keyHash);
+  return adapter.encryptSync(data, keyHash, aad);
 }
 
 export function decryptSyncWithAdapter(
   context: SyncAdapterGatewayContext,
   data: Uint8Array,
+  aad?: Uint8Array,
 ): Uint8Array {
   const adapter = requireSyncAdapter(context.adapter);
   if (!adapter.decryptSync) {
@@ -53,7 +55,7 @@ export function decryptSyncWithAdapter(
     );
   }
   const keyHash = getSyncKeyHash(context, adapter, "decrypt");
-  return adapter.decryptSync(data, keyHash);
+  return adapter.decryptSync(data, keyHash, aad);
 }
 
 export function compressSyncWithAdapter(
@@ -118,4 +120,3 @@ function getSyncKeyHash(
   context.setEncryptionKeyHash(hash);
   return hash;
 }
-

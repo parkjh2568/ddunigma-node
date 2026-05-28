@@ -8,7 +8,12 @@
  */
 
 import { fromUrlSafe, removeChunks } from "../codecUtils.js";
-import { extractChecksum, parseFooter } from "../wireFormat.js";
+import {
+  buildEncryptionAAD,
+  extractChecksum,
+  parseFooter,
+  type PipelineVersion,
+} from "../wireFormat.js";
 import type { DduOptions } from "../types.js";
 import {
   assertCanonicalPadding,
@@ -41,7 +46,8 @@ export interface DecodePreludeResult {
   extractedChecksum: string | null;
   compressionAlgorithm?: "deflate" | "brotli";
   isEncrypted: boolean;
-  pipelineVersion: 2 | 3;
+  pipelineVersion: PipelineVersion;
+  encryptionAAD?: Uint8Array;
   allowInternalDecompress: boolean;
   allowInternalDecrypt: boolean;
 }
@@ -81,6 +87,10 @@ export function runDecodePrelude(
   if (isEncrypted && allowInternalDecrypt && !context.encryptionKey) {
     throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
   }
+  const encryptionAAD =
+    isEncrypted && pipelineVersion === 4
+      ? buildEncryptionAAD({ compressionAlgorithm, pipelineVersion })
+      : undefined;
 
   assertEncodedInputAligned(cleanedInput, context.usePowerOfTwo);
   assertCanonicalPadding(
@@ -118,8 +128,8 @@ export function runDecodePrelude(
     compressionAlgorithm,
     isEncrypted,
     pipelineVersion,
+    encryptionAAD,
     allowInternalDecompress,
     allowInternalDecrypt,
   };
 }
-

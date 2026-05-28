@@ -119,7 +119,7 @@ export class BrowserAdapter implements PlatformAdapter {
    * 참고: Web Crypto는 authTag를 암호문에 추가하므로,
    * 마지막 16바이트를 authTag로 추출하고 와이어 포맷에 맞게 재배치합니다.
    */
-  async encrypt(data: Uint8Array, keyHash: Uint8Array): Promise<Uint8Array> {
+  async encrypt(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Promise<Uint8Array> {
     const iv = crypto.getRandomValues(new Uint8Array(12));
 
     const cryptoKey = await crypto.subtle.importKey(
@@ -131,11 +131,12 @@ export class BrowserAdapter implements PlatformAdapter {
     );
 
     // Web Crypto AES-GCM 반환: 암호문 + authTag(16바이트 추가)
-    const encryptedBuffer = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv, tagLength: 128 },
-      cryptoKey,
-      toArrayBuffer(data),
-    );
+    const algorithm: AesGcmParams = { name: "AES-GCM", iv, tagLength: 128 };
+    if (aad && aad.length > 0) {
+      algorithm.additionalData = toArrayBuffer(aad);
+    }
+
+    const encryptedBuffer = await crypto.subtle.encrypt(algorithm, cryptoKey, toArrayBuffer(data));
 
     const encrypted = new Uint8Array(encryptedBuffer);
     // Web Crypto 출력: 암호문(N바이트) + authTag(16바이트)
@@ -156,7 +157,7 @@ export class BrowserAdapter implements PlatformAdapter {
    * 와이어 포맷 기대: IV(12바이트) + authTag(16바이트) + 암호문.
    * 복호화 전에 Web Crypto 형식(암호문 + authTag)으로 재구성합니다.
    */
-  async decrypt(data: Uint8Array, keyHash: Uint8Array): Promise<Uint8Array> {
+  async decrypt(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Promise<Uint8Array> {
     if (data.length < 28) {
       throw new Error(
         "[Ddu64 decrypt] Encrypted data is invalid. " +
@@ -182,8 +183,13 @@ export class BrowserAdapter implements PlatformAdapter {
     );
 
     try {
+      const algorithm: AesGcmParams = { name: "AES-GCM", iv, tagLength: 128 };
+      if (aad && aad.length > 0) {
+        algorithm.additionalData = toArrayBuffer(aad);
+      }
+
       const decryptedBuffer = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv, tagLength: 128 },
+        algorithm,
         cryptoKey,
         toArrayBuffer(webCryptoInput),
       );

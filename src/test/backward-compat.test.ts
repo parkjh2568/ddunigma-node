@@ -281,9 +281,45 @@ describe("구버전 호환성 테스트", () => {
 
       // ENC 마커가 있어야 함
       expect(encoded).toContain("ENC");
+      expect(encoded).toContain("ENCV4");
 
       const decoded = encoder.decode(encoded);
       expect(decoded).toBe(input);
+    });
+
+    it("암호화 - V4 푸터 변조를 AES-GCM AAD로 거부", () => {
+      const encoder = new Ddu64Node(undefined, undefined, {
+        encryptionKey: "my-secret-key-123",
+      });
+      const encoded = encoder.encode("비밀 메시지입니다");
+      const tampered = encoded.replace("ENCV4", "ENCV3");
+
+      expect(() => encoder.decode(tampered)).toThrow();
+    });
+
+    it("암호화+압축 - V4 압축 마커 변조를 AES-GCM AAD로 거부", () => {
+      const encoder = new Ddu64Node(undefined, undefined, {
+        encryptionKey: "my-secret-key-123",
+      });
+      const encoded = encoder.encode("A".repeat(1000), {
+        compress: true,
+        compressionAlgorithm: "deflate",
+      });
+      expect(encoded).toContain("ELYSIAENCV4");
+
+      const tampered = encoded.replace("ELYSIAENCV4", "GRISEOENCV4");
+      expect(() => encoder.decode(tampered)).toThrow();
+    });
+
+    it("암호화 - 구버전 V3 encrypted fixture 디코딩 호환", () => {
+      const encoder = new Ddu64Node(undefined, undefined, {
+        encryptionKey: "legacy-v3-key",
+      });
+      const legacyV3Encoded =
+        "땩땼땾뜎댲뎼이댰욷댰땼읶듓댜뜟댝얏듇듔땼댞뜍웄욷얒뎯얏뎪듁듁웆뜢뜟듔익뎪땨읻욷뜠듀뎼뜟듀욲땻욲뎼댝댜뜍얐듕듇뎯뜌잇뜍읻뜍얏땪땻댱뜢웅양읻댜뜌뭐ENCV34";
+
+      expect(encoder.decode(legacyV3Encoded)).toBe("legacy encrypted payload");
+      expect(encoder.encode("legacy encrypted payload")).toContain("ENCV4");
     });
 
     it("URL-Safe - 인코딩/디코딩 호환", () => {

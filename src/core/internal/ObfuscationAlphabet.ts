@@ -9,13 +9,15 @@ import {
   COMPRESS_MARKER,
   ENCRYPT_MARKER,
   PIPELINE_V3_MARKER,
+  PIPELINE_V4_MARKER,
 } from "../wireFormat.js";
 
 export function buildObfuscationAlphabet(dduChar: readonly string[], paddingChar: string): string[] {
   const alphabetSet = new Set<string>(dduChar);
   alphabetSet.add(paddingChar);
 
-  const footerMarkers = COMPRESS_MARKER + BROTLI_MARKER + ENCRYPT_MARKER + PIPELINE_V3_MARKER;
+  const footerMarkers =
+    COMPRESS_MARKER + BROTLI_MARKER + ENCRYPT_MARKER + PIPELINE_V3_MARKER + PIPELINE_V4_MARKER;
   for (const ch of footerMarkers) {
     alphabetSet.add(ch);
   }

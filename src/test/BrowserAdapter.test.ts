@@ -159,6 +159,18 @@ describe("BrowserAdapter", () => {
       expect(decrypted).toEqual(plaintext);
     });
 
+    it("authenticates optional AES-GCM AAD", async () => {
+      const key = await adapter.deriveKey("aad-key");
+      const plaintext = new TextEncoder().encode("authenticated browser metadata");
+      const aad = new TextEncoder().encode("wire:v4;compress=deflate");
+      const encrypted = await adapter.encrypt(plaintext, key, aad);
+
+      await expect(adapter.decrypt(encrypted, key, aad)).resolves.toEqual(plaintext);
+      await expect(
+        adapter.decrypt(encrypted, key, new TextEncoder().encode("wire:v3")),
+      ).rejects.toThrow("data tampering or incorrect key");
+    });
+
     it("round-trips large data", async () => {
       const key = await adapter.deriveKey("large-data-key");
       const plaintext = new Uint8Array(10000);

@@ -201,22 +201,10 @@ export interface DduConstructorOptions extends DduOptions {
   paddingChar?: string;
   /** 필요 문자 수 */
   requiredLength?: number;
-  /**
-   * 비트 길이.
-   * @deprecated 무시되는 옵션입니다. 심볼당 비트 수는 charset 길이에서 자동 계산됩니다.
-   */
-  bitLength?: number;
   /** 2의 제곱수 강제 여부 */
   usePowerOfTwo?: boolean;
   /**
    * true이면 초기화 오류 시 throw합니다. false이면 fallback charset으로 대체합니다.
-   * @default false
-   * @deprecated throwOnError를 사용하세요. 이 옵션은 하위 호환성을 위해 유지됩니다.
-   */
-  useBuildErrorReturn?: boolean;
-  /**
-   * true이면 초기화 오류 시 throw합니다. false이면 fallback charset으로 대체합니다.
-   * useBuildErrorReturn과 동일한 동작이며, 둘 다 지정 시 throwOnError가 우선합니다.
    * @default false
    */
   throwOnError?: boolean;
@@ -245,8 +233,6 @@ export const dduDefaultConstructorOptions: DduConstructorOptions = {
   usePowerOfTwo: true,
   /** 필요 문자 수: 64개 */
   requiredLength: 64,
-  /** 비트 길이: 6 (2^6 = 64) */
-  bitLength: 6,
 };
 
 // ─── Platform Adapter ────────────────────────────────────────────────────────
@@ -267,14 +253,14 @@ export interface PlatformAdapter {
   deriveKeySync?(key: string, options?: KeyDerivationOptions): Uint8Array;
 
   /** AES-256-GCM으로 데이터를 암호화. IV(12) + authTag(16) + 암호문을 반환 */
-  encrypt(data: Uint8Array, keyHash: Uint8Array): Promise<Uint8Array>;
+  encrypt(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Promise<Uint8Array>;
   /** 동기적으로 데이터를 암호화 (Node.js 전용) */
-  encryptSync?(data: Uint8Array, keyHash: Uint8Array): Uint8Array;
+  encryptSync?(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Uint8Array;
 
   /** AES-256-GCM 페이로드를 복호화. IV(12) + authTag(16) + 암호문 형식을 기대 */
-  decrypt(data: Uint8Array, keyHash: Uint8Array): Promise<Uint8Array>;
+  decrypt(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Promise<Uint8Array>;
   /** 동기적으로 데이터를 복호화 (Node.js 전용) */
-  decryptSync?(data: Uint8Array, keyHash: Uint8Array): Uint8Array;
+  decryptSync?(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Uint8Array;
 
   /** 암호학적으로 안전한 랜덤 바이트를 생성 */
   randomBytes(length: number): Uint8Array;

@@ -75,6 +75,7 @@ import {
   runAsyncEncodePipeline,
   runSyncEncodePipeline,
 } from "./pipeline/EncodePipeline.js";
+import { buildEncryptionAAD } from "./wireFormat.js";
 
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
@@ -185,7 +186,7 @@ export class Ddu64Core {
     paddingChar = resolved.paddingChar;
     dduOptions = resolved.dduOptions;
 
-    const shouldThrow = dduOptions?.throwOnError ?? dduOptions?.useBuildErrorReturn ?? false;
+    const shouldThrow = dduOptions?.throwOnError ?? false;
 
     // 어댑터 해석
     if (dduOptions?.adapter) {
@@ -352,7 +353,7 @@ export class Ddu64Core {
       encryptionKey: this.encryptionKey,
       defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
       reportProgress: (info) => this.reportProgress(options, info),
-      decrypt: (data) => this.decryptSync(data),
+      decrypt: (data, aad) => this.decryptSync(data, aad),
       decompress: (data, algorithm, maxBytes) =>
         this.decompressSync(data, algorithm, maxBytes),
     });
@@ -381,9 +382,11 @@ export class Ddu64Core {
       defaultCompressionAlgorithm: this.defaultCompressionAlgorithm,
       hasEncryptionKey: !!this.encryptionKey,
       reportProgress: (info) => this.reportProgress(options, info),
+      getEncryptionAAD: (compressionAlgorithm) =>
+        buildEncryptionAAD({ compressionAlgorithm, pipelineVersion: 4 }),
       compress: (data, algorithm, level) =>
         compressAsyncWithAdapter(this.adapter, data, algorithm, level),
-      encrypt: (data) => encryptAsyncWithAdapter(this.getSyncGatewayContext(), data),
+      encrypt: (data, aad) => encryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
       finalize: (
         workingData,
         compressionAlgorithm,
@@ -442,7 +445,7 @@ export class Ddu64Core {
       encryptionKey: this.encryptionKey,
       defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
       reportProgress: (info) => this.reportProgress(options, info),
-      decrypt: (data) => decryptAsyncWithAdapter(this.getSyncGatewayContext(), data),
+      decrypt: (data, aad) => decryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
       decompress: (data, algorithm, maxBytes) =>
         decompressAsyncWithAdapter(this.adapter, data, algorithm, maxBytes),
     });
@@ -519,8 +522,10 @@ export class Ddu64Core {
       defaultCompressionAlgorithm: this.defaultCompressionAlgorithm,
       hasEncryptionKey: !!this.encryptionKey,
       reportProgress: (info) => this.reportProgress(options, info),
+      getEncryptionAAD: (compressionAlgorithm) =>
+        buildEncryptionAAD({ compressionAlgorithm, pipelineVersion: 4 }),
       compress: (data, algorithm, level) => this.compressSync(data, algorithm, level),
-      encrypt: (data) => this.encryptSync(data),
+      encrypt: (data, aad) => this.encryptSync(data, aad),
       finalize: (
         workingData,
         compressionAlgorithm,
@@ -673,6 +678,7 @@ export class Ddu64Core {
       paddingChar: this.paddingChar,
       useRepeatPadding: this.useRepeatPadding,
       bitsPerPadChar: this.bitsPerPadChar,
+      encryptedPipelineVersion: 4,
     };
   }
 
@@ -682,9 +688,9 @@ export class Ddu64Core {
 
   // ─── 동기 암호화/압축 헬퍼 ───────────────────────────────────────
 
-  private encryptSync(data: Uint8Array): Uint8Array {
+  private encryptSync(data: Uint8Array, aad?: Uint8Array): Uint8Array {
     try {
-      return encryptSyncWithAdapter(this.getSyncGatewayContext(), data);
+      return encryptSyncWithAdapter(this.getSyncGatewayContext(), data, aad);
     } catch (err) {
       const message = toErrorMessage(err);
       if (isAdapterCapabilityErrorMessage(message)) {
@@ -694,9 +700,9 @@ export class Ddu64Core {
     }
   }
 
-  private decryptSync(data: Uint8Array): Uint8Array {
+  private decryptSync(data: Uint8Array, aad?: Uint8Array): Uint8Array {
     try {
-      return decryptSyncWithAdapter(this.getSyncGatewayContext(), data);
+      return decryptSyncWithAdapter(this.getSyncGatewayContext(), data, aad);
     } catch (err) {
       const message = toErrorMessage(err);
       if (isAdapterCapabilityErrorMessage(message)) {

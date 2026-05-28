@@ -29,11 +29,12 @@ export interface AsyncAdapterGatewayContext {
 export async function encryptAsyncWithAdapter(
   context: AsyncAdapterGatewayContext,
   data: Uint8Array,
+  aad?: Uint8Array,
 ): Promise<Uint8Array> {
   try {
     const adapter = requireAsyncAdapter(context.adapter);
     const keyHash = await getAsyncKeyHash(context, adapter);
-    return await adapter.encrypt(data, keyHash);
+    return await adapter.encrypt(data, keyHash, aad);
   } catch (err) {
     throw toAsyncGatewayError(err, "encode", "encrypt");
   }
@@ -42,11 +43,12 @@ export async function encryptAsyncWithAdapter(
 export async function decryptAsyncWithAdapter(
   context: AsyncAdapterGatewayContext,
   data: Uint8Array,
+  aad?: Uint8Array,
 ): Promise<Uint8Array> {
   try {
     const adapter = requireAsyncAdapter(context.adapter);
     const keyHash = await getAsyncKeyHash(context, adapter);
-    return await adapter.decrypt(data, keyHash);
+    return await adapter.decrypt(data, keyHash, aad);
   } catch (err) {
     throw toAsyncGatewayError(err, "decode", "decrypt");
   }

@@ -1,13 +1,14 @@
 {
   "name": "@ddunigma/node",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "browser": "./dist/browser.js",
   "type": "module",
   "sideEffects": false,
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "build": "tsup",
@@ -25,14 +26,44 @@
   },
   "exports": {
     ".": {
+      "browser": {
+        "types": "./dist/browser.d.ts",
+        "import": "./dist/browser.js",
+        "require": "./dist/browser.cjs"
+      },
+      "worker": {
+        "types": "./dist/browser.d.ts",
+        "import": "./dist/browser.js",
+        "require": "./dist/browser.cjs"
+      },
+      "deno": {
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
+      },
+      "bun": {
+        "types": "./dist/browser.d.ts",
+        "import": "./dist/browser.js",
+        "require": "./dist/browser.cjs"
+      },
+      "node": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.cjs"
+        }
+      },
       "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
       },
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
-      }
+      },
+      "default": "./dist/browser.js"
     },
     "./browser": {
       "import": {
