@@ -118,9 +118,6 @@ export function splitIntoChunks(input: string, chunkSize: number, separator: str
 export function removeChunks(input: string, defaultSeparator: string): string {
   if (input.length === 0) return input;
 
-  // 항상 줄바꿈 제거
-  let result = input.replace(/[\r\n]/g, "");
-
   // 줄바꿈 변형이 아닌 커스텀 구분자 제거
   const separator =
     defaultSeparator &&
@@ -130,7 +127,16 @@ export function removeChunks(input: string, defaultSeparator: string): string {
       ? defaultSeparator
       : "";
 
-  if (separator.length > 0 && result.includes(separator)) {
+  const hasLineBreak = input.includes("\n") || input.includes("\r");
+  const hasCustomSeparator = separator.length > 0 && input.includes(separator);
+
+  if (!hasLineBreak && !hasCustomSeparator) {
+    return input;
+  }
+
+  let result = hasLineBreak ? input.replace(/[\r\n]/g, "") : input;
+
+  if (hasCustomSeparator) {
     result = result.replaceAll(separator, "");
   }
 

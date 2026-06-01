@@ -67,6 +67,7 @@ import {
   type PayloadCodecContext,
 } from "./internal/PayloadCodec.js";
 import { buildObfuscationAlphabet } from "./internal/ObfuscationAlphabet.js";
+import { isAdapterCapabilityErrorMessage } from "./internal/AdapterCapability.js";
 import {
   runAsyncDecodePipeline,
   runSyncDecodePipeline,
@@ -79,11 +80,6 @@ import { buildEncryptionAAD } from "./wireFormat.js";
 
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
-
-function isAdapterCapabilityErrorMessage(message: string): boolean {
-  const lower = message.toLowerCase();
-  return lower.includes("adapter") || lower.includes("sync") || lower.includes("provider");
-}
 
 /**
  * 플랫폼 독립 Ddu64 인코더/디코더.
@@ -164,6 +160,9 @@ export class Ddu64Core {
 
   /** 표준 Base64 charset에서 네이티브 Base64 fast path 사용 여부 */
   private readonly canUseNativeBase64: boolean;
+
+  /** 인코딩/디코딩 payload codec 공유 컨텍스트 */
+  private readonly payloadCodecContext: PayloadCodecContext;
 
   /** 플랫폼 어댑터 (동기용 지연 로드 또는 명시적 제공) */
   private adapter: PlatformAdapter | undefined;
@@ -291,6 +290,19 @@ export class Ddu64Core {
       this.usePowerOfTwo,
       this.bitLength,
     );
+    this.payloadCodecContext = {
+      bitLength: this.bitLength,
+      usePowerOfTwo: this.usePowerOfTwo,
+      bitPackConfig: this.bitPackConfig,
+      wasmThreshold: this.wasmThreshold,
+      canUseNativeBase64: this.canUseNativeBase64,
+      dduCharCodes: this.dduCharCodes,
+      dduCharCodeLookup: this.dduCharCodeLookup,
+      paddingChar: this.paddingChar,
+      useRepeatPadding: this.useRepeatPadding,
+      bitsPerPadChar: this.bitsPerPadChar,
+      encryptedPipelineVersion: 4,
+    };
   }
 
   // ─── 공개 메서드 ─────────────────────────────────────────────────────────
@@ -665,19 +677,7 @@ export class Ddu64Core {
   }
 
   private getPayloadCodecContext(): PayloadCodecContext {
-    return {
-      bitLength: this.bitLength,
-      usePowerOfTwo: this.usePowerOfTwo,
-      bitPackConfig: this.bitPackConfig,
-      wasmThreshold: this.wasmThreshold,
-      canUseNativeBase64: this.canUseNativeBase64,
-      dduCharCodes: this.dduCharCodes,
-      dduCharCodeLookup: this.dduCharCodeLookup,
-      paddingChar: this.paddingChar,
-      useRepeatPadding: this.useRepeatPadding,
-      bitsPerPadChar: this.bitsPerPadChar,
-      encryptedPipelineVersion: 4,
-    };
+    return this.payloadCodecContext;
   }
 
   private reportProgress(options: DduOptions | undefined, info: DduProgressInfo): void {

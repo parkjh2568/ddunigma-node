@@ -38,7 +38,6 @@ function supportsCompressionFormat(format: BrowserCompressionFormat): boolean {
   if (cached !== undefined) return cached;
 
   if (typeof CompressionStream === "undefined" || typeof DecompressionStream === "undefined") {
-    compressionSupportCache.set(format, false);
     return false;
   }
 
@@ -48,7 +47,6 @@ function supportsCompressionFormat(format: BrowserCompressionFormat): boolean {
     compressionSupportCache.set(format, true);
     return true;
   } catch {
-    compressionSupportCache.set(format, false);
     return false;
   }
 }
@@ -78,11 +76,14 @@ function requireCompressionFormat(
 export class BrowserAdapter implements PlatformAdapter {
   readonly supportsSyncCrypto = false;
   readonly supportsSyncCompression = false;
-  readonly supportsBrotli = supportsCompressionFormat("brotli");
   readonly runtime: "browser" | "edge" | "deno" | "bun";
 
   constructor(runtime: "browser" | "edge" | "deno" | "bun" = "browser") {
     this.runtime = runtime;
+  }
+
+  get supportsBrotli(): boolean {
+    return supportsCompressionFormat("brotli");
   }
 
   // ─── Crypto ──────────────────────────────────────────────────────────────

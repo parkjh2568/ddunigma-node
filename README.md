@@ -93,6 +93,9 @@ const hangulCoda = new Ddu64(["가", "나", "다", "라"], "뭐", {
 // → 가, 각, 갂, 갇, 나, 낙, 낚, 낟, 다, 닥, 닦, 닫, 라, 락, 랔, 랗 (16문자)
 ```
 
+커스텀 charset의 각 심볼과 `paddingChar`는 단일 UTF-16 코드 유닛 문자여야 합니다.
+이모지처럼 surrogate pair가 필요한 문자나 여러 문자로 이루어진 심볼은 지원하지 않습니다.
+
 ## CharsetBuilder
 
 ```typescript
@@ -230,6 +233,9 @@ const encodedStream = readableByteStream.pipeThrough(
 
 const decodedStream = encodedStream.pipeThrough(createReadableDecodeStream(ddu));
 ```
+
+인코딩 스트림은 압축/암호화/체크섬이 꺼져 있고 2의 제곱수 charset일 때 청크 단위로 즉시 출력합니다.
+디코딩 스트림은 footer의 압축/암호화 메타데이터를 최종 신뢰하므로 payload를 모아 `flush`에서 처리합니다.
 
 ## WASM Acceleration
 
@@ -421,6 +427,7 @@ new Ddu64(dduChar, paddingChar, options?);
 | Adapter 직접 주입 최소 번들     | `@ddunigma/node/core`               | 최소 코어 (인코딩/디코딩만)           |
 
 루트 진입점은 v4부터 `browser`/`worker`/`workerd`/`deno`/`bun`/`node` 조건을 가진 conditional export입니다. Node.js에서는 기존처럼 `Buffer` API와 NodeAdapter를 노출하고, 브라우저 및 Workers 계열 번들러에서는 Node.js 내장 모듈 없는 BrowserAdapter 경로로 해석됩니다. 런타임 조건을 알 수 없는 ESM 환경의 기본 fallback도 browser 번들을 사용합니다.
+Node.js 런타임에서는 `node` 조건이 `index.js`/`index.cjs`를 선택하므로 기본 import로 NodeAdapter와 `decodeToBuffer()`를 사용할 수 있습니다.
 
 ## Build & Test
 

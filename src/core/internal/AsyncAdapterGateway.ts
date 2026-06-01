@@ -13,6 +13,7 @@ import {
   toErrorMessage,
 } from "../errors.js";
 import type { KeyDerivationOptions, PlatformAdapter } from "../types.js";
+import { isAdapterCapabilityErrorMessage } from "./AdapterCapability.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
 type GatewayOperation = "encode" | "decode";
@@ -139,9 +140,4 @@ function toAsyncGatewayError(
     case "decrypt":
       return new Ddu64DecryptionError(message, error);
   }
-}
-
-function isAdapterCapabilityErrorMessage(message: string): boolean {
-  const lower = message.toLowerCase();
-  return lower.includes("adapter") || lower.includes("sync") || lower.includes("provider");
 }
