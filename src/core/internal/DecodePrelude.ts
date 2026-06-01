@@ -17,6 +17,7 @@ import {
 import type { DduOptions } from "../types.js";
 import {
   assertCanonicalPadding,
+  assertDecodedBitLength,
   assertEncodedInputAligned,
   estimateDecodedBytes,
   normalizeLimit,
@@ -100,6 +101,7 @@ export function runDecodePrelude(
     context.dduCharCodeLookup,
     context.charSetSize,
   );
+  assertDecodedBitLength(cleanedInput, paddingBits, context.bitLength, context.usePowerOfTwo);
 
   const maxDecodedBytes = normalizeLimit(
     options?.maxDecodedBytes,

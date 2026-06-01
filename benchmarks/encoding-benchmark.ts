@@ -283,7 +283,7 @@ async function main(): Promise<void> {
     {
       name: "DDU binary 8MB",
       mode: "large-js",
-      encoder: new Ddu64({ wasmThreshold: Number.MAX_SAFE_INTEGER }),
+      encoder: new Ddu64({ wasmThreshold: Number.POSITIVE_INFINITY }),
       input: largeBinary,
       iterations: 2,
       disableNativeBase64: true,
@@ -300,6 +300,14 @@ async function main(): Promise<void> {
       name: "DDU text 16KB",
       mode: "js-bitpack",
       encoder: new Ddu64({ wasmThreshold: 1024 * 1024 }),
+      input: smallText,
+      iterations: 200,
+      disableNativeBase64: true,
+    },
+    {
+      name: "DDU text 16KB",
+      mode: "wasm-bitpack",
+      encoder: new Ddu64({ wasmThreshold: 1024 }),
       input: smallText,
       iterations: 200,
       disableNativeBase64: true,

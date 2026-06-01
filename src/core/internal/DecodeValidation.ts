@@ -57,6 +57,25 @@ export function assertEncodedInputAligned(cleanedInput: string, usePowerOfTwo: b
   }
 }
 
+export function assertDecodedBitLength(
+  cleanedInput: string,
+  paddingBits: number,
+  bitLength: number,
+  usePowerOfTwo: boolean,
+): void {
+  if (cleanedInput.length === 0) return;
+
+  const chunkSize = usePowerOfTwo ? 1 : 2;
+  const numChunks = cleanedInput.length / chunkSize;
+  const bitCount = numChunks * bitLength - paddingBits;
+
+  if (bitCount < 0 || bitCount % BYTE_BITS !== 0) {
+    throw new Error(
+      `[Ddu64 decode] Invalid encoded bit length. Expected a whole number of bytes, got ${bitCount} bits.`,
+    );
+  }
+}
+
 export function assertCanonicalPadding(
   cleanedInput: string,
   paddingBits: number,
@@ -96,4 +115,3 @@ export function assertCanonicalPadding(
     throw new Error("[Ddu64 decode] Invalid non-zero padding bits in final symbol");
   }
 }
-

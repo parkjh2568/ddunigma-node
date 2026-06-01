@@ -243,18 +243,3 @@ export function calculateBitLength(charsetSize: number, usePowerOfTwo: boolean):
 export function isPowerOfTwo(charsetSize: number): boolean {
   return charsetSize > 0 && (charsetSize & (charsetSize - 1)) === 0;
 }
-
-/**
- * charset 매개변수로부터 BitPackConfig를 생성합니다.
- *
- * @param charsetSize - charset의 문자 수
- * @returns 인코딩/디코딩 연산에 적합한 BitPackConfig
- */
-export function createBitPackConfig(charsetSize: number): BitPackConfig {
-  const powerOfTwo = isPowerOfTwo(charsetSize);
-  return {
-    bitLength: calculateBitLength(charsetSize, powerOfTwo),
-    usePowerOfTwo: powerOfTwo,
-    charsetSize,
-  };
-}

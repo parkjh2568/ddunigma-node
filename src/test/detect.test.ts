@@ -25,6 +25,10 @@ describe("detectRuntime", () => {
   describe("runtime detection priority", () => {
     const originalProcess = globalThis.process;
     const originalCrypto = globalThis.crypto;
+    const originalEdgeRuntime = (globalThis as any).EdgeRuntime;
+    const originalWebSocketPair = (globalThis as any).WebSocketPair;
+    const hadEdgeRuntime = "EdgeRuntime" in globalThis;
+    const hadWebSocketPair = "WebSocketPair" in globalThis;
 
     afterEach(() => {
       // Restore original globals
@@ -41,6 +45,16 @@ describe("detectRuntime", () => {
       // Clean up Deno/Bun mocks
       delete (globalThis as any).Deno;
       delete (globalThis as any).Bun;
+      if (hadEdgeRuntime) {
+        (globalThis as any).EdgeRuntime = originalEdgeRuntime;
+      } else {
+        delete (globalThis as any).EdgeRuntime;
+      }
+      if (hadWebSocketPair) {
+        (globalThis as any).WebSocketPair = originalWebSocketPair;
+      } else {
+        delete (globalThis as any).WebSocketPair;
+      }
     });
 
     it('returns "deno" when Deno global is present and process is absent', () => {
@@ -81,6 +95,38 @@ describe("detectRuntime", () => {
       });
 
       expect(detectRuntime()).toBe("browser");
+    });
+
+    it('returns "edge" when EdgeRuntime is present', () => {
+      Object.defineProperty(globalThis, "process", {
+        value: undefined,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(globalThis, "crypto", {
+        value: { subtle: {} },
+        writable: true,
+        configurable: true,
+      });
+      (globalThis as any).EdgeRuntime = "edge-runtime";
+
+      expect(detectRuntime()).toBe("edge");
+    });
+
+    it('returns "edge" for workerd-style WebSocketPair globals', () => {
+      Object.defineProperty(globalThis, "process", {
+        value: undefined,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(globalThis, "crypto", {
+        value: { subtle: {} },
+        writable: true,
+        configurable: true,
+      });
+      (globalThis as any).WebSocketPair = function WebSocketPair() {};
+
+      expect(detectRuntime()).toBe("edge");
     });
 
     it('returns "unknown" when no runtime indicators are present', () => {
@@ -192,6 +238,8 @@ describe("detectRuntime", () => {
 describe("getAdapter", () => {
   const originalProcess = globalThis.process;
   const originalCrypto = globalThis.crypto;
+  const originalEdgeRuntime = (globalThis as any).EdgeRuntime;
+  const hadEdgeRuntime = "EdgeRuntime" in globalThis;
 
   afterEach(() => {
     Object.defineProperty(globalThis, "process", {
@@ -204,6 +252,11 @@ describe("getAdapter", () => {
       writable: true,
       configurable: true,
     });
+    if (hadEdgeRuntime) {
+      (globalThis as any).EdgeRuntime = originalEdgeRuntime;
+    } else {
+      delete (globalThis as any).EdgeRuntime;
+    }
   });
 
   it("returns a PlatformAdapter for the current Node.js runtime", async () => {

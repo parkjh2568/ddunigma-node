@@ -74,6 +74,12 @@ function runNodeSmoke(packageDir) {
         }
       }
 
+      const node = await import("@ddunigma/node");
+      await node.preloadWasm();
+      if (!node.getWasmCodecSync()?.ready) {
+        throw new Error("Node entry preloadWasm should initialize the packaged WASM codec");
+      }
+
       const browser = await import("@ddunigma/node/browser");
       const browserEncoder = new browser.Ddu64();
       const asyncEncoded = await browserEncoder.encodeAsync("browser:async-pack-smoke");

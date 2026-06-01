@@ -400,14 +400,18 @@ export function getWasmCodecSync(): WasmCodec | null {
 /**
  * WASM 임계값을 검증합니다.
  * 유효 범위 [1024, 1048576] 내로 클램핑된 값을 반환합니다.
+ * Infinity를 전달하면 WASM hot path를 비활성화합니다.
  *
  * @param threshold - 검증할 임계값
  * @returns 검증된 임계값
- * @throws 값이 유한한 숫자가 아닌 경우 에러
+ * @throws 값이 유한한 숫자 또는 Infinity가 아닌 경우 에러
  */
 export function validateWasmThreshold(threshold: number): number {
+  if (threshold === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY;
   if (!Number.isFinite(threshold)) {
-    throw new Error(`[Ddu64 config] wasmThreshold must be a finite number, got ${threshold}`);
+    throw new Error(
+      `[Ddu64 config] wasmThreshold must be a finite number or Infinity, got ${threshold}`,
+    );
   }
   return Math.max(MIN_WASM_THRESHOLD, Math.min(MAX_WASM_THRESHOLD, Math.round(threshold)));
 }

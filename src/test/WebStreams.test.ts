@@ -449,5 +449,29 @@ describe("WebStreams", () => {
         expect((err as Ddu64DecryptionError).code).toBe(Ddu64ErrorCode.DecryptionFailed);
       }
     });
+
+    it("does not let encrypted stream header downgrade bypass footer decryption", async () => {
+      const encoder = createEncoder({ encryptionKey: "header-tamper-key" });
+      const input = new TextEncoder().encode("stream secret".repeat(10));
+      const encoded = await encodeViaStream(encoder, input, { encrypt: true });
+      const tampered = encoded.replace("DDS1N1", "DDS1N0");
+
+      expect(tampered).not.toBe(encoded);
+
+      const decoded = await decodeViaStream(encoder, tampered);
+      expect(decoded).toEqual(input);
+    });
+
+    it("does not let compressed encrypted stream header downgrade bypass footer metadata", async () => {
+      const encoder = createEncoder({ encryptionKey: "header-tamper-compressed-key" });
+      const input = new TextEncoder().encode("compressed stream secret ".repeat(80));
+      const encoded = await encodeViaStream(encoder, input, { compress: true, encrypt: true });
+      const tampered = encoded.replace("DDS1D1", "DDS1N0");
+
+      expect(tampered).not.toBe(encoded);
+
+      const decoded = await decodeViaStream(encoder, tampered);
+      expect(decoded).toEqual(input);
+    });
   });
 });

@@ -13,11 +13,6 @@ import { buildEncodeFooter } from "./EncodeFinalize.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
 
-/**
- * wasmThreshold 이상에서 Uint16Array를 사용하여 인덱스를 저장합니다.
- * WASM 경로와 동일한 임계값을 사용하여 의미를 통합합니다.
- */
-
 export interface PayloadCodecContext {
   bitLength: number;
   usePowerOfTwo: boolean;
@@ -85,6 +80,7 @@ export function decodePayload(
     : null;
   if (nativeDecoded) return nativeDecoded;
 
+  // WASM 전환 임계값부터 typed indices를 써서 대형 payload 메모리 형태를 통일합니다.
   const shouldUseTypedIndices = inputLen >= context.wasmThreshold;
   const indices = shouldUseTypedIndices ? new Uint16Array(inputLen) : new Array<number>(inputLen);
 

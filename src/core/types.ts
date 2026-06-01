@@ -222,7 +222,7 @@ export interface DduConstructorOptions extends DduOptions {
   /** 명시적 플랫폼 어댑터 (자동 감지 대신 사용) */
   adapter?: PlatformAdapter;
 
-  /** WASM 임계값 (바이트 단위, 기본값: 4096, 범위: 1024-1048576) */
+  /** WASM 임계값 (바이트 단위, 기본값: 4096, 범위: 1024-1048576, Infinity면 비활성화) */
   wasmThreshold?: number;
 }
 

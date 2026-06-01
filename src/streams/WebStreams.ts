@@ -6,8 +6,8 @@
  * 모든 최신 브라우저와 Node.js에서 사용 가능합니다.
  *
  * 스트리밍 모드:
- * - 압축/암호화/체크섬 비활성화 + 2의 제곱수 charset: 진정한 청크 단위 스트리밍
- * - 그 외: 전체 축적 후 일괄 처리 (알고리즘/와이어 포맷 제약)
+ * - 인코딩: 압축/암호화/체크섬 비활성화 + 2의 제곱수 charset에서 청크 단위 출력
+ * - 디코딩: footer의 압축/암호화 마커를 최종 신뢰하기 위해 payload를 축적 후 처리
  *
  * 스트림 헤더 형식: [pad]DDS1[D|B|N][1|0][pad]
  * D=deflate, B=brotli, N=없음 (압축), 1/0 (암호화).
@@ -185,11 +185,8 @@ export function createReadableEncodeStream(
  * charset 인코딩 문자열을 바이너리 데이터로 역변환하는
  * Web Streams API TransformStream을 생성합니다.
  *
- * 스트림은 DDS1 스트림 헤더를 파싱하여 압축 및 암호화 설정을 감지한 후
- * 페이로드를 그에 맞게 디코딩합니다.
- *
- * 압축/암호화/체크섬이 없고 charset이 2의 제곱수인 스트림은 헤더 파싱 후 각 청크를 즉시 디코딩합니다.
- * 그 외에는 전체 페이로드를 축적 후 일괄 디코딩합니다.
+ * 스트림은 DDS1 스트림 헤더를 조기 검증하되, 헤더만으로 복호화/압축해제를 비활성화하지 않습니다.
+ * footer가 최종 wire metadata이므로 전체 페이로드를 축적 후 일괄 디코딩합니다.
  *
  * @param encoder - 디코딩에 사용할 Ddu64Core 인스턴스
  * @param options - 디코딩 옵션
@@ -207,7 +204,6 @@ export function createReadableDecodeStream(
   let textBuffer = "";
   let headerParsed = false;
   let headerMeta: StreamHeaderMeta | null = null;
-  let canStreamDecode = false;
 
   return new TransformStream<string, Uint8Array>({
     async transform(chunk, controller) {
@@ -234,44 +230,9 @@ export function createReadableDecodeStream(
         }
 
         headerParsed = true;
-        canStreamDecode = canUseChunkStreaming(info, {
-          compressed: !!headerMeta.compressionAlgorithm,
-          encrypted: headerMeta.encrypted,
-          checksum: shouldChecksum,
-        });
 
         // 헤더 제거
         textBuffer = textBuffer.slice(headerLength);
-      }
-
-      // 청크 단위 디코딩: 압축/암호화/체크섬이 없고 2의 제곱수 charset일 때만
-      if (headerParsed && canStreamDecode && textBuffer.length > 0) {
-        // 비트 정렬 단위로 디코딩 (charset 문자 단위)
-        // 6비트 charset, power-of-two: 1문자 = 6비트, 4문자 = 24비트 = 3바이트
-        const bitLength = info.bitLength;
-        const charsPerAlignment = lcm(bitLength, 8) / bitLength;
-        const alignedLen = Math.floor(textBuffer.length / charsPerAlignment) * charsPerAlignment;
-
-        if (alignedLen > 0) {
-          const alignedText = textBuffer.slice(0, alignedLen);
-          textBuffer = textBuffer.slice(alignedLen);
-
-          try {
-            const decoded = await encoder.decodeToUint8ArrayAsync(alignedText, {
-              compress: false,
-              encrypt: false,
-              checksum: false,
-              chunkSize: undefined,
-              chunkSeparator: undefined,
-            });
-            if (decoded.length > 0) {
-              controller.enqueue(decoded);
-            }
-          } catch {
-            // 디코딩 실패 시 잔여 텍스트로 복원하고 flush에서 재시도
-            textBuffer = alignedText + textBuffer;
-          }
-        }
       }
     },
 
@@ -287,13 +248,12 @@ export function createReadableDecodeStream(
         if (textBuffer.length === 0) return;
 
         const detectedCompression = headerMeta!.compressionAlgorithm;
-        const detectedEncryption = headerMeta!.encrypted;
 
         const decoded = await encoder.decodeToUint8ArrayAsync(textBuffer, {
           ...options,
-          compress: !!detectedCompression,
+          compress: options?.compress,
           compressionAlgorithm: detectedCompression,
-          encrypt: detectedEncryption,
+          encrypt: options?.encrypt,
           checksum: shouldChecksum,
           chunkSize: undefined,
           chunkSeparator: undefined,

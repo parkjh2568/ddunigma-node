@@ -34,7 +34,7 @@ export async function getAdapter(): Promise<PlatformAdapter> {
     case "browser":
     case "edge": {
       const { BrowserAdapter } = await import("./BrowserAdapter.js");
-      return new BrowserAdapter();
+      return new BrowserAdapter(runtime);
     }
     default:
       throw new Error(

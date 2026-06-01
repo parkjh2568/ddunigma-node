@@ -10,6 +10,8 @@ export type RuntimeId = "node" | "browser" | "edge" | "deno" | "bun" | "unknown"
 type RuntimeGlobals = typeof globalThis & {
   Deno?: { version?: { deno?: string } };
   Bun?: { version?: string };
+  EdgeRuntime?: string;
+  WebSocketPair?: unknown;
   process?: { versions?: { node?: string } };
 };
 
@@ -31,6 +33,13 @@ export function detectRuntime(): RuntimeId {
 
   if (runtime.process?.versions?.node) {
     return "node";
+  }
+
+  if (
+    typeof runtime.EdgeRuntime === "string" ||
+    (typeof runtime.WebSocketPair !== "undefined" && runtime.crypto?.subtle)
+  ) {
+    return "edge";
   }
 
   if (typeof runtime.crypto !== "undefined" && runtime.crypto?.subtle) {

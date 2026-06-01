@@ -17,7 +17,7 @@ V2 추가사항
 
 ## Requirements
 
-- **Node.js >= 20.0.0**
+- **Node.js >= 22.0.0**
 
 ## Install
 
@@ -211,7 +211,7 @@ const encoded = await ddu.encodeAsync("browser text");
 const decoded = await ddu.decodeAsync(encoded);
 ```
 
-Node.js에서도 async 메서드를 사용할 수 있습니다. v4부터 루트 진입점(`@ddunigma/node`)은 런타임 조건형 export를 사용하므로 브라우저 번들러에서는 BrowserAdapter 경로로 해석됩니다. 명시적인 브라우저 경로가 필요하면 `@ddunigma/node/browser`를 사용하세요.
+Node.js에서도 async 메서드를 사용할 수 있습니다. v4부터 루트 진입점(`@ddunigma/node`)은 런타임 조건형 export를 사용하므로 브라우저 번들러와 Workers 계열 런타임에서는 BrowserAdapter 경로로 해석됩니다. 명시적인 브라우저 경로가 필요하면 `@ddunigma/node/browser`를 사용하세요.
 코어 진입점(`@ddunigma/node/core`)은 기본 인코딩/디코딩만 포함하며, 압축/암호화가 필요하면 명시적으로 어댑터를 전달하세요.
 
 ## Web Streams
@@ -240,6 +240,7 @@ await preloadWasm(); // 동기 encode/decode hot path에서 WASM을 쓰려면 �
 
 const ddu = new Ddu64({
   wasmThreshold: 4096, // 이 크기 이상일 때 WASM 사용
+  // wasmThreshold: Infinity, // WASM hot path 비활성화
 });
 
 const encoded = ddu.encode(new Uint8Array(1024 * 1024));
@@ -390,7 +391,7 @@ new Ddu64(dduChar, paddingChar, options?);
 | `chunkSeparator`       | `string`                | `"\n"`      | 청크 구분자           |
 | `maxDecodedBytes`      | `number`                | `67108864`  | 디코딩 크기 제한      |
 | `maxDecompressedBytes` | `number`                | `67108864`  | 압축해제 크기 제한    |
-| `wasmThreshold`        | `number`                | `4096`      | WASM 사용 임계값      |
+| `wasmThreshold`        | `number`                | `4096`      | WASM 사용 임계값 (`Infinity`면 비활성화) |
 | `throwOnError`         | `boolean`               | `false`     | 초기화 에러 시 throw  |
 
 ## Per-Call Options
@@ -419,7 +420,7 @@ new Ddu64(dduChar, paddingChar, options?);
 | Cloudflare Workers / Deno / Bun | `@ddunigma/node` 또는 `/browser`    | Node.js 내장 모듈 없는 Web API 경로   |
 | Adapter 직접 주입 최소 번들     | `@ddunigma/node/core`               | 최소 코어 (인코딩/디코딩만)           |
 
-루트 진입점은 v4부터 `browser`/`worker`/`deno`/`bun`/`node` 조건을 가진 conditional export입니다. Node.js에서는 기존처럼 `Buffer` API와 NodeAdapter를 노출하고, 브라우저 계열 번들러에서는 Node.js 내장 모듈 없는 BrowserAdapter 경로로 해석됩니다.
+루트 진입점은 v4부터 `browser`/`worker`/`workerd`/`deno`/`bun`/`node` 조건을 가진 conditional export입니다. Node.js에서는 기존처럼 `Buffer` API와 NodeAdapter를 노출하고, 브라우저 및 Workers 계열 번들러에서는 Node.js 내장 모듈 없는 BrowserAdapter 경로로 해석됩니다. 런타임 조건을 알 수 없는 ESM 환경의 기본 fallback도 browser 번들을 사용합니다.
 
 ## Build & Test
 

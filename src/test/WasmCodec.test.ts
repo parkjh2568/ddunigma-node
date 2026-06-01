@@ -16,6 +16,10 @@ import {
   MIN_WASM_THRESHOLD,
   MAX_WASM_THRESHOLD,
 } from "../wasm/WasmCodec.js";
+import {
+  getWasmCodecSync as getNodeWasmCodecSync,
+  preloadWasm as preloadNodeWasm,
+} from "../wasm/WasmCodecNode.js";
 
 describe("WasmCodec", () => {
   beforeEach(() => {
@@ -52,6 +56,13 @@ describe("WasmCodec", () => {
       expect(promise).toBeInstanceOf(Promise);
       // Attach a handler to prevent unhandled rejection
       promise.catch(() => {});
+    });
+  });
+
+  describe("Node WASM loader", () => {
+    it("installs the Node filesystem loader lazily before preload", async () => {
+      await preloadNodeWasm();
+      expect(getNodeWasmCodecSync()?.ready).toBe(true);
     });
   });
 
@@ -116,6 +127,10 @@ describe("WasmCodec", () => {
       expect(validateWasmThreshold(10000000)).toBe(MAX_WASM_THRESHOLD);
     });
 
+    it("allows Infinity to disable WASM use", () => {
+      expect(validateWasmThreshold(Number.POSITIVE_INFINITY)).toBe(Number.POSITIVE_INFINITY);
+    });
+
     it("should round non-integer values", () => {
       expect(validateWasmThreshold(4096.7)).toBe(4097);
       expect(validateWasmThreshold(4096.3)).toBe(4096);
@@ -123,7 +138,6 @@ describe("WasmCodec", () => {
 
     it("should throw for non-finite values", () => {
       expect(() => validateWasmThreshold(NaN)).toThrow(/finite number/);
-      expect(() => validateWasmThreshold(Infinity)).toThrow(/finite number/);
       expect(() => validateWasmThreshold(-Infinity)).toThrow(/finite number/);
     });
   });

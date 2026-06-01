@@ -2,43 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   bitPackEncode,
   bitPackDecode,
-  createBitPackConfig,
   calculateBitLength,
   isPowerOfTwo,
-  BitPackConfig,
+  type BitPackConfig,
 } from "../core/BitPack.js";
 
 describe("BitPack - standalone bit-packing engine", () => {
-  describe("createBitPackConfig", () => {
-    it("creates config for power-of-two charset (64)", () => {
-      const config = createBitPackConfig(64);
-      expect(config.bitLength).toBe(6);
-      expect(config.usePowerOfTwo).toBe(true);
-      expect(config.charsetSize).toBe(64);
-    });
-
-    it("creates config for power-of-two charset (256)", () => {
-      const config = createBitPackConfig(256);
-      expect(config.bitLength).toBe(8);
-      expect(config.usePowerOfTwo).toBe(true);
-      expect(config.charsetSize).toBe(256);
-    });
-
-    it("creates config for non-power-of-two charset (50)", () => {
-      const config = createBitPackConfig(50);
-      expect(config.bitLength).toBe(6); // ceil(log2(50)) = 6
-      expect(config.usePowerOfTwo).toBe(false);
-      expect(config.charsetSize).toBe(50);
-    });
-
-    it("creates config for non-power-of-two charset (100)", () => {
-      const config = createBitPackConfig(100);
-      expect(config.bitLength).toBe(7); // ceil(log2(100)) = 7
-      expect(config.usePowerOfTwo).toBe(false);
-      expect(config.charsetSize).toBe(100);
-    });
-  });
-
   describe("isPowerOfTwo", () => {
     it("returns true for powers of two", () => {
       expect(isPowerOfTwo(2)).toBe(true);
@@ -291,7 +260,7 @@ describe("BitPack - standalone bit-packing engine", () => {
 
   describe("platform independence", () => {
     it("operates purely on Uint8Array without Buffer", () => {
-      const config = createBitPackConfig(64);
+      const config: BitPackConfig = { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 };
       // Create a plain Uint8Array (not a Buffer)
       const input = new Uint8Array([72, 101, 108, 108, 111]);
       const { indices, paddingBits } = bitPackEncode(input, config);

@@ -10,7 +10,15 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { _setWasmByteLoader } from "./WasmCodec.js";
+import type { WasmCodec } from "../core/types.js";
+import {
+  _setWasmByteLoader,
+  getWasmCodec as getWasmCodecBase,
+  getWasmCodecSync as getWasmCodecSyncBase,
+  preloadWasm as preloadWasmBase,
+} from "./WasmCodec.js";
+
+let nodeWasmByteLoaderInstalled = false;
 
 async function readWasmFile(path: string): Promise<ArrayBuffer | null> {
   try {
@@ -37,12 +45,28 @@ async function loadWasmBytesFromNodeFs(): Promise<ArrayBuffer | null> {
   return null;
 }
 
-_setWasmByteLoader(loadWasmBytesFromNodeFs);
+function ensureNodeWasmByteLoader(): void {
+  if (nodeWasmByteLoaderInstalled) return;
+  _setWasmByteLoader(loadWasmBytesFromNodeFs);
+  nodeWasmByteLoaderInstalled = true;
+}
+
+export async function preloadWasm(): Promise<void> {
+  ensureNodeWasmByteLoader();
+  return preloadWasmBase();
+}
+
+export function getWasmCodec(): WasmCodec | null {
+  ensureNodeWasmByteLoader();
+  return getWasmCodecBase();
+}
+
+export function getWasmCodecSync(): WasmCodec | null {
+  ensureNodeWasmByteLoader();
+  return getWasmCodecSyncBase();
+}
 
 export {
-  preloadWasm,
-  getWasmCodec,
-  getWasmCodecSync,
   validateWasmThreshold,
   DEFAULT_WASM_THRESHOLD,
   MIN_WASM_THRESHOLD,

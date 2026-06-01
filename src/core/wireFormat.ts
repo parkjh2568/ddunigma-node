@@ -379,7 +379,7 @@ export interface FooterOptions {
  * 와이어 포맷 푸터 문자열을 생성합니다.
  *
  * 두 가지 모드를 지원합니다:
- * 1. Node 스타일: `{padChar}{compressionMarker}{encryptMarker}{paddingBits}`
+ * 1. Node 스타일: `{padChar}{compressionMarker}{encryptMarker}{pipelineMarker}{paddingBits}`
  * 2. 반복 패딩: `{padChar}`를 `paddingBits / bitsPerPadChar`회 반복
  *    (압축/암호화 마커가 필요 없을 때만)
  *
@@ -396,6 +396,10 @@ export function buildFooter(options: FooterOptions): string {
     bitsPerPadChar = 2,
     pipelineVersion = 2,
   } = options;
+
+  if (!isEncrypted && pipelineVersion !== 2) {
+    throw new Error("[wireFormat] Pipeline version markers require encryption");
+  }
 
   // 패딩 비트가 없고 마커도 필요 없으면 빈 문자열 반환
   if (paddingBits === 0 && !compressionAlgorithm && !isEncrypted && pipelineVersion === 2) {

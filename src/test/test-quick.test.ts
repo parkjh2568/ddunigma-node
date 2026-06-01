@@ -171,7 +171,9 @@ console.log("══════════════════════�
   } catch (err: any) {
     reportTest(
       "음수 패딩 감지",
-      err.message.includes("Invalid padding") || err.message.includes("Invalid character"),
+      err.message.includes("Invalid padding") ||
+        err.message.includes("Invalid character") ||
+        err.message.includes("Invalid encoded bit length"),
     );
   }
 

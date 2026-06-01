@@ -370,6 +370,17 @@ describe("buildFooter", () => {
     expect(result).toBe(pad + BROTLI_MARKER + ENCRYPT_MARKER + PIPELINE_V4_MARKER + "3");
   });
 
+  it("rejects pipeline markers without encryption", () => {
+    expect(() =>
+      buildFooter({
+        paddingBits: 3,
+        isEncrypted: false,
+        paddingChar: pad,
+        pipelineVersion: 4,
+      }),
+    ).toThrow("[wireFormat] Pipeline version markers require encryption");
+  });
+
   it("builds V2 repeat-padding footer", () => {
     const result = buildFooter({
       paddingBits: 4,

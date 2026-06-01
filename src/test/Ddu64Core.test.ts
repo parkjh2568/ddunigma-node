@@ -70,6 +70,32 @@ describe("Ddu64Core", () => {
   });
 
   describe("decodeToUint8Array", () => {
+    it("rejects unpadded payloads that do not end on a byte boundary", () => {
+      const encoder = new Ddu64Core(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        "=",
+        { adapter: new NodeAdapter() },
+      );
+
+      for (const truncated of ["A", "AA", "AAA"]) {
+        expect(() => encoder.decodeToUint8Array(truncated)).toThrow(Ddu64CharsetError);
+        expect(() => encoder.decodeToUint8Array(truncated)).toThrow(
+          "Invalid encoded bit length",
+        );
+      }
+    });
+
+    it("accepts byte-aligned no-footer payloads and repeated Base64 padding", () => {
+      const encoder = new Ddu64Core(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        "=",
+        { adapter: new NodeAdapter() },
+      );
+
+      expect(Array.from(encoder.decodeToUint8Array("AAAA"))).toEqual([0, 0, 0]);
+      expect(Array.from(encoder.decodeToUint8Array("AA=="))).toEqual([0]);
+    });
+
     it("should return Uint8Array instance", () => {
       const encoder = createEncoder();
       const encoded = encoder.encode("test");

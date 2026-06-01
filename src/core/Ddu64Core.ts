@@ -5,7 +5,7 @@
  * @module core/Ddu64Core
  */
 
-import { type BitPackConfig } from "./BitPack.js";
+import { calculateBitLength, isPowerOfTwo, type BitPackConfig } from "./BitPack.js";
 import {
   normalizeCompressionLevel,
   stringToBytes,
@@ -220,7 +220,7 @@ export class Ddu64Core {
 
     // 비트 길이 계산
     const dduLength = this.dduChar.length;
-    const autoIsPow2 = dduLength > 0 && (dduLength & (dduLength - 1)) === 0;
+    const autoIsPow2 = isPowerOfTwo(dduLength);
     // preset 인코딩 프로필은 레거시 와이어 포맷을 고정하므로 사용자 옵션보다 우선합니다.
     // 단, dduOptions.usePowerOfTwo=true여도 charset 크기가 2의 제곱수가 아니면 무시.
     const requestedPow2 = dduOptions?.usePowerOfTwo;
@@ -234,9 +234,7 @@ export class Ddu64Core {
     const presetBitLength =
       encodingProfile?.bitLength ??
       (initial.isPredefined && initial.usePowerOfTwo !== undefined ? initial.bitLength : undefined);
-    this.bitLength =
-      presetBitLength ??
-      (this.usePowerOfTwo ? Math.floor(Math.log2(dduLength)) : Math.ceil(Math.log2(dduLength)));
+    this.bitLength = presetBitLength ?? calculateBitLength(dduLength, this.usePowerOfTwo);
 
     const lookupTables = buildCharsetLookupTables(this.dduChar);
     this.dduCharCodeLookup = lookupTables.charCodeLookup;

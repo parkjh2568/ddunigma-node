@@ -79,7 +79,11 @@ export class BrowserAdapter implements PlatformAdapter {
   readonly supportsSyncCrypto = false;
   readonly supportsSyncCompression = false;
   readonly supportsBrotli = supportsCompressionFormat("brotli");
-  readonly runtime = "browser" as const;
+  readonly runtime: "browser" | "edge" | "deno" | "bun";
+
+  constructor(runtime: "browser" | "edge" | "deno" | "bun" = "browser") {
+    this.runtime = runtime;
+  }
 
   // ─── Crypto ──────────────────────────────────────────────────────────────
 

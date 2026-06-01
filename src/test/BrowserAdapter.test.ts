@@ -45,6 +45,12 @@ describe("BrowserAdapter", () => {
     it('reports runtime as "browser"', () => {
       expect(adapter.runtime).toBe("browser");
     });
+
+    it("can be tagged with a Web API runtime id", () => {
+      expect(new BrowserAdapter("edge").runtime).toBe("edge");
+      expect(new BrowserAdapter("deno").runtime).toBe("deno");
+      expect(new BrowserAdapter("bun").runtime).toBe("bun");
+    });
   });
 
   describe("sync methods are undefined", () => {
