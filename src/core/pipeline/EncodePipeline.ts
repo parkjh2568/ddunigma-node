@@ -26,6 +26,7 @@ export interface EncodePipelineBaseContext {
     isEncrypted: boolean,
     checksum: string,
     shouldChecksum: boolean,
+    checksumScope: "plaintext" | "output",
     chunkSize: number | undefined,
     chunkSeparator: string,
   ): string;
@@ -92,6 +93,7 @@ export function runSyncEncodePipeline(
       isEncrypted,
       checksum,
       settings.shouldChecksum,
+      settings.checksumScope,
       settings.chunkSize,
       settings.chunkSeparator,
     ),
@@ -145,6 +147,7 @@ export async function runAsyncEncodePipeline(
     isEncrypted,
     checksum,
     settings.shouldChecksum,
+    settings.checksumScope,
     settings.chunkSize,
     settings.chunkSeparator,
   );

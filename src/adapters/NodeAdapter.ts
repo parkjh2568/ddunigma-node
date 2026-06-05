@@ -32,6 +32,7 @@ import {
   normalizePbkdf2HashForNode,
   normalizePbkdf2Iterations,
   pbkdf2SaltToBytes,
+  resolveKeyDerivationAlgorithm,
 } from "./keyDerivation.js";
 
 const deflateRawAsync = promisify(deflateRaw);
@@ -89,13 +90,13 @@ export class NodeAdapter implements PlatformAdapter {
   // ─── Crypto ──────────────────────────────────────────────────────────────
 
   async deriveKey(key: string, options?: KeyDerivationOptions): Promise<Uint8Array> {
-    if (options?.algorithm === "pbkdf2") {
+    if (resolveKeyDerivationAlgorithm(options) === "pbkdf2") {
       const derived = await pbkdf2Async(
         key,
-        pbkdf2SaltToBytes(options.salt),
-        normalizePbkdf2Iterations(options.iterations),
+        pbkdf2SaltToBytes(options?.salt),
+        normalizePbkdf2Iterations(options?.iterations),
         32,
-        normalizePbkdf2HashForNode(options.hash),
+        normalizePbkdf2HashForNode(options?.hash),
       );
       return new Uint8Array(derived);
     }
@@ -103,14 +104,14 @@ export class NodeAdapter implements PlatformAdapter {
   }
 
   deriveKeySync(key: string, options?: KeyDerivationOptions): Uint8Array {
-    if (options?.algorithm === "pbkdf2") {
+    if (resolveKeyDerivationAlgorithm(options) === "pbkdf2") {
       return new Uint8Array(
         pbkdf2Sync(
           key,
-          pbkdf2SaltToBytes(options.salt),
-          normalizePbkdf2Iterations(options.iterations),
+          pbkdf2SaltToBytes(options?.salt),
+          normalizePbkdf2Iterations(options?.iterations),
           32,
-          normalizePbkdf2HashForNode(options.hash),
+          normalizePbkdf2HashForNode(options?.hash),
         ),
       );
     }

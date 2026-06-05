@@ -192,7 +192,9 @@ export class Ddu64Core {
     paddingChar = resolved.paddingChar;
     dduOptions = resolved.dduOptions;
 
-    const shouldThrow = dduOptions?.throwOnError ?? false;
+    // 5.0: 초기화 오류 시 기본적으로 throw (기본 3종 등 유효 설정은 영향 없음; 잘못된 charset만 throw).
+    // 레거시 묵시적 fallback이 필요하면 throwOnError: false를 명시.
+    const shouldThrow = dduOptions?.throwOnError ?? true;
 
     // 어댑터 해석
     if (dduOptions?.adapter) {
@@ -265,7 +267,9 @@ export class Ddu64Core {
 
     // 옵션
     this.defaultChecksum = dduOptions?.checksum ?? false;
-    this.defaultChecksumScope = dduOptions?.checksumScope ?? "plaintext";
+    // 5.0: 기본 체크섬 범위를 "output"으로 전환 (암호화 시 평문 CRC 미노출).
+    // 기본 3종(옵션 미사용)은 체크섬을 쓰지 않으므로 와이어 출력에 영향 없음.
+    this.defaultChecksumScope = dduOptions?.checksumScope ?? "output";
     this.defaultChunkSize = dduOptions?.chunkSize;
     this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
     this.defaultCompressionAlgorithm = dduOptions?.compressionAlgorithm ?? "deflate";
@@ -446,7 +450,6 @@ export class Ddu64Core {
     return {
       encryptionKey: this.encryptionKey,
       defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
-      defaultChecksumScope: this.defaultChecksumScope,
       reportProgress: (info) => this.reportProgress(options, info),
     };
   }
@@ -544,6 +547,7 @@ export class Ddu64Core {
         isEncrypted,
         checksum,
         shouldChecksum,
+        checksumScope,
         chunkSize,
         chunkSeparator,
       ) =>
@@ -553,6 +557,7 @@ export class Ddu64Core {
           isEncrypted,
           checksum,
           shouldChecksum,
+          checksumScope,
           chunkSize,
           chunkSeparator,
           options,
@@ -570,6 +575,7 @@ export class Ddu64Core {
     isEncrypted: boolean,
     checksum: string,
     shouldChecksum: boolean,
+    checksumScope: "plaintext" | "output",
     chunkSize: number | undefined,
     chunkSeparator: string,
     options: DduOptions | undefined,
@@ -595,6 +601,7 @@ export class Ddu64Core {
       options,
       checksum,
       shouldChecksum,
+      checksumScope,
       chunkSize,
       chunkSeparator,
     );
@@ -616,6 +623,7 @@ export class Ddu64Core {
     options: DduOptions | undefined,
     checksum: string,
     shouldChecksum: boolean,
+    checksumScope: "plaintext" | "output",
     chunkSize: number | undefined,
     chunkSeparator: string,
   ): string {
@@ -624,6 +632,7 @@ export class Ddu64Core {
       options,
       checksum,
       shouldChecksum,
+      checksumScope,
       chunkSize,
       chunkSeparator,
       urlSafe: this.urlSafe,

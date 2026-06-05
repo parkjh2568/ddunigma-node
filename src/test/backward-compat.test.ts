@@ -21,7 +21,7 @@ describe("구버전 호환성 테스트", () => {
         "뜌,뜍,뜎,뜏,뜐,뜑,뜒,뜓,뜔,뜕,뜖,뜗,뜘,뜙,뜚,뜛,뜜,뜝,뜞,뜟,뜠,뜡,뜢,뜣,뜤,뜥,뜦,뜧,뜨,뜩,뜪,뜫,뜬,뜭,뜮,뜯,뜰,뜱,뜲,뜳,뜴,뜵,뜶,뜷,뜸,뜹,뜺,뜻,뜼,뜽,뜾,뜿,땨,땩,땪,땫,땬,땭,땮,땯,땰,땱,땲,땳,땴,땵,땶,땷,땸,땹,땺,땻,땼,땽,땾,땿,떀,떁,떂,떃,떄,떅,떆,떇,떈,떉,떊,떋,떌,떍,떎,떏,떐,떑,떒,떓,떔,떕,떖,떗,떘,떙,떚,떛,우,욱,욲,욳,운,울,욶,욷,움,웁,웂,웃,웄,웅,웆,웇,워,웍,웎,웏,원,월,웒,웓,월,웕,웖,웗,웘,웙,웚,웛,위,윅,윆,윇,윈,윉,윊,윋,윌,윍,윎,윏,윐,윑,윒,윓,윔,윕,윖,따,딱,딲,딳,딴,딵,딶,딷,딸,딹,딺,딻,딼,딽,딾,딿,땀,땁,땂,땃,땄,땅,땆,땇,땈,땉,땊,땋,때,땍,땎,땏,때,땑,땒,땓,땔,땕,땖,땗,땘,땙,땚,땛,땜,땝,땞,땟,땠,땡,땢,야,약,얂,얃,얄,얅,얆,얇,얈,얉,얊,얋,얌,얍,얎,얏,양,양,얒,얓,얔,얕,얖,얗,얘,얙,얚,얛,얜,얝,얞,얟,얠,얡,얢,얣,얤,얥,얦,얧,얨,얩,얪,얫,얬,얭,얮,얯,얰,얱".split(
           ",",
         );
-      const encoder = new Ddu64Node(koreanChars, "뭐");
+      const encoder = new Ddu64Node(koreanChars, "뭐", { throwOnError: false });
 
       const encoded = encoder.encode("안녕하세요12");
       const decoded = encoder.decode(encoded);
@@ -34,7 +34,9 @@ describe("구버전 호환성 테스트", () => {
     });
 
     it("4문자 charset (우따야야) - usePowerOfTwo", () => {
-      const encoder = new Ddu64Node("우따야야", "뭐", { usePowerOfTwo: true });
+      // "우따야야"는 중복("야") charset → 5.0 기본 throwOnError:true에선 throw하므로
+      // 레거시 dedup 동작 검증을 위해 throwOnError:false로 명시.
+      const encoder = new Ddu64Node("우따야야", "뭐", { usePowerOfTwo: true, throwOnError: false });
 
       const input = "안녕하세요";
       const encoded = encoder.encode(input);
@@ -49,7 +51,7 @@ describe("구버전 호환성 테스트", () => {
     });
 
     it("4문자 charset (우따야야) - compress 라운드트립", () => {
-      const encoder = new Ddu64Node("우따야야", "뭐", { usePowerOfTwo: true });
+      const encoder = new Ddu64Node("우따야야", "뭐", { usePowerOfTwo: true, throwOnError: false });
 
       const input = "안녕하세요".repeat(14);
       // 압축 인코딩 → 디코딩 라운드트립 검증
@@ -223,11 +225,12 @@ describe("구버전 호환성 테스트", () => {
       expect(decoded).toBe("데이터 무결성 테스트");
     });
 
-    it("체크섬 - 인코딩 동일성", () => {
+    it("체크섬 - CRC 값 유지 (5.0 마커는 CK로 변경, plaintext CRC 동일)", () => {
       const encoder = new Ddu64Node();
 
       const currentEncoded = encoder.encode("데이터 무결성 테스트", { checksum: true });
-      expect(currentEncoded).toContain("CHK");
+      // 5.0: 마커가 CHK → CK[scope]로 변경됨. 평문 CRC 값은 동일(plain 데이터라 output==plaintext)
+      expect(currentEncoded).toMatch(/CK[PO]e603e028/);
       expect(currentEncoded).toContain("e603e028");
 
       const decoded = encoder.decode(currentEncoded, { checksum: true });
@@ -311,9 +314,12 @@ describe("구버전 호환성 테스트", () => {
       expect(() => encoder.decode(tampered)).toThrow();
     });
 
-    it("암호화 - 구버전 V3 encrypted fixture 디코딩 호환", () => {
+    it("암호화 - 구버전 V3 encrypted fixture 디코딩 호환 (sha256 명시)", () => {
+      // 5.0 기본 키 파생은 pbkdf2. 4.x sha256으로 암호화된 레거시 데이터를 디코딩하려면
+      // keyDerivation:{ algorithm:"sha256" }를 명시해야 한다(키 파생은 와이어에 자기기술 불가).
       const encoder = new Ddu64Node(undefined, undefined, {
         encryptionKey: "legacy-v3-key",
+        keyDerivation: { algorithm: "sha256" },
       });
       const legacyV3Encoded =
         "땩땼땾뜎댲뎼이댰욷댰땼읶듓댜뜟댝얏듇듔땼댞뜍웄욷얒뎯얏뎪듁듁웆뜢뜟듔익뎪땨읻욷뜠듀뎼뜟듀욲땻욲뎼댝댜뜍얐듕듇뎯뜌잇뜍읻뜍얏땪땻댱뜢웅양읻댜뜌뭐ENCV34";

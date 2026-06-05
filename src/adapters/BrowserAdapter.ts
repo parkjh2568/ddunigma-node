@@ -14,6 +14,7 @@ import {
   normalizePbkdf2HashForWebCrypto,
   normalizePbkdf2Iterations,
   pbkdf2SaltToBytes,
+  resolveKeyDerivationAlgorithm,
 } from "./keyDerivation.js";
 
 type BrowserCompressionFormat = "deflate-raw" | "brotli";
@@ -96,16 +97,16 @@ export class BrowserAdapter implements PlatformAdapter {
     const encoder = new TextEncoder();
     const keyData = encoder.encode(key);
 
-    if (options?.algorithm === "pbkdf2") {
+    if (resolveKeyDerivationAlgorithm(options) === "pbkdf2") {
       const keyMaterial = await crypto.subtle.importKey("raw", keyData, "PBKDF2", false, [
         "deriveBits",
       ]);
       const bits = await crypto.subtle.deriveBits(
         {
           name: "PBKDF2",
-          salt: pbkdf2SaltToBytes(options.salt) as BufferSource,
-          iterations: normalizePbkdf2Iterations(options.iterations),
-          hash: normalizePbkdf2HashForWebCrypto(options.hash),
+          salt: pbkdf2SaltToBytes(options?.salt) as BufferSource,
+          iterations: normalizePbkdf2Iterations(options?.iterations),
+          hash: normalizePbkdf2HashForWebCrypto(options?.hash),
         },
         keyMaterial,
         256,

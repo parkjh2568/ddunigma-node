@@ -77,11 +77,11 @@
     },
     {
       "id": "checksum-hello",
-      "description": "Encoding with CRC32 checksum appended (CHK marker + 8 hex chars)",
+      "description": "Encoding with CRC32 checksum appended (V5 CK marker + scope + 8 hex chars)",
       "input": { "raw": "48656c6c6f", "encoding": "utf-8" },
       "charset": { "dduChar": "base64", "paddingChar": "=" },
       "options": { "checksum": true },
-      "expected": { "encoded": "SGVsbG8=2CHKf7d18982" },
+      "expected": { "encoded": "SGVsbG8=2CKOf7d18982" },
       "tags": ["checksum"]
     },
     {

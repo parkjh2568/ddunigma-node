@@ -381,7 +381,7 @@ describe("WebStreams", () => {
       const input = new TextEncoder().encode("Checksum protected stream payload");
 
       const encoded = await encodeViaStream(encoder, input, { checksum: true });
-      expect(encoded).toMatch(/CHK[0-9a-f]{8}$/i);
+      expect(encoded).toMatch(/CK[PO][0-9a-f]{8}$/i);
 
       const decoded = await decodeViaStream(encoder, encoded, { checksum: true });
       expect(decoded).toEqual(input);

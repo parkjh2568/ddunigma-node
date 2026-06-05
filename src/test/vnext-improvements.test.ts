@@ -99,23 +99,24 @@ describe("vNext improvements", () => {
       }
     });
 
-    it("output scope decode rejects data checksummed with the default plaintext scope", () => {
+    it("auto-detected scope (V5) makes encode/decode scope-option mismatch a non-issue", () => {
       const outputEnc = new Ddu64Node(undefined, undefined, {
         checksum: true,
         checksumScope: "output",
         encryptionKey: "k",
       });
-      const plaintextDec = new Ddu64Node(undefined, undefined, {
-        checksum: true, // default plaintext scope
-        encryptionKey: "k",
-      });
-      const encoded = outputEnc.encode("scope mismatch should fail");
-      expect(() => plaintextDec.decode(encoded)).toThrow();
+      const dec = new Ddu64Node(undefined, undefined, { encryptionKey: "k" });
+      const msg = "scope auto-detect via CK marker";
+      const encoded = outputEnc.encode(msg);
+      // 디코더가 명시적으로 다른 scope(plaintext)를 줘도 CK 마커의 output scope가 우선 적용됨
+      expect(dec.decode(encoded, { checksum: true, checksumScope: "plaintext" })).toBe(msg);
     });
 
-    it("default (plaintext) scope remains the default and round-trips", () => {
+    it("default checksumScope is 'output' (5.0) and round-trips", () => {
       const enc = new Ddu64Node(undefined, undefined, { checksum: true });
-      expect(enc.decode(enc.encode("default scope"))).toBe("default scope");
+      const encoded = enc.encode("default scope");
+      expect(encoded).toMatch(/CKO[0-9a-f]{8}/); // 기본 output scope → CK O 마커
+      expect(enc.decode(encoded)).toBe("default scope");
     });
   });
 

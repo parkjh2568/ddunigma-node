@@ -230,7 +230,7 @@ describe("Ddu64Core", () => {
       const encoder = createEncoder({ checksum: true });
       const input = "Checksum test data";
       const encoded = encoder.encode(input);
-      expect(encoded).toContain("CHK");
+      expect(encoded).toMatch(/CK[PO][0-9a-f]{8}/); // V5 marker + scope + 8 hex
       const decoded = encoder.decode(encoded);
       expect(decoded).toBe(input);
     });
@@ -238,9 +238,8 @@ describe("Ddu64Core", () => {
     it("should detect checksum mismatch", () => {
       const encoder = createEncoder({ checksum: true });
       const encoded = encoder.encode("original");
-      // Tamper with the encoded data (change a character before CHK)
-      const chkIdx = encoded.indexOf("CHK");
-      const tampered = encoded.slice(0, chkIdx) + "CHK" + "00000000";
+      // 마지막 hex 한 글자를 뒤집어 체크섬 불일치 유발 (마커/scope는 유지)
+      const tampered = encoded.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
       expect(() => encoder.decode(tampered)).toThrow(Ddu64ChecksumError);
       try {
         encoder.decode(tampered);
@@ -322,15 +321,24 @@ describe("Ddu64Core", () => {
   });
 
   describe("URL-Safe", () => {
-    it("should produce URL-safe output with ONECHARSET", () => {
+    it("silently disables URL-safe for ONECHARSET conflict when throwOnError is false", () => {
+      // ONECHARSET은 "-","_"를 포함해 URL-Safe와 충돌. 5.0 기본(throwOnError:true)에선 생성자가 throw하므로
+      // 레거시 "조용히 비활성화" 동작은 throwOnError:false로 명시할 때만 적용됨.
       const encoder = createEncoder({
         dduSetSymbol: DduSetSymbol.ONECHARSET,
         urlSafe: true,
+        throwOnError: false,
       });
       const input = "URL safe test";
       const encoded = encoder.encode(input);
       const decoded = encoder.decode(encoded);
       expect(decoded).toBe(input);
+    });
+
+    it("throws on URL-safe/charset conflict by default (5.0 throwOnError:true)", () => {
+      expect(() => createEncoder({ dduSetSymbol: DduSetSymbol.ONECHARSET, urlSafe: true })).toThrow(
+        /URL-Safe/i,
+      );
     });
   });
 

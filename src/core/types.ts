@@ -146,12 +146,13 @@ export type KeyDerivationAlgorithm = "sha256" | "pbkdf2";
 
 export interface KeyDerivationOptions {
   /**
-   * Key derivation algorithm. Defaults to `sha256` for legacy compatibility.
+   * Key derivation algorithm. Defaults to `pbkdf2` (5.0).
    *
-   * ⚠️ Security: the default `sha256` is a single, unsalted hash and is fast to
-   * brute-force. For low-entropy keys (human passwords) protecting production
-   * data, use `pbkdf2` with an application-specific `salt`. Keep `sha256` only
-   * for high-entropy keys (e.g. 32 random bytes) or legacy data compatibility.
+   * ⚠️ Migration: 4.x defaulted to `sha256`. Data encrypted with 4.x defaults must be decrypted with
+   * `algorithm: "sha256"` explicitly (key derivation is NOT self-described in the wire format).
+   * For low-entropy keys (human passwords), keep the `pbkdf2` default and provide an
+   * application-specific `salt`. Use `sha256` only for high-entropy keys (e.g. 32 random bytes) or
+   * legacy data compatibility.
    */
   algorithm?: KeyDerivationAlgorithm;
   /**
@@ -355,65 +356,4 @@ export interface ObfuscationLayer {
    * 난독화를 역변환하여 원본 charset 인코딩 문자열을 복원합니다.
    */
   deobfuscate(input: string): string;
-}
-
-// ─── Test Vectors ────────────────────────────────────────────────────────────
-
-/**
- * 크로스 플랫폼 인코딩 호환성 및 와이어 포맷 적합성을 검증하기 위한
- * 표준화된 테스트 벡터 형식.
- *
- * @deprecated Exported for legacy test-vector consumers. This is not part of
- * the runtime encoding API and may move to a test utility entry point in a
- * future major release.
- */
-export interface TestVector {
-  /** 이 테스트 벡터의 고유 식별자 */
-  id: string;
-
-  /** 이 벡터가 테스트하는 내용에 대한 설명 */
-  description: string;
-
-  /** 입력 데이터 명세 */
-  input: {
-    /** 16진수 인코딩된 입력 바이트 */
-    raw: string;
-    /** 원시 데이터의 인코딩 */
-    encoding: "utf-8" | "binary";
-  };
-
-  /** 이 벡터의 charset 설정 */
-  charset: {
-    /** 프리셋 심볼 (내장 charset 사용 시) */
-    preset?: DduSetSymbol;
-    /** 커스텀 charset 문자 (프리셋 미사용 시) */
-    dduChar?: string[];
-    /** 조합 charset용 종성 문자 */
-    codaChar?: string[];
-    /** 패딩 문자 */
-    paddingChar: string;
-  };
-
-  /** 인코딩 옵션 */
-  options: {
-    compress?: boolean;
-    compressionAlgorithm?: "deflate" | "brotli";
-    encrypt?: boolean;
-    encryptionKey?: string;
-    checksum?: boolean;
-    urlSafe?: boolean;
-    chunkSize?: number;
-    useRepeatPadding?: boolean;
-  };
-
-  /** 기대 출력 */
-  expected: {
-    /** 기대되는 인코딩 문자열 */
-    encoded: string;
-    /** 바이너리 비교를 위한 16진수 표현 */
-    encodedHex?: string;
-  };
-
-  /** 테스트 벡터 분류 태그 */
-  tags: string[];
 }

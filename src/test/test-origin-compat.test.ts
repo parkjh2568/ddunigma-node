@@ -481,8 +481,8 @@ describe("Origin Cross-Platform Compatibility", () => {
       const input = "checksum test";
       const encoded = encoder.encode(input);
 
-      // Checksum output contains CHK marker
-      expect(encoded).toContain("CHK");
+      // Checksum output contains the V5 CK marker (CK + scope + 8 hex)
+      expect(encoded).toMatch(/CK[PO][0-9a-f]{8}/);
     });
 
     it("plain DDU encoding IS compatible with Origin (no markers in output)", () => {

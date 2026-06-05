@@ -199,7 +199,7 @@ describe("Ddu64Node", () => {
       const encoder = new Ddu64Node(undefined, undefined, { checksum: true });
       const input = "Checksum test";
       const encoded = encoder.encode(input);
-      expect(encoded).toContain("CHK");
+      expect(encoded).toMatch(/CK[PO][0-9a-f]{8}/);
       const decoded = encoder.decode(encoded);
       expect(decoded).toBe(input);
     });

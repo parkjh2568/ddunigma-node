@@ -8,7 +8,12 @@
  */
 
 import { splitIntoChunks, toUrlSafe } from "../codecUtils.js";
-import { buildFooter, CHECKSUM_MARKER, type PipelineVersion } from "../wireFormat.js";
+import {
+  buildFooter,
+  CHECKSUM_MARKER_V5,
+  type ChecksumScope,
+  type PipelineVersion,
+} from "../wireFormat.js";
 import type { DduOptions, ObfuscationLayer } from "../types.js";
 
 export interface BuildEncodeFooterOptions {
@@ -27,6 +32,8 @@ export interface ApplyPostEncodingOptions {
   options: DduOptions | undefined;
   checksum: string;
   shouldChecksum: boolean;
+  /** 체크섬 scope — V5 마커에 P|O로 자기기술됨 */
+  checksumScope: ChecksumScope;
   chunkSize: number | undefined;
   chunkSeparator: string;
   urlSafe: boolean;
@@ -58,7 +65,9 @@ export function applyPostEncoding(options: ApplyPostEncodingOptions): string {
   }
 
   if (options.shouldChecksum && options.checksum) {
-    result = result + CHECKSUM_MARKER + options.checksum;
+    // V5: 체크섬 마커에 scope를 자기기술(P=plaintext, O=output)
+    const scopeChar = options.checksumScope === "plaintext" ? "P" : "O";
+    result = result + CHECKSUM_MARKER_V5 + scopeChar + options.checksum;
   }
 
   if (options.urlSafe) {

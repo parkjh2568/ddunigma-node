@@ -138,3 +138,17 @@ describe("V5 decode self-description (Step 2)", () => {
     expect(() => dec.decodeToUint8Array(vec.expected.encoded!)).toThrow();
   });
 });
+
+describe("V5 encoder golden output (Step 3)", () => {
+  const deterministic = vectors.filter((v) => v.tags.includes("deterministic"));
+  for (const v of deterministic) {
+    it(`${v.id}: real 5.0 encoder produces the locked vector`, () => {
+      const enc = new Ddu64Node(undefined, undefined, {
+        compress: v.options.compress ?? false,
+        checksum: true,
+        checksumScope: v.checksumSource,
+      });
+      expect(enc.encode(fromHex(v.input.raw))).toBe(v.expected.encoded);
+    });
+  }
+});

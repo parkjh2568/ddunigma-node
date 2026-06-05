@@ -110,9 +110,9 @@ describe("BrowserAdapter", () => {
       expect(result1).not.toEqual(result2);
     });
 
-    it("produces known SHA-256 hash for empty string", async () => {
-      // SHA-256 of empty string is well-known
-      const result = await adapter.deriveKey("");
+    it("produces known SHA-256 hash for empty string (explicit sha256)", async () => {
+      // SHA-256 of empty string is well-known. 5.0 기본은 pbkdf2이므로 sha256을 명시.
+      const result = await adapter.deriveKey("", { algorithm: "sha256" });
       // SHA-256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
       const expected = new Uint8Array([
         0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9,

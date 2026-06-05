@@ -24,9 +24,10 @@ describe("Charset Optimization - Removal Validation", () => {
       ).toThrow(/not found/i);
     });
 
-    it("should fallback silently when initializing with twoCharSet without throwOnError", () => {
+    it("should fallback silently when initializing with twoCharSet and throwOnError: false", () => {
       const encoder = new Ddu64(undefined, undefined, {
         dduSetSymbol: "twoCharSet" as any,
+        throwOnError: false, // 5.0 기본은 throw이므로 fallback 동작은 명시적으로 opt-in
       });
       // Should fallback to default charset and still work
       const encoded = encoder.encode("test");
@@ -34,9 +35,10 @@ describe("Charset Optimization - Removal Validation", () => {
       expect(decoded).toBe("test");
     });
 
-    it("should fallback silently when initializing with threeCharSet without throwOnError", () => {
+    it("should fallback silently when initializing with threeCharSet and throwOnError: false", () => {
       const encoder = new Ddu64(undefined, undefined, {
         dduSetSymbol: "threeCharSet" as any,
+        throwOnError: false,
       });
       // Should fallback to default charset and still work
       const encoded = encoder.encode("test");

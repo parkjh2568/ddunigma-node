@@ -124,10 +124,9 @@ describe("Property-Based Tests", () => {
 
       await fc.assert(
         fc.asyncProperty(fc.string({ minLength: 1, maxLength: 200 }), async (key) => {
-          // NodeAdapter 동기 키 파생
-          const nodeKey = nodeAdapter.deriveKeySync(key);
-          // BrowserAdapter 비동기 키 파생
-          const browserKey = await browserAdapter.deriveKey(key);
+          // sha256 경로 동등성 (빠름). 기본 pbkdf2 동등성은 아래 별도 테스트에서 저반복으로 검증.
+          const nodeKey = nodeAdapter.deriveKeySync(key, { algorithm: "sha256" });
+          const browserKey = await browserAdapter.deriveKey(key, { algorithm: "sha256" });
 
           // 둘 다 32바이트(256비트) SHA-256 해시여야 함
           expect(nodeKey.length).toBe(32);
@@ -137,6 +136,29 @@ describe("Property-Based Tests", () => {
           expect(nodeKey).toEqual(browserKey);
         }),
         { numRuns: NUM_RUNS },
+      );
+    });
+
+    it("기본 키 파생은 pbkdf2이며 어댑터 간 동일한 32바이트 키를 생성 (저반복)", async () => {
+      const nodeAdapter = new NodeAdapter();
+      const browserAdapter = new BrowserAdapter();
+      const opts = { iterations: 10_000 } as const; // 기본 algorithm(pbkdf2) + 빠른 반복수
+
+      await fc.assert(
+        fc.asyncProperty(fc.string({ minLength: 1, maxLength: 64 }), async (key) => {
+          const nodeDefault = nodeAdapter.deriveKeySync(key, opts);
+          const nodePbkdf2 = nodeAdapter.deriveKeySync(key, { algorithm: "pbkdf2", ...opts });
+          const browserDefault = await browserAdapter.deriveKey(key, opts);
+
+          // 기본값 == 명시적 pbkdf2
+          expect(nodeDefault).toEqual(nodePbkdf2);
+          // Node ↔ Browser pbkdf2 동등성
+          expect(browserDefault).toEqual(nodeDefault);
+          expect(nodeDefault.length).toBe(32);
+          // sha256과는 달라야 함(기본이 pbkdf2임을 확인)
+          expect(nodeDefault).not.toEqual(nodeAdapter.deriveKeySync(key, { algorithm: "sha256" }));
+        }),
+        { numRuns: 10 },
       );
     });
   });
@@ -152,8 +174,8 @@ describe("Property-Based Tests", () => {
           fc.uint8Array({ minLength: 1, maxLength: 500 }),
           fc.string({ minLength: 1, maxLength: 64 }),
           async (data, keyStr) => {
-            // 동일한 키 해시 파생
-            const keyHash = nodeAdapter.deriveKeySync(keyStr);
+            // 동일한 키 해시 파생 (sha256 = 빠름; 상호운용 검증에는 알고리즘 무관)
+            const keyHash = nodeAdapter.deriveKeySync(keyStr, { algorithm: "sha256" });
 
             // NodeAdapter로 암호화
             const encrypted = nodeAdapter.encryptSync(data, keyHash);
@@ -177,7 +199,7 @@ describe("Property-Based Tests", () => {
           fc.uint8Array({ minLength: 1, maxLength: 500 }),
           fc.string({ minLength: 1, maxLength: 64 }),
           async (data, keyStr) => {
-            const keyHash = nodeAdapter.deriveKeySync(keyStr);
+            const keyHash = nodeAdapter.deriveKeySync(keyStr, { algorithm: "sha256" });
 
             // BrowserAdapter로 암호화
             const encrypted = await browserAdapter.encrypt(data, keyHash);
@@ -312,7 +334,7 @@ describe("Property-Based Tests", () => {
           fc.uint8Array({ minLength: 1, maxLength: 1000 }),
           fc.string({ minLength: 1, maxLength: 64 }),
           (data, keyStr) => {
-            const keyHash = nodeAdapter.deriveKeySync(keyStr);
+            const keyHash = nodeAdapter.deriveKeySync(keyStr, { algorithm: "sha256" });
             const encrypted = nodeAdapter.encryptSync(data, keyHash);
 
             // 최소 28바이트 (12 IV + 16 authTag + 최소 0바이트 ciphertext)
