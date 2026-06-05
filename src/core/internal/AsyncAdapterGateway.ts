@@ -10,6 +10,7 @@ import {
   Ddu64DecompressionError,
   Ddu64DecryptionError,
   Ddu64EncryptionError,
+  isDdu64Error,
   toErrorMessage,
 } from "../errors.js";
 import type { KeyDerivationOptions, PlatformAdapter } from "../types.js";
@@ -33,7 +34,7 @@ export async function encryptAsyncWithAdapter(
   aad?: Uint8Array,
 ): Promise<Uint8Array> {
   try {
-    const adapter = requireAsyncAdapter(context.adapter);
+    const adapter = requireAsyncAdapter(context.adapter, "encode");
     const keyHash = await getAsyncKeyHash(context, adapter);
     return await adapter.encrypt(data, keyHash, aad);
   } catch (err) {
@@ -47,7 +48,7 @@ export async function decryptAsyncWithAdapter(
   aad?: Uint8Array,
 ): Promise<Uint8Array> {
   try {
-    const adapter = requireAsyncAdapter(context.adapter);
+    const adapter = requireAsyncAdapter(context.adapter, "decode");
     const keyHash = await getAsyncKeyHash(context, adapter);
     return await adapter.decrypt(data, keyHash, aad);
   } catch (err) {
@@ -62,11 +63,12 @@ export async function compressAsyncWithAdapter(
   level: number,
 ): Promise<Uint8Array> {
   try {
-    const asyncAdapter = requireAsyncAdapter(adapter);
+    const asyncAdapter = requireAsyncAdapter(adapter, "encode");
     if (algorithm === "brotli") {
       if (!asyncAdapter.brotliCompress) {
-        throw new Error(
+        throw new Ddu64AdapterError(
           "[Ddu64 compress] Brotli compression is unavailable in the current runtime.",
+          "encode",
         );
       }
       return await asyncAdapter.brotliCompress(data, level);
@@ -84,11 +86,12 @@ export async function decompressAsyncWithAdapter(
   maxBytes: number,
 ): Promise<Uint8Array> {
   try {
-    const asyncAdapter = requireAsyncAdapter(adapter);
+    const asyncAdapter = requireAsyncAdapter(adapter, "decode");
     if (algorithm === "brotli") {
       if (!asyncAdapter.brotliDecompress) {
-        throw new Error(
+        throw new Ddu64AdapterError(
           "[Ddu64 decompress] Brotli decompression is unavailable in the current runtime.",
+          "decode",
         );
       }
       return await asyncAdapter.brotliDecompress(data, maxBytes);
@@ -99,12 +102,16 @@ export async function decompressAsyncWithAdapter(
   }
 }
 
-function requireAsyncAdapter(adapter: PlatformAdapter | undefined): PlatformAdapter {
+function requireAsyncAdapter(
+  adapter: PlatformAdapter | undefined,
+  operation: GatewayOperation,
+): PlatformAdapter {
   if (!adapter) {
-    throw new Error(
+    throw new Ddu64AdapterError(
       "[Ddu64 adapter] No platform adapter available. " +
         "Use @ddunigma/node or @ddunigma/node/browser, " +
         "or provide an adapter via options.adapter.",
+      operation,
     );
   }
   return adapter;
@@ -125,6 +132,8 @@ function toAsyncGatewayError(
   fallbackOperation: GatewayOperation,
   failureKind: AsyncFailureKind,
 ): Error {
+  if (isDdu64Error(error)) return error;
+
   const message = toErrorMessage(error);
   if (isAdapterCapabilityErrorMessage(message)) {
     return new Ddu64AdapterError(message, fallbackOperation, error);

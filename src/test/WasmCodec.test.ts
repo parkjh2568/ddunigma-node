@@ -144,7 +144,7 @@ describe("WasmCodec", () => {
 
   describe("constants", () => {
     it("should export correct default threshold", () => {
-      expect(DEFAULT_WASM_THRESHOLD).toBe(4096);
+      expect(DEFAULT_WASM_THRESHOLD).toBe(16 * 1024);
     });
 
     it("should export correct min threshold", () => {

@@ -159,6 +159,10 @@ const dduPbkdf2 = new Ddu64({
 PBKDF2 `iterations`는 기본값이 `210_000`이며, `10_000` 미만의 양수는 `10_000`으로 보정됩니다.
 0 이하 또는 유한하지 않은 값은 기본값으로 대체됩니다.
 
+기본 키 파생 방식인 `sha256`은 레거시 호환과 고엔트로피 키를 위한 빠른 단일 해시입니다.
+사용자가 입력한 비밀번호처럼 추측 가능한 키를 보호해야 한다면 `pbkdf2`와 애플리케이션별 고유 `salt`를 명시하세요.
+고정 기본 salt는 호환성용 fallback이므로, 서비스/테넌트/사용자 범위에 맞는 salt를 직접 관리하는 구성이 더 안전합니다.
+
 ## Checksum
 
 ```typescript
@@ -245,7 +249,7 @@ import { Ddu64, preloadWasm } from "@ddunigma/node";
 await preloadWasm(); // 동기 encode/decode hot path에서 WASM을 쓰려면 먼저 완료되어야 함
 
 const ddu = new Ddu64({
-  wasmThreshold: 4096, // 이 크기 이상일 때 WASM 사용
+  wasmThreshold: 16 * 1024, // 이 크기 이상일 때 WASM 사용
   // wasmThreshold: Infinity, // WASM hot path 비활성화
 });
 
@@ -389,7 +393,7 @@ new Ddu64(dduChar, paddingChar, options?);
 | `compressionAlgorithm` | `"deflate" \| "brotli"` | `"deflate"` | 압축 알고리즘         |
 | `compressionLevel`     | `number`                | `6`         | 압축 레벨             |
 | `encryptionKey`        | `string`                | -           | AES-256-GCM 암호화 키 |
-| `keyDerivation`        | `KeyDerivationOptions`  | `sha256`    | 키 파생 방식          |
+| `keyDerivation`        | `KeyDerivationOptions`  | `sha256`    | 키 파생 방식. 비밀번호 기반 키는 `pbkdf2`와 고유 `salt` 권장 |
 | `checksum`             | `boolean`               | `false`     | CRC32 체크섬          |
 | `urlSafe`              | `boolean`               | `false`     | URL-Safe 변환         |
 | `obfuscate`            | `boolean`               | `false`     | 한글 난독화           |
@@ -397,7 +401,7 @@ new Ddu64(dduChar, paddingChar, options?);
 | `chunkSeparator`       | `string`                | `"\n"`      | 청크 구분자           |
 | `maxDecodedBytes`      | `number`                | `67108864`  | 디코딩 크기 제한      |
 | `maxDecompressedBytes` | `number`                | `67108864`  | 압축해제 크기 제한    |
-| `wasmThreshold`        | `number`                | `4096`      | WASM 사용 임계값 (`Infinity`면 비활성화) |
+| `wasmThreshold`        | `number`                | `16384`     | WASM 사용 임계값 (`Infinity`면 비활성화) |
 | `throwOnError`         | `boolean`               | `false`     | 초기화 에러 시 throw  |
 
 ## Per-Call Options

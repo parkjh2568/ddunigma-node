@@ -5,14 +5,17 @@
 import { describe, it, expect } from "vitest";
 import { Ddu64Core } from "../core/Ddu64Core.js";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
+import { BrowserAdapter } from "../adapters/BrowserAdapter.js";
 import { DduSetSymbol } from "../core/types.js";
 import {
   Ddu64AdapterError,
   Ddu64ChecksumError,
   Ddu64CharsetError,
   Ddu64DecryptionError,
+  Ddu64EncodeError,
   Ddu64ErrorCode,
   isDdu64Error,
+  wrapDdu64Error,
 } from "../core/errors.js";
 
 // Helper: create encoder with NodeAdapter for sync operations
@@ -79,9 +82,7 @@ describe("Ddu64Core", () => {
 
       for (const truncated of ["A", "AA", "AAA"]) {
         expect(() => encoder.decodeToUint8Array(truncated)).toThrow(Ddu64CharsetError);
-        expect(() => encoder.decodeToUint8Array(truncated)).toThrow(
-          "Invalid encoded bit length",
-        );
+        expect(() => encoder.decodeToUint8Array(truncated)).toThrow("Invalid encoded bit length");
       }
     });
 
@@ -251,6 +252,33 @@ describe("Ddu64Core", () => {
   });
 
   describe("Custom errors", () => {
+    it("wraps browser sync capability failures as typed adapter errors", () => {
+      const encoder = new Ddu64Core(undefined, undefined, {
+        adapter: new BrowserAdapter(),
+        encryptionKey: "secret",
+      });
+
+      expect(() => encoder.encode("test")).toThrow(Ddu64AdapterError);
+
+      try {
+        encoder.encode("test");
+      } catch (err) {
+        expect(isDdu64Error(err)).toBe(true);
+        expect((err as Ddu64AdapterError).code).toBe(Ddu64ErrorCode.AdapterUnavailable);
+        expect(err).toBeInstanceOf(Ddu64AdapterError);
+      }
+    });
+
+    it("does not classify arbitrary sync/provider wording as an adapter error", () => {
+      const err = wrapDdu64Error(
+        new Error("[Ddu64 encode] Provider metadata sync marker failed"),
+        "encode",
+      );
+
+      expect(err).toBeInstanceOf(Ddu64EncodeError);
+      expect(err.code).toBe(Ddu64ErrorCode.EncodeFailed);
+    });
+
     it("wraps invalid decode input as a typed charset error", () => {
       const encoder = createEncoder();
 
@@ -263,6 +291,17 @@ describe("Ddu64Core", () => {
         expect((err as Ddu64CharsetError).code).toBe(Ddu64ErrorCode.InvalidCharset);
         expect(err).toBeInstanceOf(Ddu64CharsetError);
       }
+    });
+
+    it("rejects characters whose code point exceeds the lookup table length", () => {
+      // ONECHARSET is ASCII (max code 122), so its lookup table is small.
+      // A high-code-point char (e.g. Hangul) must still be rejected via the
+      // out-of-range guard rather than silently decoding. The 4-char length
+      // keeps the payload bit-length aligned so decoding reaches char lookup.
+      const encoder = createEncoder({ dduSetSymbol: DduSetSymbol.ONECHARSET });
+
+      expect(() => encoder.decodeToUint8Array("가가가가")).toThrow(Ddu64CharsetError);
+      expect(() => encoder.decodeToUint8Array("가가가가")).toThrow(/Invalid character/);
     });
 
     it("wraps async decryption failure as a typed decryption error", async () => {

@@ -57,6 +57,11 @@ export function bitPackEncode(input: Uint8Array, config: BitPackConfig): BitPack
     return { indices: [], paddingBits: 0 };
   }
 
+  if (usePowerOfTwo) {
+    if (bitLength === 6) return bitPackEncode6(input);
+    if (bitLength === 8) return bitPackEncode8(input);
+  }
+
   const totalBits = inputLen * BYTE_BITS;
   const estimatedChunks = Math.ceil(totalBits / bitLength);
   // 비-2의 제곱수의 경우, 각 청크가 2개의 인덱스를 생성
@@ -111,10 +116,56 @@ export function bitPackEncode(input: Uint8Array, config: BitPackConfig): BitPack
     }
   }
 
-  // 실제 길이로 자르기
-  indices.length = idx;
+  if (idx !== estimatedIndices) {
+    indices.length = idx;
+  }
 
   return { indices, paddingBits };
+}
+
+function bitPackEncode6(input: Uint8Array): BitPackEncodeResult {
+  const inputLen = input.length;
+  const fullGroups = (inputLen / 3) | 0;
+  const remaining = inputLen - fullGroups * 3;
+  const indices = new Array<number>(fullGroups * 4 + (remaining === 0 ? 0 : remaining + 1));
+
+  let idx = 0;
+  let i = 0;
+  for (; i + 2 < inputLen; i += 3) {
+    const b0 = input[i];
+    const b1 = input[i + 1];
+    const b2 = input[i + 2];
+
+    indices[idx++] = b0 >>> 2;
+    indices[idx++] = ((b0 & 0x03) << 4) | (b1 >>> 4);
+    indices[idx++] = ((b1 & 0x0f) << 2) | (b2 >>> 6);
+    indices[idx++] = b2 & 0x3f;
+  }
+
+  let paddingBits = 0;
+  if (remaining === 1) {
+    const b0 = input[i];
+    indices[idx++] = b0 >>> 2;
+    indices[idx] = (b0 & 0x03) << 4;
+    paddingBits = 4;
+  } else if (remaining === 2) {
+    const b0 = input[i];
+    const b1 = input[i + 1];
+    indices[idx++] = b0 >>> 2;
+    indices[idx++] = ((b0 & 0x03) << 4) | (b1 >>> 4);
+    indices[idx] = (b1 & 0x0f) << 2;
+    paddingBits = 2;
+  }
+
+  return { indices, paddingBits };
+}
+
+function bitPackEncode8(input: Uint8Array): BitPackEncodeResult {
+  const indices = new Array<number>(input.length);
+  for (let i = 0; i < input.length; i++) {
+    indices[i] = input[i];
+  }
+  return { indices, paddingBits: 0 };
 }
 
 // ─── Decode ──────────────────────────────────────────────────────────────────

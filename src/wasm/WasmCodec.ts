@@ -12,8 +12,8 @@ import type { WasmCodec } from "../core/types.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** WASM을 사용하는 기본 임계값 (바이트 단위, 4096바이트) */
-export const DEFAULT_WASM_THRESHOLD = 4096;
+/** WASM을 사용하는 기본 임계값 (바이트 단위, 16384바이트) */
+export const DEFAULT_WASM_THRESHOLD = 16 * 1024;
 
 /** 설정 가능한 최소 WASM 임계값 */
 export const MIN_WASM_THRESHOLD = 1024;

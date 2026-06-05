@@ -7,6 +7,8 @@
  * @module core/errors
  */
 
+import { isAdapterCapabilityErrorMessage } from "./internal/AdapterCapability.js";
+
 export type Ddu64Operation =
   | "construct"
   | "encode"
@@ -152,7 +154,7 @@ export function wrapDdu64Error(
   if (isInternalError) {
     if (lower.includes("checksum")) return new Ddu64ChecksumError(message, error);
     if (lower.includes("obfuscation")) return new Ddu64ObfuscationError(message, error);
-    if (lower.includes("adapter") || lower.includes("sync") || lower.includes("provider")) {
+    if (isAdapterCapabilityErrorMessage(message)) {
       return new Ddu64AdapterError(message, fallbackOperation, error);
     }
     if (lower.includes("encryptionkey") || lower.includes("encrypted payload requires")) {

@@ -10,6 +10,7 @@ import { getWasmCodecSync } from "../../wasm/WasmCodec.js";
 import { decodeNativeBase64, encodeNativeBase64 } from "./NativeBase64FastPath.js";
 import { indicesToString } from "./IndexStringMapper.js";
 import { buildEncodeFooter } from "./EncodeFinalize.js";
+import { lookupCharIndex } from "./CharsetLookup.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
 
@@ -75,7 +76,7 @@ export function decodePayload(
     ? decodeNativeBase64(
         cleanedInput,
         paddingBits,
-        (codeUnit) => context.dduCharCodeLookup[codeUnit] >= 0,
+        (codeUnit) => lookupCharIndex(context.dduCharCodeLookup, codeUnit) >= 0,
       )
     : null;
   if (nativeDecoded) return nativeDecoded;
@@ -84,8 +85,11 @@ export function decodePayload(
   const shouldUseTypedIndices = inputLen >= context.wasmThreshold;
   const indices = shouldUseTypedIndices ? new Uint16Array(inputLen) : new Array<number>(inputLen);
 
+  const lookup = context.dduCharCodeLookup;
+  const lookupLen = lookup.length;
   for (let i = 0; i < inputLen; i++) {
-    const val = context.dduCharCodeLookup[cleanedInput.charCodeAt(i)];
+    const code = cleanedInput.charCodeAt(i);
+    const val = code < lookupLen ? lookup[code] : -1;
     if (val < 0) {
       throw new Error(`[Ddu64 decode] Invalid character "${cleanedInput[i]}" at ${i}`);
     }

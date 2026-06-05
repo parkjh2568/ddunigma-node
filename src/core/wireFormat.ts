@@ -65,6 +65,18 @@ export type PipelineVersion = 2 | 3 | 4;
 
 const aadEncoder = /* @__PURE__ */ new TextEncoder();
 
+function endsWithAt(input: string, marker: string, end: number): boolean {
+  const start = end - marker.length;
+  if (start < 0) return false;
+
+  for (let i = 0; i < marker.length; i++) {
+    if (input.charCodeAt(start + i) !== marker.charCodeAt(i)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // ─── 푸터 파싱 ────────────────────────────────────────────────────────────────
 
 /** 와이어 포맷 푸터 파싱 결과 */
@@ -111,7 +123,7 @@ export function parseFooter(
     pipelineVersion: 2,
   };
 
-  if (inputLen < padLen) return noFooter;
+  if (padLen === 0 || inputLen < padLen) return noFooter;
 
   const maxPaddingBits = Math.max(0, effectiveBitLength - 1);
   const maxDigits = maxPaddingBits.toString().length;
@@ -131,15 +143,13 @@ export function parseFooter(
     }
     if (!allDigits) continue;
 
-    const digitStr = input.substring(digitsStart);
-    const paddingBits = parseInt(digitStr, 10);
-    if (
-      Number.isNaN(paddingBits) ||
-      paddingBits < 0 ||
-      paddingBits >= effectiveBitLength ||
-      digitStr !== paddingBits.toString()
-    )
-      continue;
+    if (digitCount > 1 && input.charCodeAt(digitsStart) === 48) continue;
+
+    let paddingBits = 0;
+    for (let i = digitsStart; i < inputLen; i++) {
+      paddingBits = paddingBits * 10 + (input.charCodeAt(i) - 48);
+    }
+    if (paddingBits >= effectiveBitLength) continue;
 
     // 숫자 앞의 마커를 역순으로 확인
     let pos = digitsStart;
@@ -149,35 +159,32 @@ export function parseFooter(
 
     if (
       pos >= PIPELINE_V4_MARKER.length &&
-      input.substring(pos - PIPELINE_V4_MARKER.length, pos) === PIPELINE_V4_MARKER
+      endsWithAt(input, PIPELINE_V4_MARKER, pos)
     ) {
       pipelineVersion = 4;
       pos -= PIPELINE_V4_MARKER.length;
     } else if (
       pos >= PIPELINE_V3_MARKER.length &&
-      input.substring(pos - PIPELINE_V3_MARKER.length, pos) === PIPELINE_V3_MARKER
+      endsWithAt(input, PIPELINE_V3_MARKER, pos)
     ) {
       pipelineVersion = 3;
       pos -= PIPELINE_V3_MARKER.length;
     }
 
-    if (
-      pos >= ENCRYPT_MARKER.length &&
-      input.substring(pos - ENCRYPT_MARKER.length, pos) === ENCRYPT_MARKER
-    ) {
+    if (pos >= ENCRYPT_MARKER.length && endsWithAt(input, ENCRYPT_MARKER, pos)) {
       isEncrypted = true;
       pos -= ENCRYPT_MARKER.length;
     }
 
     if (
       pos >= COMPRESS_MARKER.length &&
-      input.substring(pos - COMPRESS_MARKER.length, pos) === COMPRESS_MARKER
+      endsWithAt(input, COMPRESS_MARKER, pos)
     ) {
       compressionAlgorithm = "deflate";
       pos -= COMPRESS_MARKER.length;
     } else if (
       pos >= BROTLI_MARKER.length &&
-      input.substring(pos - BROTLI_MARKER.length, pos) === BROTLI_MARKER
+      endsWithAt(input, BROTLI_MARKER, pos)
     ) {
       compressionAlgorithm = "brotli";
       pos -= BROTLI_MARKER.length;
@@ -185,7 +192,7 @@ export function parseFooter(
 
     // 마커 앞의 패딩 문자 확인
     const padStart = pos - padLen;
-    if (padStart >= 0 && input.substring(padStart, pos) === paddingChar) {
+    if (padStart >= 0 && endsWithAt(input, paddingChar, pos)) {
       return {
         cleanedInput: input.substring(0, padStart),
         paddingBits,
@@ -197,11 +204,11 @@ export function parseFooter(
   }
 
   // 단계 2: V2 반복 패딩 시도 (후행 padChar, 각각 bitsPerPadChar 비트를 나타냄)
-  if (input.endsWith(paddingChar)) {
+  if (endsWithAt(input, paddingChar, inputLen)) {
     let trailingPadCount = 0;
     let pos = inputLen;
     while (pos >= padLen) {
-      if (input.substring(pos - padLen, pos) === paddingChar) {
+      if (endsWithAt(input, paddingChar, pos)) {
         trailingPadCount++;
         pos -= padLen;
       } else {

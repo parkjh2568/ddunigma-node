@@ -13,6 +13,9 @@
   "scripts": {
     "build": "tsup",
     "bench": "node --expose-gc --import tsx benchmarks/encoding-benchmark.ts",
+    "bench:micro": "node --expose-gc --import tsx benchmarks/micro-benchmark.ts",
+    "bench:threshold": "node --expose-gc --import tsx benchmarks/wasm-threshold-benchmark.ts",
+    "bench:guard": "node --expose-gc --import tsx benchmarks/perf-guard.ts",
     "pack:check": "node scripts/verify-pack.mjs",
     "prepublishOnly": "pnpm test && pnpm build && pnpm pack:check",
     "test": "vitest run",

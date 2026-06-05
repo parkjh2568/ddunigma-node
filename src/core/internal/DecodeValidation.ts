@@ -8,6 +8,8 @@
  * @module core/internal/DecodeValidation
  */
 
+import { lookupCharIndex } from "./CharsetLookup.js";
+
 const BYTE_BITS = 8;
 
 export function normalizeLimit(
@@ -93,7 +95,7 @@ export function assertCanonicalPadding(
 
   if (usePowerOfTwo) {
     const lastChar = cleanedInput[cleanedInput.length - 1];
-    const value = dduCharCodeLookup[lastChar.charCodeAt(0)];
+    const value = lookupCharIndex(dduCharCodeLookup, lastChar.charCodeAt(0));
     if (value < 0) {
       throw new Error(
         `[Ddu64 decode] Invalid character "${lastChar}" at ${cleanedInput.length - 1}`,
@@ -103,8 +105,8 @@ export function assertCanonicalPadding(
   } else {
     const first = cleanedInput[cleanedInput.length - 2];
     const second = cleanedInput[cleanedInput.length - 1];
-    const firstValue = dduCharCodeLookup[first.charCodeAt(0)];
-    const secondValue = dduCharCodeLookup[second.charCodeAt(0)];
+    const firstValue = lookupCharIndex(dduCharCodeLookup, first.charCodeAt(0));
+    const secondValue = lookupCharIndex(dduCharCodeLookup, second.charCodeAt(0));
     if (firstValue < 0 || secondValue < 0) {
       throw new Error("[Ddu64 decode] Invalid character in final encoded chunk");
     }

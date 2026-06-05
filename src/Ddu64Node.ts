@@ -40,9 +40,11 @@ export class Ddu64Node extends Ddu64Core {
     // 명시적으로 제공된 어댑터가 없으면 NodeAdapter를 자동 주입
     const options: DduConstructorOptions = {
       ...resolved.dduOptions,
+      ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
+      ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
       adapter: resolved.dduOptions?.adapter ?? new NodeAdapter(),
     };
-    super(resolved.dduChar, resolved.paddingChar, options);
+    super(options);
   }
 
   /**

@@ -13,6 +13,11 @@ export enum DduSetSymbol {
   ONECHARSET = "oneCharSet",
 }
 
+/**
+ * @deprecated ddunigma runtime string encode/decode paths are UTF-8 based.
+ * This union remains for legacy type compatibility and `CharSetInfo.encoding`
+ * metadata only; non-UTF-8 values do not change runtime text conversion.
+ */
 export type DduTextEncoding =
   | "utf-8"
   | "utf8"
@@ -222,7 +227,7 @@ export interface DduConstructorOptions extends DduOptions {
   /** 명시적 플랫폼 어댑터 (자동 감지 대신 사용) */
   adapter?: PlatformAdapter;
 
-  /** WASM 임계값 (바이트 단위, 기본값: 4096, 범위: 1024-1048576, Infinity면 비활성화) */
+  /** WASM 임계값 (바이트 단위, 기본값: 16384, 범위: 1024-1048576, Infinity면 비활성화) */
   wasmThreshold?: number;
 }
 
@@ -341,6 +346,10 @@ export interface ObfuscationLayer {
 /**
  * 크로스 플랫폼 인코딩 호환성 및 와이어 포맷 적합성을 검증하기 위한
  * 표준화된 테스트 벡터 형식.
+ *
+ * @deprecated Exported for legacy test-vector consumers. This is not part of
+ * the runtime encoding API and may move to a test utility entry point in a
+ * future major release.
  */
 export interface TestVector {
   /** 이 테스트 벡터의 고유 식별자 */

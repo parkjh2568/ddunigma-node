@@ -22,8 +22,10 @@ export class Ddu64Browser extends Ddu64Core {
 
     const options: DduConstructorOptions = {
       ...resolved.dduOptions,
+      ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
+      ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
       adapter: resolved.dduOptions?.adapter ?? new BrowserAdapter(),
     };
-    super(resolved.dduChar, resolved.paddingChar, options);
+    super(options);
   }
 }

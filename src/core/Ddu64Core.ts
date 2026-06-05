@@ -6,11 +6,7 @@
  */
 
 import { calculateBitLength, isPowerOfTwo, type BitPackConfig } from "./BitPack.js";
-import {
-  normalizeCompressionLevel,
-  stringToBytes,
-  bytesToString,
-} from "./codecUtils.js";
+import { normalizeCompressionLevel, stringToBytes, bytesToString } from "./codecUtils.js";
 import {
   resolveInitialCharSet,
   normalizeCharSet,
@@ -28,22 +24,18 @@ import type {
   KeyDerivationOptions,
 } from "./types.js";
 import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
-import {
-  validateWasmThreshold,
-  DEFAULT_WASM_THRESHOLD,
-} from "../wasm/WasmCodec.js";
+import { validateWasmThreshold, DEFAULT_WASM_THRESHOLD } from "../wasm/WasmCodec.js";
 import {
   Ddu64CompressionError,
   Ddu64DecompressionError,
   Ddu64DecryptionError,
   Ddu64EncryptionError,
   Ddu64ObfuscationError,
+  isDdu64Error,
   toErrorMessage,
   wrapDdu64Error,
 } from "./errors.js";
-import {
-  canUseNativeBase64FastPath,
-} from "./internal/NativeBase64FastPath.js";
+import { canUseNativeBase64FastPath } from "./internal/NativeBase64FastPath.js";
 import {
   compressSyncWithAdapter,
   decompressSyncWithAdapter,
@@ -61,21 +53,11 @@ import { buildCharsetLookupTables } from "./internal/CharsetLookup.js";
 import { normalizeLimit } from "./internal/DecodeValidation.js";
 import { runDecodePrelude, type DecodePreludeResult } from "./internal/DecodePrelude.js";
 import { applyPostEncoding as applyEncodePostProcessing } from "./internal/EncodeFinalize.js";
-import {
-  decodePayload,
-  encodePayload,
-  type PayloadCodecContext,
-} from "./internal/PayloadCodec.js";
+import { decodePayload, encodePayload, type PayloadCodecContext } from "./internal/PayloadCodec.js";
 import { buildObfuscationAlphabet } from "./internal/ObfuscationAlphabet.js";
 import { isAdapterCapabilityErrorMessage } from "./internal/AdapterCapability.js";
-import {
-  runAsyncDecodePipeline,
-  runSyncDecodePipeline,
-} from "./pipeline/DecodePipeline.js";
-import {
-  runAsyncEncodePipeline,
-  runSyncEncodePipeline,
-} from "./pipeline/EncodePipeline.js";
+import { runAsyncDecodePipeline, runSyncDecodePipeline } from "./pipeline/DecodePipeline.js";
+import { runAsyncEncodePipeline, runSyncEncodePipeline } from "./pipeline/EncodePipeline.js";
 import { buildEncryptionAAD } from "./wireFormat.js";
 
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
@@ -250,12 +232,11 @@ export class Ddu64Core {
       ? isUrlSafeCompatible(this.dduChar, this.paddingChar, shouldThrow)
       : false;
 
-    // 암호화 키 (원시 저장, 해시는 지연 또는 동기 파생)
+    // 암호화 키 (원시 저장, 해시는 첫 암/복호화 시점에 지연 파생 후 캐시)
+    // 생성 시점에 즉시 파생하면 암호화를 쓰지 않는 인스턴스나 고비용 PBKDF2 파생에서
+    // 불필요한 작업이 발생하므로, SyncAdapterGateway/AsyncAdapterGateway의 지연 파생에 맡깁니다.
     this.encryptionKey = dduOptions?.encryptionKey;
     this.keyDerivation = dduOptions?.keyDerivation;
-    if (this.encryptionKey && this.adapter?.deriveKeySync) {
-      this.encryptionKeyHash = this.adapter.deriveKeySync(this.encryptionKey, this.keyDerivation);
-    }
 
     // 옵션
     this.defaultChecksum = dduOptions?.checksum ?? false;
@@ -364,8 +345,7 @@ export class Ddu64Core {
       defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
       reportProgress: (info) => this.reportProgress(options, info),
       decrypt: (data, aad) => this.decryptSync(data, aad),
-      decompress: (data, algorithm, maxBytes) =>
-        this.decompressSync(data, algorithm, maxBytes),
+      decompress: (data, algorithm, maxBytes) => this.decompressSync(data, algorithm, maxBytes),
     });
   }
 
@@ -382,7 +362,10 @@ export class Ddu64Core {
     }
   }
 
-  private async encodeAsyncInternal(input: Uint8Array | string, options?: DduOptions): Promise<string> {
+  private async encodeAsyncInternal(
+    input: Uint8Array | string,
+    options?: DduOptions,
+  ): Promise<string> {
     return runAsyncEncodePipeline(input, options, {
       defaultCompress: this.defaultCompress,
       defaultChecksum: this.defaultChecksum,
@@ -637,10 +620,7 @@ export class Ddu64Core {
    * 청크 제거 → URL-safe 역변환 → 체크섬 추출 → 역난독화 → 푸터 파싱 →
    * 검증(정렬/패딩/크기) → 비트팩 해제까지 수행합니다.
    */
-  private decodePrelude(
-    input: string,
-    options: DduOptions | undefined,
-  ): DecodePreludeResult {
+  private decodePrelude(input: string, options: DduOptions | undefined): DecodePreludeResult {
     return runDecodePrelude(input, options, {
       defaultChecksum: this.defaultChecksum,
       defaultChunkSeparator: this.defaultChunkSeparator,
@@ -690,6 +670,7 @@ export class Ddu64Core {
     try {
       return encryptSyncWithAdapter(this.getSyncGatewayContext(), data, aad);
     } catch (err) {
+      if (isDdu64Error(err)) throw err;
       const message = toErrorMessage(err);
       if (isAdapterCapabilityErrorMessage(message)) {
         throw wrapDdu64Error(err, "encode");
@@ -702,6 +683,7 @@ export class Ddu64Core {
     try {
       return decryptSyncWithAdapter(this.getSyncGatewayContext(), data, aad);
     } catch (err) {
+      if (isDdu64Error(err)) throw err;
       const message = toErrorMessage(err);
       if (isAdapterCapabilityErrorMessage(message)) {
         throw wrapDdu64Error(err, "decode");
@@ -718,6 +700,7 @@ export class Ddu64Core {
     try {
       return compressSyncWithAdapter(this.adapter, data, algorithm, level);
     } catch (err) {
+      if (isDdu64Error(err)) throw err;
       const message = toErrorMessage(err);
       if (isAdapterCapabilityErrorMessage(message)) {
         throw wrapDdu64Error(err, "encode");
@@ -734,6 +717,7 @@ export class Ddu64Core {
     try {
       return decompressSyncWithAdapter(this.adapter, data, algorithm, maxBytes);
     } catch (err) {
+      if (isDdu64Error(err)) throw err;
       const message = toErrorMessage(err);
       if (isAdapterCapabilityErrorMessage(message)) {
         throw wrapDdu64Error(err, "decode");

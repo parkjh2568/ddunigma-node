@@ -1,0 +1,108 @@
+import { performance } from "node:perf_hooks";
+import { bitPackEncode } from "../src/core/BitPack.js";
+import { indicesToString } from "../src/core/internal/IndexStringMapper.js";
+
+type GuardCase = {
+  name: string;
+  iterations: number;
+  bytes: number;
+  minMbps: number;
+  fn: () => unknown;
+};
+
+let sink = 0;
+
+function consume(value: unknown): void {
+  if (typeof value === "string") {
+    sink ^= value.length;
+    return;
+  }
+  if (value && typeof value === "object") {
+    const maybeResult = value as { indices?: ArrayLike<number>; paddingBits?: number };
+    sink ^= maybeResult.indices?.length ?? 0;
+    sink ^= maybeResult.paddingBits ?? 0;
+  }
+}
+
+function makeBytes(length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  for (let i = 0; i < length; i++) {
+    bytes[i] = (i * 31 + 17) & 0xff;
+  }
+  return bytes;
+}
+
+function makeIndices(length: number): Uint16Array {
+  const indices = new Uint16Array(length);
+  for (let i = 0; i < length; i++) {
+    indices[i] = i & 63;
+  }
+  return indices;
+}
+
+function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boolean } {
+  const gc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
+  gc?.();
+  consume(testCase.fn());
+
+  const started = performance.now();
+  for (let i = 0; i < testCase.iterations; i++) {
+    consume(testCase.fn());
+  }
+  const elapsedMs = performance.now() - started;
+  const totalMb = (testCase.bytes * testCase.iterations) / (1024 * 1024);
+  const mbps = totalMb / (elapsedMs / 1000);
+  return { name: testCase.name, mbps, passed: mbps >= testCase.minMbps };
+}
+
+function main(): void {
+  const bytes16k = makeBytes(16 * 1024);
+  const bytes256k = makeBytes(256 * 1024);
+  const indices16k = makeIndices(16 * 1024);
+  const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const charCodes = new Uint16Array([...base64Chars].map((char) => char.charCodeAt(0)));
+
+  const cases: GuardCase[] = [
+    {
+      name: "bitPackEncode 6bit 16KB",
+      iterations: 2_000,
+      bytes: bytes16k.byteLength,
+      minMbps: 170,
+      fn: () => bitPackEncode(bytes16k, { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 }),
+    },
+    {
+      name: "bitPackEncode 6bit 256KB",
+      iterations: 100,
+      bytes: bytes256k.byteLength,
+      minMbps: 280,
+      fn: () => bitPackEncode(bytes256k, { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 }),
+    },
+    {
+      name: "indicesToString 16KB",
+      iterations: 2_000,
+      bytes: indices16k.byteLength,
+      minMbps: 320,
+      fn: () => indicesToString(indices16k, charCodes),
+    },
+  ];
+
+  const results = cases.map(runCase);
+  console.log("case                         MB/s    min    status");
+  console.log("----------------------------------------------------");
+  for (const result of results) {
+    const testCase = cases.find((item) => item.name === result.name)!;
+    console.log(
+      `${result.name.padEnd(26)} ${result.mbps.toFixed(1).padStart(7)} ` +
+        `${testCase.minMbps.toFixed(1).padStart(6)} ` +
+        `${result.passed ? "ok" : "fail"}`,
+    );
+  }
+  console.log(`sink=${sink}`);
+
+  const failed = results.filter((result) => !result.passed);
+  if (failed.length > 0) {
+    throw new Error(`Performance guard failed: ${failed.map((result) => result.name).join(", ")}`);
+  }
+}
+
+main();

@@ -8,9 +8,18 @@
  */
 
 const STRING_CHUNK_SIZE = 8192;
+const PLAIN_ARRAY_STRING_SIZE = 4096;
 
 export function indicesToString(indices: ArrayLike<number>, charCodes: Uint16Array): string {
   const len = indices.length;
+
+  if (len <= PLAIN_ARRAY_STRING_SIZE) {
+    const codes = new Array<number>(len);
+    for (let i = 0; i < len; i++) {
+      codes[i] = charCodes[indices[i]];
+    }
+    return String.fromCharCode.apply(null, codes);
+  }
 
   if (len <= STRING_CHUNK_SIZE) {
     // 작은 입력: 단일 Uint16Array + 단일 fromCharCode 호출
