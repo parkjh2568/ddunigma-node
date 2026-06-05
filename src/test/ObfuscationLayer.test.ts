@@ -17,7 +17,6 @@ import {
   HANGUL_SYLLABLE_END,
   HANGUL_SYLLABLE_COUNT,
   buildSyllableMap,
-  isHangulSyllable,
 } from "../obfuscation/syllableMap.js";
 
 // ─── Test Data ───────────────────────────────────────────────────────────────
@@ -128,13 +127,14 @@ describe("ObfuscationLayer", () => {
       expect(HANGUL_SYLLABLE_COUNT).toBe(11172);
     });
 
-    it("isHangulSyllable should correctly identify syllables", () => {
-      expect(isHangulSyllable(0xac00)).toBe(true); // 가
-      expect(isHangulSyllable(0xd7a3)).toBe(true); // 힣
-      expect(isHangulSyllable(0xac00 + 5000)).toBe(true);
-      expect(isHangulSyllable(0xabff)).toBe(false); // before range
-      expect(isHangulSyllable(0xd7a4)).toBe(false); // after range
-      expect(isHangulSyllable(0x0041)).toBe(false); // 'A'
+    it("Hangul syllable range constants cover U+AC00–U+D7A3", () => {
+      const inRange = (cp: number) => cp >= HANGUL_SYLLABLE_START && cp <= HANGUL_SYLLABLE_END;
+      expect(inRange(0xac00)).toBe(true); // 가
+      expect(inRange(0xd7a3)).toBe(true); // 힣
+      expect(inRange(0xac00 + 5000)).toBe(true);
+      expect(inRange(0xabff)).toBe(false); // before range
+      expect(inRange(0xd7a4)).toBe(false); // after range
+      expect(inRange(0x0041)).toBe(false); // 'A'
     });
   });
 

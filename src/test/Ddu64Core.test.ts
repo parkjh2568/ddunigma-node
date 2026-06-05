@@ -446,6 +446,10 @@ describe("Ddu64Core", () => {
       expect(info.defaultCompress).toBe(false);
       expect(info.urlSafe).toBe(false);
       expect(info.hasEncryptionKey).toBe(false);
+      // 5.0 신규 introspection 필드
+      expect(info.defaultChecksumScope).toBe("output");
+      expect(info.defaultObfuscate).toBe(false);
+      expect(info.wasmThreshold).toBe(16384);
     });
 
     it("returns correct info for ONECHARSET", () => {

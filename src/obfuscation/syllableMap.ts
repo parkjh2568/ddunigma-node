@@ -117,13 +117,3 @@ export function syllableToCharIndex(codePoint: number, config: SyllableMapConfig
 
   return charIndex;
 }
-
-/**
- * 코드 포인트가 유효한 한글 음절 블록인지 확인합니다.
- *
- * @param codePoint - 확인할 유니코드 코드 포인트
- * @returns 코드 포인트가 U+AC00–U+D7A3 범위에 있으면 true
- */
-export function isHangulSyllable(codePoint: number): boolean {
-  return codePoint >= HANGUL_SYLLABLE_START && codePoint <= HANGUL_SYLLABLE_END;
-}

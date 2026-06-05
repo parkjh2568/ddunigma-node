@@ -89,6 +89,12 @@ export interface CharSetInfo {
   hasEncryptionKey: boolean;
   /** 기본 체크섬 사용 여부 */
   defaultChecksum: boolean;
+  /** 기본 체크섬 계산 범위 (5.0: "output") */
+  defaultChecksumScope: "plaintext" | "output";
+  /** 기본 난독화 사용 여부 */
+  defaultObfuscate: boolean;
+  /** WASM 사용 임계값 (바이트) */
+  wasmThreshold: number;
   /** 기본 청크 크기 */
   defaultChunkSize: number | undefined;
   /** 기본 청크 구분자 */
