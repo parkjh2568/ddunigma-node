@@ -57,8 +57,16 @@ import { applyPostEncoding as applyEncodePostProcessing } from "./internal/Encod
 import { decodePayload, encodePayload, type PayloadCodecContext } from "./internal/PayloadCodec.js";
 import { buildObfuscationAlphabet } from "./internal/ObfuscationAlphabet.js";
 import { isAdapterCapabilityErrorMessage } from "./internal/AdapterCapability.js";
-import { runAsyncDecodePipeline, runSyncDecodePipeline } from "./pipeline/DecodePipeline.js";
-import { runAsyncEncodePipeline, runSyncEncodePipeline } from "./pipeline/EncodePipeline.js";
+import {
+  runAsyncDecodePipeline,
+  runSyncDecodePipeline,
+  type DecodePipelineContext,
+} from "./pipeline/DecodePipeline.js";
+import {
+  runAsyncEncodePipeline,
+  runSyncEncodePipeline,
+  type EncodePipelineBaseContext,
+} from "./pipeline/EncodePipeline.js";
 import { buildEncryptionAAD } from "./wireFormat.js";
 
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
@@ -158,6 +166,19 @@ export class Ddu64Core {
 
   // ─── 생성자 ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Ddu64 인코더/디코더를 생성합니다.
+   *
+   * 권장: 옵션 객체 단일 인자 형태 — `new Ddu64({ dduSetSymbol, compress, ... })`.
+   *
+   * 위치 인자 형태 `new Ddu64(dduChar, paddingChar, options)`는 커스텀 charset
+   * 지정용으로 계속 지원되지만, 가독성을 위해 옵션 객체 형태를 우선 권장합니다.
+   * (`new Ddu64(charset, padding, options)` 또는 `new Ddu64({ dduChar, paddingChar, ...options })`)
+   *
+   * @param dduChar - 커스텀 charset(문자열/배열) 또는 옵션 객체
+   * @param paddingChar - 패딩 문자 (커스텀 charset 사용 시 필수)
+   * @param dduOptions - 추가 옵션
+   */
   constructor(
     dduChar?: string[] | string | DduConstructorOptions,
     paddingChar?: string,
@@ -342,9 +363,7 @@ export class Ddu64Core {
   private decodeToUint8ArrayInternal(input: string, options?: DduOptions): Uint8Array {
     const prep = this.decodePrelude(input, options);
     return runSyncDecodePipeline(prep, options, {
-      encryptionKey: this.encryptionKey,
-      defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
-      reportProgress: (info) => this.reportProgress(options, info),
+      ...this.buildDecodeBaseContext(options),
       decrypt: (data, aad) => this.decryptSync(data, aad),
       decompress: (data, algorithm, maxBytes) => this.decompressSync(data, algorithm, maxBytes),
     });
@@ -368,38 +387,10 @@ export class Ddu64Core {
     options?: DduOptions,
   ): Promise<string> {
     return runAsyncEncodePipeline(input, options, {
-      defaultCompress: this.defaultCompress,
-      defaultChecksum: this.defaultChecksum,
-      defaultChunkSize: this.defaultChunkSize,
-      defaultChunkSeparator: this.defaultChunkSeparator,
-      defaultCompressionLevel: this.defaultCompressionLevel,
-      defaultCompressionAlgorithm: this.defaultCompressionAlgorithm,
-      hasEncryptionKey: !!this.encryptionKey,
-      reportProgress: (info) => this.reportProgress(options, info),
-      getEncryptionAAD: (compressionAlgorithm) =>
-        buildEncryptionAAD({ compressionAlgorithm, pipelineVersion: 4 }),
+      ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) =>
         compressAsyncWithAdapter(this.adapter, data, algorithm, level),
       encrypt: (data, aad) => encryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
-      finalize: (
-        workingData,
-        compressionAlgorithm,
-        isEncrypted,
-        checksum,
-        shouldChecksum,
-        chunkSize,
-        chunkSeparator,
-      ) =>
-        this.finalizeEncode(
-          workingData,
-          compressionAlgorithm,
-          isEncrypted,
-          checksum,
-          shouldChecksum,
-          chunkSize,
-          chunkSeparator,
-          options,
-        ),
     });
   }
 
@@ -436,13 +427,23 @@ export class Ddu64Core {
   ): Promise<Uint8Array> {
     const prep = this.decodePrelude(input, options);
     return runAsyncDecodePipeline(prep, options, {
-      encryptionKey: this.encryptionKey,
-      defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
-      reportProgress: (info) => this.reportProgress(options, info),
+      ...this.buildDecodeBaseContext(options),
       decrypt: (data, aad) => decryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
       decompress: (data, algorithm, maxBytes) =>
         decompressAsyncWithAdapter(this.adapter, data, algorithm, maxBytes),
     });
+  }
+
+  /**
+   * 동기/비동기 디코딩 파이프라인이 공유하는 기본 컨텍스트를 구성합니다.
+   * decrypt/decompress만 동기/비동기 구현에서 각각 덧붙입니다.
+   */
+  private buildDecodeBaseContext(options?: DduOptions): DecodePipelineContext {
+    return {
+      encryptionKey: this.encryptionKey,
+      defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
+      reportProgress: (info) => this.reportProgress(options, info),
+    };
   }
 
   /**
@@ -509,6 +510,18 @@ export class Ddu64Core {
     options?: DduOptions,
   ): { encoded: string; compressedSize?: number } {
     return runSyncEncodePipeline(input, options, {
+      ...this.buildEncodeBaseContext(options),
+      compress: (data, algorithm, level) => this.compressSync(data, algorithm, level),
+      encrypt: (data, aad) => this.encryptSync(data, aad),
+    });
+  }
+
+  /**
+   * 동기/비동기 인코딩 파이프라인이 공유하는 기본 컨텍스트를 구성합니다.
+   * compress/encrypt만 동기/비동기 구현에서 각각 덧붙입니다.
+   */
+  private buildEncodeBaseContext(options?: DduOptions): EncodePipelineBaseContext {
+    return {
       defaultCompress: this.defaultCompress,
       defaultChecksum: this.defaultChecksum,
       defaultChunkSize: this.defaultChunkSize,
@@ -519,8 +532,6 @@ export class Ddu64Core {
       reportProgress: (info) => this.reportProgress(options, info),
       getEncryptionAAD: (compressionAlgorithm) =>
         buildEncryptionAAD({ compressionAlgorithm, pipelineVersion: 4 }),
-      compress: (data, algorithm, level) => this.compressSync(data, algorithm, level),
-      encrypt: (data, aad) => this.encryptSync(data, aad),
       finalize: (
         workingData,
         compressionAlgorithm,
@@ -540,7 +551,7 @@ export class Ddu64Core {
           chunkSeparator,
           options,
         ),
-    });
+    };
   }
 
   /**

@@ -56,35 +56,20 @@ export async function runAsyncDecodePipeline(
   let decoded = prep.decoded;
 
   if (shouldRunPreDecompressDecrypt(prep, context)) {
-    context.reportProgress({
-      processedBytes: decoded.length,
-      totalBytes: decoded.length,
-      percent: 55,
-      stage: "decrypt",
-    });
+    reportStage(context, decoded.length, 55, "decrypt");
     decoded = await context.decrypt(decoded, prep.encryptionAAD);
   }
 
   if (shouldDecompress(prep)) {
     const maxDecompressedBytes = getMaxDecompressedBytes(options, context);
-    context.reportProgress({
-      processedBytes: decoded.length,
-      totalBytes: decoded.length,
-      percent: 70,
-      stage: "decompress",
-    });
+    reportStage(context, decoded.length, 70, "decompress");
     decoded = await context.decompress(decoded, prep.compressionAlgorithm!, maxDecompressedBytes);
   }
 
   verifyDecodedChecksum(prep, context, options, decoded);
 
   if (shouldRunPostChecksumDecrypt(prep, context)) {
-    context.reportProgress({
-      processedBytes: decoded.length,
-      totalBytes: decoded.length,
-      percent: 90,
-      stage: "decrypt",
-    });
+    reportStage(context, decoded.length, 90, "decrypt");
     decoded = await context.decrypt(decoded, prep.encryptionAAD);
   }
 
@@ -98,12 +83,7 @@ function runPreDecompressDecrypt(
   decoded: Uint8Array,
 ): Uint8Array {
   if (!shouldRunPreDecompressDecrypt(prep, context)) return decoded;
-  context.reportProgress({
-    processedBytes: decoded.length,
-    totalBytes: decoded.length,
-    percent: 55,
-    stage: "decrypt",
-  });
+  reportStage(context, decoded.length, 55, "decrypt");
   return context.decrypt(decoded, prep.encryptionAAD);
 }
 
@@ -115,12 +95,7 @@ function runDecompress(
 ): Uint8Array {
   if (!shouldDecompress(prep)) return decoded;
   const maxDecompressedBytes = getMaxDecompressedBytes(options, context);
-  context.reportProgress({
-    processedBytes: decoded.length,
-    totalBytes: decoded.length,
-    percent: 70,
-    stage: "decompress",
-  });
+  reportStage(context, decoded.length, 70, "decompress");
   return context.decompress(decoded, prep.compressionAlgorithm!, maxDecompressedBytes);
 }
 
@@ -130,12 +105,7 @@ function runPostChecksumDecrypt(
   decoded: Uint8Array,
 ): Uint8Array {
   if (!shouldRunPostChecksumDecrypt(prep, context)) return decoded;
-  context.reportProgress({
-    processedBytes: decoded.length,
-    totalBytes: decoded.length,
-    percent: 90,
-    stage: "decrypt",
-  });
+  reportStage(context, decoded.length, 90, "decrypt");
   return context.decrypt(decoded, prep.encryptionAAD);
 }
 
@@ -182,12 +152,7 @@ function verifyDecodedChecksum(
   if (!prep.extractedChecksum) return;
   if (!(prep.pipelineVersion === 2 || !prep.isEncrypted || prep.allowInternalDecrypt)) return;
 
-  context.reportProgress({
-    processedBytes: decoded.length,
-    totalBytes: decoded.length,
-    percent: 85,
-    stage: "checksum",
-  });
+  reportStage(context, decoded.length, 85, "checksum");
   const calculatedChecksum = calculateCRC32(decoded);
   if (!constantTimeEquals(calculatedChecksum, prep.extractedChecksum)) {
     throw new Ddu64ChecksumError(
@@ -208,11 +173,20 @@ function getMaxDecompressedBytes(
   );
 }
 
-function reportDone(context: DecodePipelineContext, decoded: Uint8Array): void {
+function reportStage(
+  context: DecodePipelineContext,
+  length: number,
+  percent: number,
+  stage: DduProgressInfo["stage"],
+): void {
   context.reportProgress({
-    processedBytes: decoded.length,
-    totalBytes: decoded.length,
-    percent: 100,
-    stage: "done",
+    processedBytes: length,
+    totalBytes: length,
+    percent,
+    stage,
   });
+}
+
+function reportDone(context: DecodePipelineContext, decoded: Uint8Array): void {
+  reportStage(context, decoded.length, 100, "done");
 }

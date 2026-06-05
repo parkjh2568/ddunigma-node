@@ -171,7 +171,11 @@ export interface KeyDerivationOptions {
 export interface DduOptions {
   /** 압축 사용 여부 (zlib deflate 또는 brotli) */
   compress?: boolean;
-  /** 내부 암/복호화 사용 여부 (기본값: true, 스트림 파이프라인 내부 제어용) */
+  /**
+   * 내부 암/복호화 사용 여부 (기본값: true, 스트림 파이프라인 내부 제어용).
+   * @internal 일반 사용자는 `encryptionKey`로 암호화를 제어하세요. 이 플래그는
+   * 스트림/내부 파이프라인 전용이며 향후 공개 옵션에서 분리될 수 있습니다.
+   */
   encrypt?: boolean;
   /** 압축 알고리즘 (기본값: "deflate") */
   compressionAlgorithm?: "deflate" | "brotli";
@@ -187,7 +191,10 @@ export interface DduOptions {
   chunkSize?: number;
   /** 청크 구분자 (기본값: '\n') */
   chunkSeparator?: string;
-  /** 중간 스트림 청크처럼 푸터를 생략해야 할 때 사용 */
+  /**
+   * 중간 스트림 청크처럼 푸터를 생략해야 할 때 사용.
+   * @internal 스트림 인코딩 내부 전용 플래그이며 향후 공개 옵션에서 분리될 수 있습니다.
+   */
   omitFooter?: boolean;
   /** 진행률 콜백 */
   onProgress?: (info: DduProgressInfo) => void;

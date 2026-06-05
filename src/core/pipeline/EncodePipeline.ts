@@ -9,7 +9,7 @@ import type { DduOptions, DduProgressInfo } from "../types.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
 
-interface EncodePipelineBaseContext {
+export interface EncodePipelineBaseContext {
   defaultCompress: boolean;
   defaultChecksum: boolean;
   defaultChunkSize: number | undefined;
@@ -59,11 +59,7 @@ export function runSyncEncodePipeline(
   let compressionAlgorithm: CompressionAlgorithm | undefined;
   let compressedSize: number | undefined;
   if (settings.shouldCompress) {
-    const algo = options?.compressionAlgorithm ?? context.defaultCompressionAlgorithm;
-    const level = normalizeCompressionLevel(
-      options?.compressionLevel ?? context.defaultCompressionLevel,
-      algo,
-    );
+    const { algo, level } = resolveCompressionParams(options, context);
     reportCompress(context, workingData.length);
     const compressed = context.compress(workingData, algo, level);
     compressedSize = compressed.length;
@@ -107,11 +103,7 @@ export async function runAsyncEncodePipeline(
 
   let compressionAlgorithm: CompressionAlgorithm | undefined;
   if (settings.shouldCompress) {
-    const algo = options?.compressionAlgorithm ?? context.defaultCompressionAlgorithm;
-    const level = normalizeCompressionLevel(
-      options?.compressionLevel ?? context.defaultCompressionLevel,
-      algo,
-    );
+    const { algo, level } = resolveCompressionParams(options, context);
     reportCompress(context, workingData.length);
     const compressed = await context.compress(workingData, algo, level);
     if (compressed.length < workingData.length) {
@@ -123,7 +115,10 @@ export async function runAsyncEncodePipeline(
   let isEncrypted = false;
   if (settings.shouldEncrypt) {
     reportEncrypt(context, workingData.length);
-    workingData = await context.encrypt(workingData, context.getEncryptionAAD(compressionAlgorithm));
+    workingData = await context.encrypt(
+      workingData,
+      context.getEncryptionAAD(compressionAlgorithm),
+    );
     isEncrypted = true;
   }
 
@@ -136,6 +131,18 @@ export async function runAsyncEncodePipeline(
     settings.chunkSize,
     settings.chunkSeparator,
   );
+}
+
+function resolveCompressionParams(
+  options: DduOptions | undefined,
+  context: EncodePipelineBaseContext,
+): { algo: CompressionAlgorithm; level: number } {
+  const algo = options?.compressionAlgorithm ?? context.defaultCompressionAlgorithm;
+  const level = normalizeCompressionLevel(
+    options?.compressionLevel ?? context.defaultCompressionLevel,
+    algo,
+  );
+  return { algo, level };
 }
 
 function resolveEncodeSettings(
