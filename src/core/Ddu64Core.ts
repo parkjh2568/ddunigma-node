@@ -41,6 +41,7 @@ import {
   decompressSyncWithAdapter,
   decryptSyncWithAdapter,
   encryptSyncWithAdapter,
+  type SyncAdapterGatewayContext,
 } from "./internal/SyncAdapterGateway.js";
 import {
   compressAsyncWithAdapter,
@@ -89,9 +90,6 @@ export class Ddu64Core {
   /** UTF-16 코드 유닛 → 인덱스 direct lookup (단일 BMP 심볼 전용) */
   private readonly dduCharCodeLookup: Int32Array;
 
-  /** 미리 정의된 charset 사용 여부 */
-  private readonly isPredefinedCharSet: boolean;
-
   /** 기본 압축 활성화 */
   protected readonly defaultCompress: boolean;
 
@@ -112,6 +110,9 @@ export class Ddu64Core {
 
   /** 캐시된 암호화 키 해시 */
   private encryptionKeyHash: Uint8Array | undefined;
+
+  /** 캐시된 어댑터 게이트웨이 컨텍스트 (호출당 재할당 방지, 해시는 getter로 라이브 조회) */
+  private syncGatewayContext: SyncAdapterGatewayContext | undefined;
 
   /** 기본 체크섬 활성화 */
   private readonly defaultChecksum: boolean;
@@ -182,7 +183,7 @@ export class Ddu64Core {
 
     this.dduChar = normalized.charSet;
     this.paddingChar = normalized.padding;
-    this.isPredefinedCharSet = normalized.isPredefined;
+    const isPredefinedCharSet = normalized.isPredefined;
     this.defaultCompress = dduOptions?.compress ?? false;
 
     // 제한값
@@ -222,7 +223,7 @@ export class Ddu64Core {
     this.dduCharCodes = lookupTables.charCodes;
 
     // 커스텀 charset 조합 검증
-    if (!this.isPredefinedCharSet) {
+    if (!isPredefinedCharSet) {
       validateCombinationDuplicates(this.dduChar, this.paddingChar, dduLength);
     }
 
@@ -477,7 +478,8 @@ export class Ddu64Core {
   getStats(input: Uint8Array | string, options?: DduOptions): DduEncodeStats {
     const originalData = typeof input === "string" ? stringToBytes(input) : input;
     const originalSize = originalData.length;
-    const { encoded, compressedSize } = this.encodeInternal(input, options);
+    // 이미 바이트로 변환된 originalData를 재사용해 문자열 입력의 중복 UTF-8 인코딩을 피합니다.
+    const { encoded, compressedSize } = this.encodeInternal(originalData, options);
     const encodedSize = encoded.length;
     const expansionRatio = originalSize > 0 ? encodedSize / originalSize : 0;
     const shouldCompress = options?.compress ?? this.defaultCompress;
@@ -726,16 +728,24 @@ export class Ddu64Core {
     }
   }
 
-  private getSyncGatewayContext() {
-    return {
-      adapter: this.adapter,
-      encryptionKey: this.encryptionKey,
-      keyDerivation: this.keyDerivation,
-      encryptionKeyHash: this.encryptionKeyHash,
-      setEncryptionKeyHash: (hash: Uint8Array) => {
-        this.encryptionKeyHash = hash;
-      },
-    };
+  private getSyncGatewayContext(): SyncAdapterGatewayContext {
+    if (!this.syncGatewayContext) {
+      // adapter/encryptionKey/keyDerivation은 생성 후 불변이므로 한 번만 구성합니다.
+      // encryptionKeyHash는 지연 파생되며, 유일한 writer인 setEncryptionKeyHash에서
+      // 인스턴스 필드와 캐시 컨텍스트를 함께 갱신해 일관성을 유지합니다.
+      const ctx: SyncAdapterGatewayContext = {
+        adapter: this.adapter,
+        encryptionKey: this.encryptionKey,
+        keyDerivation: this.keyDerivation,
+        encryptionKeyHash: this.encryptionKeyHash,
+        setEncryptionKeyHash: (hash: Uint8Array) => {
+          this.encryptionKeyHash = hash;
+          ctx.encryptionKeyHash = hash;
+        },
+      };
+      this.syncGatewayContext = ctx;
+    }
+    return this.syncGatewayContext;
   }
 
   // ─── 난독화 헬퍼 ───────────────────────────────────────────────────

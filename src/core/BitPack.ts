@@ -197,7 +197,6 @@ export function bitPackDecode(
 
   const chunkSize = usePowerOfTwo ? 1 : 2;
   const numChunks = Math.ceil(inputLen / chunkSize);
-  const maxBinaryValue = bitLength < 31 ? 1 << bitLength : Math.pow(2, bitLength);
   const estimatedBytes = Math.ceil((numChunks * bitLength - paddingBits) / BYTE_BITS);
   const buffer = new Uint8Array(estimatedBytes + 1);
   let bufIdx = 0;
@@ -229,6 +228,7 @@ export function bitPackDecode(
       }
     }
   } else {
+    const maxBinaryValue = bitLength < 31 ? 1 << bitLength : Math.pow(2, bitLength);
     for (let i = 0; i < inputLen; i += chunkSize) {
       const v1 = indices[i];
       const v2 = indices[i + 1];

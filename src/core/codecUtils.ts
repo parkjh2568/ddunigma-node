@@ -178,6 +178,16 @@ const CODA_INDEX_MAP: Record<string, number> = {
 };
 
 /**
+ * 주어진 문자가 알려진 한글 종성(또는 종성 없음 "")인지 확인합니다.
+ *
+ * @param coda - 확인할 종성 문자
+ * @returns CODA_INDEX_MAP에 등록된 종성이면 true
+ */
+export function isKnownCodaChar(coda: string): boolean {
+  return Object.prototype.hasOwnProperty.call(CODA_INDEX_MAP, coda);
+}
+
+/**
  * 한글 문자에 종성을 결합합니다.
  *
  * @param char - 기본 한글 문자 (종성 없음)

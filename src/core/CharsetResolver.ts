@@ -4,7 +4,7 @@
  * @module core/CharsetResolver
  */
 
-import { buildCodaCharset, URL_SAFE_CONFLICT_CHARS } from "./codecUtils.js";
+import { buildCodaCharset, isKnownCodaChar, URL_SAFE_CONFLICT_CHARS } from "./codecUtils.js";
 import type { DduConstructorOptions, CharSetConfig, EncodingProfile } from "./types.js";
 import { DduSetSymbol, dduDefaultConstructorOptions } from "./types.js";
 import { getCharSet } from "../presets.js";
@@ -98,6 +98,18 @@ export function resolveInitialCharSet(
       const codaChar = dduOptions?.codaChar;
       const useRepeatPad = codaChar ? true : (dduOptions?.useRepeatPadding ?? false);
       if (codaChar && codaChar.length > 0) {
+        // 알 수 없는 종성은 combineCoda에서 종성-없음(인덱스 0)으로 접혀 중복 심볼을
+        // 만들 수 있으므로, throwOnError일 때 명확한 에러로 알립니다.
+        if (shouldThrow) {
+          const unknownCoda = codaChar.filter((c) => !isKnownCodaChar(c));
+          if (unknownCoda.length > 0) {
+            throw new Error(
+              `[Ddu64 Constructor] Unknown coda character(s): [${unknownCoda.join(", ")}]. ` +
+                `Coda must be empty ("") or a Hangul jongseong jamo (ㄱ, ㄲ, ㄳ, … ㅎ). ` +
+                `Unknown coda collapses to no-coda and can create duplicate symbols.`,
+            );
+          }
+        }
         arr = buildCodaCharset(arr, codaChar);
       }
 

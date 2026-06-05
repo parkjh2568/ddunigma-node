@@ -25,7 +25,8 @@ export interface PayloadCodecContext {
   paddingChar: string;
   useRepeatPadding: boolean;
   bitsPerPadChar: number;
-  encryptedPipelineVersion: 3 | 4;
+  /** 암호화 페이로드 파이프라인 버전. 인코더는 항상 V4를 생성합니다(V3 읽기는 parseFooter의 레거시 호환). */
+  encryptedPipelineVersion: 4;
 }
 
 export function encodePayload(

@@ -115,6 +115,13 @@ export class HangulObfuscationLayer implements ObfuscationLayer {
  * charset 문자와 패딩 문자로부터 완전한 알파벳을 구성한 후
  * 한글 난독화 레이어를 생성합니다.
  *
+ * ⚠️ 주의: 이 헬퍼는 charset + 패딩 문자만으로 알파벳을 구성합니다. Ddu64 인코더가
+ * 내부적으로 사용하는 난독화 알파벳은 footer 마커(ELYSIA/GRISEO/ENC/V3/V4)와 숫자까지
+ * 포함하므로 서로 다릅니다. 따라서 이 헬퍼로 만든 레이어로 실제 인코더 출력을
+ * deobfuscate하면 마커/숫자 문자에서 실패할 수 있습니다. 인코더 출력의 난독화는
+ * `Ddu64`의 `obfuscate` 옵션을 사용하세요. 이 헬퍼는 독립적인 난독화 용도로만
+ * 사용하는 것을 권장합니다.
+ *
  * @param charSet - 인코딩에 사용되는 charset 문자
  * @param paddingChar - 패딩 문자
  * @returns ObfuscationLayer 인스턴스

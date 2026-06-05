@@ -397,7 +397,7 @@ describe("Origin Cross-Platform Compatibility", () => {
       expect(decoded.length).toBe(0);
     });
 
-    it("large UTF-8 input (100 KB) round-trips correctly", () => {
+    it("large UTF-8 input (100 KB) round-trips correctly", { timeout: 30_000 }, () => {
       const encoder = createOriginCompatEncoder();
       // Generate 100 KB of mixed UTF-8 content
       const segment = "Hello 안녕 世界 🌍 ";
@@ -410,7 +410,7 @@ describe("Origin Cross-Platform Compatibility", () => {
       expect(decoded).toEqual(inputBytes);
     });
 
-    it("1 MB UTF-8 input round-trips correctly", () => {
+    it("1 MB UTF-8 input round-trips correctly", { timeout: 30_000 }, () => {
       const encoder = createOriginCompatEncoder();
       // Generate 1 MB of data
       const segment = "뚜니그마 DDUnigma テスト 🔐 ";

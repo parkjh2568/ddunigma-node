@@ -172,6 +172,17 @@ const encoded = ddu.encode("data"); // CRC32 체크섬 포함
 const decoded = ddu.decode(encoded); // 무결성 검증 후 반환
 ```
 
+CRC32 체크섬은 **우발적 손상 감지**용이며 변조 방지(보안) 기능이 아닙니다. 비암호화 출력에서는
+공격자가 데이터와 체크섬을 함께 바꿀 수 있으므로, 변조 방지가 필요하면 `encryptionKey`(AES-256-GCM
+인증 태그)를 사용하세요.
+
+> ⚠️ `checksum`은 인코딩 파이프라인에 들어가기 전의 **원본(평문)** 바이트에 대해 계산되어 출력 끝에
+> 평문으로 덧붙습니다. 따라서 `encryptionKey`와 `checksum`을 함께 쓰면 출력에 평문의 CRC32(32비트)가
+> 노출됩니다. 민감 데이터를 암호화할 때는 무결성을 GCM 태그에 맡기고 `checksum`은 끄는 것을 권장합니다.
+
+> ℹ️ `checksum`은 와이어 포맷에 자기기술(self-describing) 플래그가 없습니다. `checksum: true`로 인코딩한
+> 출력은 디코딩 시에도 `checksum: true`를 지정해야 합니다(아래 "Option Compatibility" 참고).
+
 ## URL-Safe
 
 ```typescript
@@ -182,6 +193,10 @@ const ddu = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234
 // +→- /→_ =→. 로 자동 변환
 const encoded = ddu.encode("URL safe text");
 ```
+
+charset 또는 패딩 문자가 URL-Safe 충돌 문자(`-`, `_`, `.`)를 포함하면 URL-Safe 모드를 적용할 수 없습니다.
+이 경우 `throwOnError: true`이면 생성자에서 에러를 던지고, 기본값(`throwOnError: false`)이면 URL-Safe가
+조용히 비활성화됩니다(예: `ONECHARSET`은 `-`, `_`를 포함하므로 URL-Safe와 호환되지 않습니다).
 
 ## Chunking
 
@@ -259,6 +274,16 @@ const encoded = ddu.encode(new Uint8Array(1024 * 1024));
 `encode()`/`decode()`의 동기 hot path는 이미 로드된 WASM만 사용합니다.
 `preloadWasm()`이 완료되지 않았거나 WASM을 사용할 수 없으면 JavaScript로 폴백됩니다.
 
+> 동기 `encode()`/`decode()`에서 WASM 가속을 쓰려면 먼저 `await preloadWasm()`을 완료해야 합니다
+> (동기 경로는 온디맨드 초기화를 트리거하지 않습니다). 비동기 경로에서도 WASM은 이미 로드된 경우에만
+> 사용됩니다.
+>
+> 번들러 사용 시: WASM은 `dist/wasm/codec.wasm`에서 로드됩니다. Node.js는 파일시스템으로,
+> 브라우저/Workers는 `new URL("./wasm/codec.wasm", import.meta.url)` fetch로 해석합니다. 일부 번들러
+> (webpack/Vite 등)는 이 에셋을 자동으로 출력하지 않을 수 있으니, 필요하면 에셋 복사/`?url` import 등
+> 번들러별 설정으로 `codec.wasm`을 함께 배포하세요. 로드에 실패하면 JavaScript 구현으로 폴백되므로
+> 기능 자체는 동작합니다.
+
 ## Progress Callback
 
 ```typescript
@@ -281,6 +306,10 @@ const stats = ddu.getStats("A".repeat(1000));
 // { originalSize, encodedSize, compressedSize, compressionRatio, expansionRatio, charsetSize, bitLength }
 ```
 
+`compressedSize`/`compressionRatio`는 `compress: true`일 때 **압축 시도 결과**를 나타냅니다. 압축 결과가
+원본보다 크면 실제 출력은 비압축으로 저장되지만, `compressedSize`는 시도된 압축 크기를 그대로 보고합니다.
+`encodedSize`는 항상 최종 출력 문자열 길이입니다.
+
 ## Size Limits
 
 ```typescript
@@ -289,6 +318,20 @@ const ddu = new Ddu64({
   maxDecompressedBytes: 50 * 1024 * 1024, // 압축해제 최대 크기 (기본 64MB)
 });
 ```
+
+## Option Compatibility
+
+압축(`compress`)과 암호화(`encrypt`) 메타데이터는 출력 footer에 기록되어 디코딩 시 자동 감지됩니다.
+하지만 다음 옵션들은 와이어 포맷에 자기기술 플래그가 없으므로 **인코딩과 디코딩에서 동일하게 지정**해야 합니다:
+
+| 옵션             | 불일치 시 결과                                                      |
+| ---------------- | ------------------------------------------------------------------- |
+| `checksum`       | 디코딩에 누락 시 체크섬 접미사를 페이로드로 오인 → 디코드 실패/오류 |
+| `urlSafe`        | 불일치 시 `-_.` 치환이 어긋나 디코드 실패                           |
+| `obfuscate`      | 불일치 시 역난독화 누락/오적용으로 디코드 실패                      |
+| `chunkSeparator` | 커스텀 구분자를 디코더가 모르면 제거되지 않아 디코드 실패           |
+
+같은 설정의 인코더/디코더 인스턴스를 사용하거나, 호출별 옵션을 양쪽에 동일하게 전달하세요.
 
 ## Custom Errors
 
@@ -383,26 +426,26 @@ new Ddu64(options?);
 new Ddu64(dduChar, paddingChar, options?);
 ```
 
-| Option                 | Type                    | Default     | 설명                  |
-| ---------------------- | ----------------------- | ----------- | --------------------- |
-| `dduSetSymbol`         | `DduSetSymbol`          | `DDU`       | 프리셋 선택           |
-| `dduChar`              | `string \| string[]`    | -           | 커스텀 charset        |
-| `paddingChar`          | `string`                | -           | 패딩 문자             |
-| `codaChar`             | `string[]`              | -           | 종성 조합 문자        |
-| `compress`             | `boolean`               | `false`     | 압축 활성화           |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | `"deflate"` | 압축 알고리즘         |
-| `compressionLevel`     | `number`                | `6`         | 압축 레벨             |
-| `encryptionKey`        | `string`                | -           | AES-256-GCM 암호화 키 |
+| Option                 | Type                    | Default     | 설명                                                         |
+| ---------------------- | ----------------------- | ----------- | ------------------------------------------------------------ |
+| `dduSetSymbol`         | `DduSetSymbol`          | `DDU`       | 프리셋 선택                                                  |
+| `dduChar`              | `string \| string[]`    | -           | 커스텀 charset                                               |
+| `paddingChar`          | `string`                | -           | 패딩 문자                                                    |
+| `codaChar`             | `string[]`              | -           | 종성 조합 문자                                               |
+| `compress`             | `boolean`               | `false`     | 압축 활성화                                                  |
+| `compressionAlgorithm` | `"deflate" \| "brotli"` | `"deflate"` | 압축 알고리즘                                                |
+| `compressionLevel`     | `number`                | `6`         | 압축 레벨                                                    |
+| `encryptionKey`        | `string`                | -           | AES-256-GCM 암호화 키                                        |
 | `keyDerivation`        | `KeyDerivationOptions`  | `sha256`    | 키 파생 방식. 비밀번호 기반 키는 `pbkdf2`와 고유 `salt` 권장 |
-| `checksum`             | `boolean`               | `false`     | CRC32 체크섬          |
-| `urlSafe`              | `boolean`               | `false`     | URL-Safe 변환         |
-| `obfuscate`            | `boolean`               | `false`     | 한글 난독화           |
-| `chunkSize`            | `number`                | -           | 청크 분할 크기        |
-| `chunkSeparator`       | `string`                | `"\n"`      | 청크 구분자           |
-| `maxDecodedBytes`      | `number`                | `67108864`  | 디코딩 크기 제한      |
-| `maxDecompressedBytes` | `number`                | `67108864`  | 압축해제 크기 제한    |
-| `wasmThreshold`        | `number`                | `16384`     | WASM 사용 임계값 (`Infinity`면 비활성화) |
-| `throwOnError`         | `boolean`               | `false`     | 초기화 에러 시 throw  |
+| `checksum`             | `boolean`               | `false`     | CRC32 체크섬                                                 |
+| `urlSafe`              | `boolean`               | `false`     | URL-Safe 변환                                                |
+| `obfuscate`            | `boolean`               | `false`     | 한글 난독화                                                  |
+| `chunkSize`            | `number`                | -           | 청크 분할 크기                                               |
+| `chunkSeparator`       | `string`                | `"\n"`      | 청크 구분자                                                  |
+| `maxDecodedBytes`      | `number`                | `67108864`  | 디코딩 크기 제한                                             |
+| `maxDecompressedBytes` | `number`                | `67108864`  | 압축해제 크기 제한                                           |
+| `wasmThreshold`        | `number`                | `16384`     | WASM 사용 임계값 (`Infinity`면 비활성화)                     |
+| `throwOnError`         | `boolean`               | `false`     | 초기화 에러 시 throw                                         |
 
 ## Per-Call Options
 
@@ -423,12 +466,12 @@ new Ddu64(dduChar, paddingChar, options?);
 
 ## Entry Points
 
-| Runtime / Target                | Import Path                         | 용도                                  |
-| ------------------------------- | ----------------------------------- | ------------------------------------- |
-| Node.js server/CLI              | `@ddunigma/node`                    | Node.js 전체 기능 (동기+비동기)       |
-| Browser / Vite / webpack        | `@ddunigma/node` 또는 `/browser`    | 브라우저 최적화 (BrowserAdapter 기본) |
-| Cloudflare Workers / Deno / Bun | `@ddunigma/node` 또는 `/browser`    | Node.js 내장 모듈 없는 Web API 경로   |
-| Adapter 직접 주입 최소 번들     | `@ddunigma/node/core`               | 최소 코어 (인코딩/디코딩만)           |
+| Runtime / Target                | Import Path                      | 용도                                  |
+| ------------------------------- | -------------------------------- | ------------------------------------- |
+| Node.js server/CLI              | `@ddunigma/node`                 | Node.js 전체 기능 (동기+비동기)       |
+| Browser / Vite / webpack        | `@ddunigma/node` 또는 `/browser` | 브라우저 최적화 (BrowserAdapter 기본) |
+| Cloudflare Workers / Deno / Bun | `@ddunigma/node` 또는 `/browser` | Node.js 내장 모듈 없는 Web API 경로   |
+| Adapter 직접 주입 최소 번들     | `@ddunigma/node/core`            | 최소 코어 (인코딩/디코딩만)           |
 
 루트 진입점은 v4부터 `browser`/`worker`/`workerd`/`deno`/`bun`/`node` 조건을 가진 conditional export입니다. Node.js에서는 기존처럼 `Buffer` API와 NodeAdapter를 노출하고, 브라우저 및 Workers 계열 번들러에서는 Node.js 내장 모듈 없는 BrowserAdapter 경로로 해석됩니다. 런타임 조건을 알 수 없는 ESM 환경의 기본 fallback도 browser 번들을 사용합니다.
 Node.js 런타임에서는 `node` 조건이 `index.js`/`index.cjs`를 선택하므로 기본 import로 NodeAdapter와 `decodeToBuffer()`를 사용할 수 있습니다.
