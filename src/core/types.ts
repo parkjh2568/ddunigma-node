@@ -187,6 +187,15 @@ export interface DduOptions {
   maxDecompressedBytes?: number;
   /** 체크섬 추가 여부 (CRC32) */
   checksum?: boolean;
+  /**
+   * 체크섬 계산 범위 (기본값: "plaintext").
+   * - `"plaintext"`: 원본 입력 바이트의 CRC32 (레거시 기본). 암호화와 함께 쓰면 평문 CRC가 출력에 노출됩니다.
+   * - `"output"`: 인코딩 파이프라인 최종 바이트(압축/암호화 후, 와이어에 실리는 바이트)의 CRC32.
+   *   암호화 시 평문 CRC를 노출하지 않고, 복호화 이전에 전송 손상을 감지합니다.
+   *
+   * `checksum`과 마찬가지로 와이어에 자기기술 플래그가 없으므로 인코딩/디코딩에서 동일하게 지정해야 합니다.
+   */
+  checksumScope?: "plaintext" | "output";
   /** 청크 분할 크기 */
   chunkSize?: number;
   /** 청크 구분자 (기본값: '\n') */

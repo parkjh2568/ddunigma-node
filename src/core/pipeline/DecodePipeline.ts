@@ -15,6 +15,7 @@ type CompressionAlgorithm = "deflate" | "brotli";
 export interface DecodePipelineContext {
   encryptionKey: string | undefined;
   defaultMaxDecompressedBytes: number;
+  defaultChecksumScope: "plaintext" | "output";
   reportProgress(info: DduProgressInfo): void;
 }
 
@@ -38,10 +39,13 @@ export function runSyncDecodePipeline(
   context: SyncDecodePipelineContext,
 ): Uint8Array {
   let decoded = prep.decoded;
+  const checksumScope =
+    prep.extractedChecksumScope ?? options?.checksumScope ?? context.defaultChecksumScope;
 
+  if (checksumScope === "output") verifyWireChecksum(prep, context);
   decoded = runPreDecompressDecrypt(prep, context, decoded);
   decoded = runDecompress(prep, options, context, decoded);
-  verifyDecodedChecksum(prep, context, options, decoded);
+  if (checksumScope === "plaintext") verifyDecodedChecksum(prep, context, options, decoded);
   decoded = runPostChecksumDecrypt(prep, context, decoded);
   reportDone(context, decoded);
 
@@ -54,6 +58,10 @@ export async function runAsyncDecodePipeline(
   context: AsyncDecodePipelineContext,
 ): Promise<Uint8Array> {
   let decoded = prep.decoded;
+  const checksumScope =
+    prep.extractedChecksumScope ?? options?.checksumScope ?? context.defaultChecksumScope;
+
+  if (checksumScope === "output") verifyWireChecksum(prep, context);
 
   if (shouldRunPreDecompressDecrypt(prep, context)) {
     reportStage(context, decoded.length, 55, "decrypt");
@@ -66,7 +74,7 @@ export async function runAsyncDecodePipeline(
     decoded = await context.decompress(decoded, prep.compressionAlgorithm!, maxDecompressedBytes);
   }
 
-  verifyDecodedChecksum(prep, context, options, decoded);
+  if (checksumScope === "plaintext") verifyDecodedChecksum(prep, context, options, decoded);
 
   if (shouldRunPostChecksumDecrypt(prep, context)) {
     reportStage(context, decoded.length, 90, "decrypt");
@@ -141,6 +149,18 @@ function shouldDecompress(
     prep.allowInternalDecompress &&
     (prep.pipelineVersion === 2 || !prep.isEncrypted || prep.allowInternalDecrypt)
   );
+}
+
+function verifyWireChecksum(prep: DecodePreludeResult, context: DecodePipelineContext): void {
+  if (!prep.extractedChecksum) return;
+  // "output" 범위: 디코딩된 와이어 바이트(복호화/압축해제 이전)에 대해 검증합니다.
+  reportStage(context, prep.decoded.length, 85, "checksum");
+  const calculatedChecksum = calculateCRC32(prep.decoded);
+  if (!constantTimeEquals(calculatedChecksum, prep.extractedChecksum)) {
+    throw new Ddu64ChecksumError(
+      `[Ddu64 decode] Checksum mismatch. Expected: ${prep.extractedChecksum}, Got: ${calculatedChecksum}`,
+    );
+  }
 }
 
 function verifyDecodedChecksum(

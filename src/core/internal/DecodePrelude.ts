@@ -10,8 +10,9 @@
 import { fromUrlSafe, removeChunks } from "../codecUtils.js";
 import {
   buildEncryptionAAD,
-  extractChecksum,
+  extractChecksumV5,
   parseFooter,
+  type ChecksumScope,
   type PipelineVersion,
 } from "../wireFormat.js";
 import type { DduOptions } from "../types.js";
@@ -45,6 +46,8 @@ export interface DecodePreludeContext {
 export interface DecodePreludeResult {
   decoded: Uint8Array;
   extractedChecksum: string | null;
+  /** V5 마커에서 자동 감지된 체크섬 scope (레거시/없음이면 null → 옵션/기본값으로 결정) */
+  extractedChecksumScope: ChecksumScope | null;
   compressionAlgorithm?: "deflate" | "brotli";
   isEncrypted: boolean;
   pipelineVersion: PipelineVersion;
@@ -72,9 +75,11 @@ export function runDecodePrelude(
   }
 
   let extractedChecksum: string | null = null;
+  let extractedChecksumScope: ChecksumScope | null = null;
   if (shouldChecksum) {
-    const result = extractChecksum(workingInput);
+    const result = extractChecksumV5(workingInput);
     extractedChecksum = result.checksum;
+    extractedChecksumScope = result.scope;
     workingInput = result.data;
   }
 
@@ -127,6 +132,7 @@ export function runDecodePrelude(
   return {
     decoded,
     extractedChecksum,
+    extractedChecksumScope,
     compressionAlgorithm,
     isEncrypted,
     pipelineVersion,

@@ -10,6 +10,10 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { Ddu64Node } from "../Ddu64Node.js";
+import {
+  createEncoderObfuscationLayer,
+  createObfuscationLayer,
+} from "../obfuscation/ObfuscationLayer.js";
 
 describe("vNext improvements", () => {
   describe("sync/async output equivalence (non-encrypted)", () => {
@@ -78,6 +82,53 @@ describe("vNext improvements", () => {
             throwOnError: true,
           }),
       ).not.toThrow();
+    });
+  });
+
+  describe("checksumScope opt-in (non-breaking)", () => {
+    it("output scope round-trips for plain/compress/encrypt", () => {
+      const configs = [
+        { checksum: true, checksumScope: "output" as const },
+        { checksum: true, checksumScope: "output" as const, compress: true },
+        { checksum: true, checksumScope: "output" as const, encryptionKey: "scope-key" },
+      ];
+      for (const cfg of configs) {
+        const enc = new Ddu64Node(undefined, undefined, cfg);
+        const message = "checksumScope round-trip payload ".repeat(8);
+        expect(enc.decode(enc.encode(message))).toBe(message);
+      }
+    });
+
+    it("output scope decode rejects data checksummed with the default plaintext scope", () => {
+      const outputEnc = new Ddu64Node(undefined, undefined, {
+        checksum: true,
+        checksumScope: "output",
+        encryptionKey: "k",
+      });
+      const plaintextDec = new Ddu64Node(undefined, undefined, {
+        checksum: true, // default plaintext scope
+        encryptionKey: "k",
+      });
+      const encoded = outputEnc.encode("scope mismatch should fail");
+      expect(() => plaintextDec.decode(encoded)).toThrow();
+    });
+
+    it("default (plaintext) scope remains the default and round-trips", () => {
+      const enc = new Ddu64Node(undefined, undefined, { checksum: true });
+      expect(enc.decode(enc.encode("default scope"))).toBe("default scope");
+    });
+  });
+
+  describe("createEncoderObfuscationLayer (encoder-compatible alphabet)", () => {
+    it("round-trips strings containing footer markers and digits", () => {
+      const layer = createEncoderObfuscationLayer(["A", "B", "C", "D"], "X");
+      const input = "ABCDENC123V4"; // 마커(ENC, V4) + 숫자 포함
+      expect(layer.deobfuscate(layer.obfuscate(input))).toBe(input);
+    });
+
+    it("plain createObfuscationLayer throws on marker/digit chars (documents the difference)", () => {
+      const layer = createObfuscationLayer(["A", "B", "C", "D"], "X");
+      expect(() => layer.obfuscate("ABCDENC123V4")).toThrow();
     });
   });
 });

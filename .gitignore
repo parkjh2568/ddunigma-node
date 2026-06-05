@@ -6,3 +6,5 @@ coverage/
 test-decode.ts
 muyaho
 src/wasm/target/
+docs/
+scripts/

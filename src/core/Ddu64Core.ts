@@ -125,6 +125,9 @@ export class Ddu64Core {
   /** 기본 체크섬 활성화 */
   private readonly defaultChecksum: boolean;
 
+  /** 기본 체크섬 계산 범위 */
+  private readonly defaultChecksumScope: "plaintext" | "output";
+
   /** 기본 청크 크기 */
   private readonly defaultChunkSize: number | undefined;
 
@@ -262,6 +265,7 @@ export class Ddu64Core {
 
     // 옵션
     this.defaultChecksum = dduOptions?.checksum ?? false;
+    this.defaultChecksumScope = dduOptions?.checksumScope ?? "plaintext";
     this.defaultChunkSize = dduOptions?.chunkSize;
     this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
     this.defaultCompressionAlgorithm = dduOptions?.compressionAlgorithm ?? "deflate";
@@ -442,6 +446,7 @@ export class Ddu64Core {
     return {
       encryptionKey: this.encryptionKey,
       defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
+      defaultChecksumScope: this.defaultChecksumScope,
       reportProgress: (info) => this.reportProgress(options, info),
     };
   }
@@ -524,6 +529,7 @@ export class Ddu64Core {
     return {
       defaultCompress: this.defaultCompress,
       defaultChecksum: this.defaultChecksum,
+      defaultChecksumScope: this.defaultChecksumScope,
       defaultChunkSize: this.defaultChunkSize,
       defaultChunkSeparator: this.defaultChunkSeparator,
       defaultCompressionLevel: this.defaultCompressionLevel,

@@ -178,7 +178,22 @@ CRC32 체크섬은 **우발적 손상 감지**용이며 변조 방지(보안) �
 
 > ⚠️ `checksum`은 인코딩 파이프라인에 들어가기 전의 **원본(평문)** 바이트에 대해 계산되어 출력 끝에
 > 평문으로 덧붙습니다. 따라서 `encryptionKey`와 `checksum`을 함께 쓰면 출력에 평문의 CRC32(32비트)가
-> 노출됩니다. 민감 데이터를 암호화할 때는 무결성을 GCM 태그에 맡기고 `checksum`은 끄는 것을 권장합니다.
+> 노출됩니다. 이를 피하려면 `checksumScope: "output"`을 사용하세요(아래). 또는 무결성을 GCM 태그에
+> 맡기고 `checksum`을 끄세요.
+
+### checksumScope (opt-in)
+
+```typescript
+// 암호화/압축 후의 최종 바이트로 체크섬 계산 (평문 CRC 미노출, 복호화 이전 손상 감지)
+const ddu = new Ddu64({
+  encryptionKey: "secret",
+  checksum: true,
+  checksumScope: "output", // 기본값 "plaintext"
+});
+```
+
+`checksumScope`는 기본값이 `"plaintext"`(레거시 호환)이며, `"output"`은 압축/암호화가 끝난 와이어 바이트의
+CRC32를 계산합니다. `checksum`과 마찬가지로 인코딩/디코딩에서 동일하게 지정해야 합니다.
 
 > ℹ️ `checksum`은 와이어 포맷에 자기기술(self-describing) 플래그가 없습니다. `checksum: true`로 인코딩한
 > 출력은 디코딩 시에도 `checksum: true`를 지정해야 합니다(아래 "Option Compatibility" 참고).
@@ -221,6 +236,11 @@ const ddu = new Ddu64({
 const encoded = ddu.encode("hello");
 // 출력이 한글 음절 블록(U+AC00–U+D7A3)으로 변환됨
 ```
+
+인코더 출력과 동일한 난독화 매핑을 외부에서 재현해야 한다면 `createEncoderObfuscationLayer(charSet, paddingChar)`를
+사용하세요. 이 헬퍼는 charset/패딩뿐 아니라 footer 마커와 숫자까지 알파벳에 포함하므로 실제 인코더 출력을
+안전하게 deobfuscate할 수 있습니다. (`createObfuscationLayer`는 charset/패딩만 포함하므로 마커/숫자가 섞인
+인코더 출력에는 적합하지 않습니다.)
 
 ## Async (브라우저 호환)
 
@@ -426,43 +446,45 @@ new Ddu64(options?);
 new Ddu64(dduChar, paddingChar, options?);
 ```
 
-| Option                 | Type                    | Default     | 설명                                                         |
-| ---------------------- | ----------------------- | ----------- | ------------------------------------------------------------ |
-| `dduSetSymbol`         | `DduSetSymbol`          | `DDU`       | 프리셋 선택                                                  |
-| `dduChar`              | `string \| string[]`    | -           | 커스텀 charset                                               |
-| `paddingChar`          | `string`                | -           | 패딩 문자                                                    |
-| `codaChar`             | `string[]`              | -           | 종성 조합 문자                                               |
-| `compress`             | `boolean`               | `false`     | 압축 활성화                                                  |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | `"deflate"` | 압축 알고리즘                                                |
-| `compressionLevel`     | `number`                | `6`         | 압축 레벨                                                    |
-| `encryptionKey`        | `string`                | -           | AES-256-GCM 암호화 키                                        |
-| `keyDerivation`        | `KeyDerivationOptions`  | `sha256`    | 키 파생 방식. 비밀번호 기반 키는 `pbkdf2`와 고유 `salt` 권장 |
-| `checksum`             | `boolean`               | `false`     | CRC32 체크섬                                                 |
-| `urlSafe`              | `boolean`               | `false`     | URL-Safe 변환                                                |
-| `obfuscate`            | `boolean`               | `false`     | 한글 난독화                                                  |
-| `chunkSize`            | `number`                | -           | 청크 분할 크기                                               |
-| `chunkSeparator`       | `string`                | `"\n"`      | 청크 구분자                                                  |
-| `maxDecodedBytes`      | `number`                | `67108864`  | 디코딩 크기 제한                                             |
-| `maxDecompressedBytes` | `number`                | `67108864`  | 압축해제 크기 제한                                           |
-| `wasmThreshold`        | `number`                | `16384`     | WASM 사용 임계값 (`Infinity`면 비활성화)                     |
-| `throwOnError`         | `boolean`               | `false`     | 초기화 에러 시 throw                                         |
+| Option                 | Type                      | Default       | 설명                                                         |
+| ---------------------- | ------------------------- | ------------- | ------------------------------------------------------------ |
+| `dduSetSymbol`         | `DduSetSymbol`            | `DDU`         | 프리셋 선택                                                  |
+| `dduChar`              | `string \| string[]`      | -             | 커스텀 charset                                               |
+| `paddingChar`          | `string`                  | -             | 패딩 문자                                                    |
+| `codaChar`             | `string[]`                | -             | 종성 조합 문자                                               |
+| `compress`             | `boolean`                 | `false`       | 압축 활성화                                                  |
+| `compressionAlgorithm` | `"deflate" \| "brotli"`   | `"deflate"`   | 압축 알고리즘                                                |
+| `compressionLevel`     | `number`                  | `6`           | 압축 레벨                                                    |
+| `encryptionKey`        | `string`                  | -             | AES-256-GCM 암호화 키                                        |
+| `keyDerivation`        | `KeyDerivationOptions`    | `sha256`      | 키 파생 방식. 비밀번호 기반 키는 `pbkdf2`와 고유 `salt` 권장 |
+| `checksum`             | `boolean`                 | `false`       | CRC32 체크섬                                                 |
+| `checksumScope`        | `"plaintext" \| "output"` | `"plaintext"` | 체크섬 계산 범위(`"output"`은 압축/암호화 후 바이트 기준)    |
+| `urlSafe`              | `boolean`                 | `false`       | URL-Safe 변환                                                |
+| `obfuscate`            | `boolean`                 | `false`       | 한글 난독화                                                  |
+| `chunkSize`            | `number`                  | -             | 청크 분할 크기                                               |
+| `chunkSeparator`       | `string`                  | `"\n"`        | 청크 구분자                                                  |
+| `maxDecodedBytes`      | `number`                  | `67108864`    | 디코딩 크기 제한                                             |
+| `maxDecompressedBytes` | `number`                  | `67108864`    | 압축해제 크기 제한                                           |
+| `wasmThreshold`        | `number`                  | `16384`       | WASM 사용 임계값 (`Infinity`면 비활성화)                     |
+| `throwOnError`         | `boolean`                 | `false`       | 초기화 에러 시 throw                                         |
 
 ## Per-Call Options
 
 `encode`, `decode`, `encodeAsync`, `decodeAsync` 등에서 호출별로 오버라이드 가능:
 
-| Option                 | Type                    | 설명               |
-| ---------------------- | ----------------------- | ------------------ |
-| `compress`             | `boolean`               | 압축 사용 여부     |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | 압축 알고리즘      |
-| `compressionLevel`     | `number`                | 압축 레벨          |
-| `encrypt`              | `boolean`               | 암호화 사용 여부   |
-| `checksum`             | `boolean`               | 체크섬 사용 여부   |
-| `obfuscate`            | `boolean`               | 난독화 사용 여부   |
-| `chunkSize`            | `number`                | 청크 크기          |
-| `maxDecodedBytes`      | `number`                | 디코딩 크기 제한   |
-| `maxDecompressedBytes` | `number`                | 압축해제 크기 제한 |
-| `onProgress`           | `(info) => void`        | 진행률 콜백        |
+| Option                 | Type                      | 설명               |
+| ---------------------- | ------------------------- | ------------------ |
+| `compress`             | `boolean`                 | 압축 사용 여부     |
+| `compressionAlgorithm` | `"deflate" \| "brotli"`   | 압축 알고리즘      |
+| `compressionLevel`     | `number`                  | 압축 레벨          |
+| `encrypt`              | `boolean`                 | 암호화 사용 여부   |
+| `checksum`             | `boolean`                 | 체크섬 사용 여부   |
+| `checksumScope`        | `"plaintext" \| "output"` | 체크섬 계산 범위   |
+| `obfuscate`            | `boolean`                 | 난독화 사용 여부   |
+| `chunkSize`            | `number`                  | 청크 크기          |
+| `maxDecodedBytes`      | `number`                  | 디코딩 크기 제한   |
+| `maxDecompressedBytes` | `number`                  | 압축해제 크기 제한 |
+| `onProgress`           | `(info) => void`          | 진행률 콜백        |
 
 ## Entry Points
 

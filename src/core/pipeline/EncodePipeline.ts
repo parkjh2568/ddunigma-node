@@ -12,6 +12,7 @@ type CompressionAlgorithm = "deflate" | "brotli";
 export interface EncodePipelineBaseContext {
   defaultCompress: boolean;
   defaultChecksum: boolean;
+  defaultChecksumScope: "plaintext" | "output";
   defaultChunkSize: number | undefined;
   defaultChunkSeparator: string;
   defaultCompressionLevel: number;
@@ -54,7 +55,10 @@ export function runSyncEncodePipeline(
   let workingData = typeof input === "string" ? stringToBytes(input) : input;
   reportStart(context, workingData.length);
 
-  const checksum = settings.shouldChecksum ? calculateCRC32(workingData) : "";
+  let checksum = "";
+  if (settings.shouldChecksum && settings.checksumScope === "plaintext") {
+    checksum = calculateCRC32(workingData);
+  }
 
   let compressionAlgorithm: CompressionAlgorithm | undefined;
   let compressedSize: number | undefined;
@@ -74,6 +78,11 @@ export function runSyncEncodePipeline(
     reportEncrypt(context, workingData.length);
     workingData = context.encrypt(workingData, context.getEncryptionAAD(compressionAlgorithm));
     isEncrypted = true;
+  }
+
+  // "output" 범위: 압축/암호화 후의 최종 와이어 바이트로 체크섬을 계산합니다.
+  if (settings.shouldChecksum && settings.checksumScope === "output") {
+    checksum = calculateCRC32(workingData);
   }
 
   return {
@@ -99,7 +108,10 @@ export async function runAsyncEncodePipeline(
   let workingData = typeof input === "string" ? stringToBytes(input) : input;
   reportStart(context, workingData.length);
 
-  const checksum = settings.shouldChecksum ? calculateCRC32(workingData) : "";
+  let checksum = "";
+  if (settings.shouldChecksum && settings.checksumScope === "plaintext") {
+    checksum = calculateCRC32(workingData);
+  }
 
   let compressionAlgorithm: CompressionAlgorithm | undefined;
   if (settings.shouldCompress) {
@@ -120,6 +132,11 @@ export async function runAsyncEncodePipeline(
       context.getEncryptionAAD(compressionAlgorithm),
     );
     isEncrypted = true;
+  }
+
+  // "output" 범위: 압축/암호화 후의 최종 와이어 바이트로 체크섬을 계산합니다.
+  if (settings.shouldChecksum && settings.checksumScope === "output") {
+    checksum = calculateCRC32(workingData);
   }
 
   return context.finalize(
@@ -151,6 +168,7 @@ function resolveEncodeSettings(
 ): {
   shouldCompress: boolean;
   shouldChecksum: boolean;
+  checksumScope: "plaintext" | "output";
   shouldEncrypt: boolean;
   chunkSize: number | undefined;
   chunkSeparator: string;
@@ -158,6 +176,7 @@ function resolveEncodeSettings(
   return {
     shouldCompress: options?.compress ?? context.defaultCompress,
     shouldChecksum: options?.checksum ?? context.defaultChecksum,
+    checksumScope: options?.checksumScope ?? context.defaultChecksumScope,
     shouldEncrypt: (options?.encrypt ?? true) && context.hasEncryptionKey,
     chunkSize: options?.chunkSize ?? context.defaultChunkSize,
     chunkSeparator: options?.chunkSeparator ?? context.defaultChunkSeparator,

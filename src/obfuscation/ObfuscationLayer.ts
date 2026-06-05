@@ -19,6 +19,7 @@ import {
   syllableToCharIndex,
   type SyllableMapConfig,
 } from "./syllableMap.js";
+import { buildObfuscationAlphabet } from "../core/internal/ObfuscationAlphabet.js";
 
 // ─── HangulObfuscationLayer ─────────────────────────────────────────────────
 
@@ -133,4 +134,25 @@ export function createObfuscationLayer(charSet: string[], paddingChar: string): 
 
   const alphabet = [...alphabetSet];
   return new HangulObfuscationLayer(alphabet);
+}
+
+/**
+ * Ddu64 인코더 출력과 호환되는 ObfuscationLayer를 생성합니다.
+ *
+ * `createObfuscationLayer`와 달리 charset/패딩 외에 footer 마커
+ * (ELYSIA/GRISEO/ENC/V3/V4)와 숫자(0-9)까지 알파벳에 포함하므로, 압축/암호화/파이프라인
+ * 마커가 붙은 실제 인코더 출력도 안전하게 deobfuscate할 수 있습니다.
+ *
+ * 일반적으로는 `Ddu64`의 `obfuscate` 옵션을 쓰는 것으로 충분하며, 이 헬퍼는 인코더와
+ * 동일한 난독화 매핑을 외부에서 재현해야 할 때 사용합니다.
+ *
+ * @param charSet - 인코딩에 사용되는 charset 문자
+ * @param paddingChar - 패딩 문자
+ * @returns 인코더 호환 ObfuscationLayer 인스턴스
+ */
+export function createEncoderObfuscationLayer(
+  charSet: string[],
+  paddingChar: string,
+): ObfuscationLayer {
+  return new HangulObfuscationLayer(buildObfuscationAlphabet(charSet, paddingChar));
 }

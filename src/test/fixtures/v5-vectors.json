@@ -1,0 +1,680 @@
+{
+  "version": "v5-draft-1",
+  "description": "ddunigma 5.0 V5 wire-format (self-describing checksum) deterministic test vectors. Footer checksum suffix: CK[P|O][8 lowercase hex]. payload+footer identical to 4.x. Encrypted vectors are round-trip-only (random IV).",
+  "markerSpec": {
+    "checksumMarkerV5": "CK",
+    "scopeChars": {
+      "plaintext": "P",
+      "output": "O"
+    },
+    "suffixPattern": "^CK[PO][0-9a-f]{8}$",
+    "legacyMarker": "CHK",
+    "notes": "Decoder must try V5 (CK[PO][8hex]) first, then legacy CHK[8hex]. Fixed-length + scope char + 8 hex validation mitigates accidental collisions in charsets containing C/H/K and hex digits."
+  },
+  "vectors": [
+    {
+      "id": "v5-ascii-hello-plain-scopeP",
+      "description": "ASCII 'Hello', no-compress, checksumScope=plaintext",
+      "input": {
+        "raw": "48656c6c6f",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": "읶뜟잉듖욷뜟뎾뭐CKPf7d18982",
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": "f7d18982"
+      },
+      "tags": [
+        "deterministic",
+        "plain",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-ascii-hello-deflate-scopeP",
+      "description": "ASCII 'Hello', deflate, checksumScope=plaintext",
+      "input": {
+        "raw": "48656c6c6f",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "compress": true,
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": "읶뜟잉듖욷뜟뎾뭐CKPf7d18982",
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": "f7d18982"
+      },
+      "tags": [
+        "deterministic",
+        "deflate",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-ascii-hello-encrypt-scopeP",
+      "description": "ASCII 'Hello', AES-256-GCM, checksumScope=plaintext (round-trip only)",
+      "input": {
+        "raw": "48656c6c6f",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "encryptionKey": "v5-vector-key",
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": null,
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": null
+      },
+      "tags": [
+        "round-trip-only",
+        "encrypt",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-ascii-hello-plain-scopeO",
+      "description": "ASCII 'Hello', no-compress, checksumScope=output",
+      "input": {
+        "raw": "48656c6c6f",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": "읶뜟잉듖욷뜟뎾뭐CKOf7d18982",
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": "f7d18982"
+      },
+      "tags": [
+        "deterministic",
+        "plain",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-ascii-hello-deflate-scopeO",
+      "description": "ASCII 'Hello', deflate, checksumScope=output",
+      "input": {
+        "raw": "48656c6c6f",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "compress": true,
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": "읶뜟잉듖욷뜟뎾뭐CKOf7d18982",
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": "f7d18982"
+      },
+      "tags": [
+        "deterministic",
+        "deflate",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-ascii-hello-encrypt-scopeO",
+      "description": "ASCII 'Hello', AES-256-GCM, checksumScope=output (round-trip only)",
+      "input": {
+        "raw": "48656c6c6f",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "encryptionKey": "v5-vector-key",
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": null,
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": null
+      },
+      "tags": [
+        "round-trip-only",
+        "encrypt",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-korean-plain-scopeP",
+      "description": "Korean UTF-8, no-compress, checksumScope=plaintext",
+      "input": {
+        "raw": "ec9588eb8595ed9598ec84b8ec9a94",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊CKP4c8b7af1",
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": "4c8b7af1"
+      },
+      "tags": [
+        "deterministic",
+        "plain",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-korean-deflate-scopeP",
+      "description": "Korean UTF-8, deflate, checksumScope=plaintext",
+      "input": {
+        "raw": "ec9588eb8595ed9598ec84b8ec9a94",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "compress": true,
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊CKP4c8b7af1",
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": "4c8b7af1"
+      },
+      "tags": [
+        "deterministic",
+        "deflate",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-korean-encrypt-scopeP",
+      "description": "Korean UTF-8, AES-256-GCM, checksumScope=plaintext (round-trip only)",
+      "input": {
+        "raw": "ec9588eb8595ed9598ec84b8ec9a94",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "encryptionKey": "v5-vector-key",
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": null,
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": null
+      },
+      "tags": [
+        "round-trip-only",
+        "encrypt",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-korean-plain-scopeO",
+      "description": "Korean UTF-8, no-compress, checksumScope=output",
+      "input": {
+        "raw": "ec9588eb8595ed9598ec84b8ec9a94",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊CKO4c8b7af1",
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": "4c8b7af1"
+      },
+      "tags": [
+        "deterministic",
+        "plain",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-korean-deflate-scopeO",
+      "description": "Korean UTF-8, deflate, checksumScope=output",
+      "input": {
+        "raw": "ec9588eb8595ed9598ec84b8ec9a94",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "compress": true,
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊CKO4c8b7af1",
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": "4c8b7af1"
+      },
+      "tags": [
+        "deterministic",
+        "deflate",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-korean-encrypt-scopeO",
+      "description": "Korean UTF-8, AES-256-GCM, checksumScope=output (round-trip only)",
+      "input": {
+        "raw": "ec9588eb8595ed9598ec84b8ec9a94",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "encryptionKey": "v5-vector-key",
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": null,
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": null
+      },
+      "tags": [
+        "round-trip-only",
+        "encrypt",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-binary-edge-plain-scopeP",
+      "description": "binary edge bytes, no-compress, checksumScope=plaintext",
+      "input": {
+        "raw": "00017f80ff",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": "뜌뜌뜡뎼야땼뎾뭐CKP37b2c8d3",
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": "37b2c8d3"
+      },
+      "tags": [
+        "deterministic",
+        "plain",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-binary-edge-deflate-scopeP",
+      "description": "binary edge bytes, deflate, checksumScope=plaintext",
+      "input": {
+        "raw": "00017f80ff",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "compress": true,
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": "뜌뜌뜡뎼야땼뎾뭐CKP37b2c8d3",
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": "37b2c8d3"
+      },
+      "tags": [
+        "deterministic",
+        "deflate",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-binary-edge-encrypt-scopeP",
+      "description": "binary edge bytes, AES-256-GCM, checksumScope=plaintext (round-trip only)",
+      "input": {
+        "raw": "00017f80ff",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "encryptionKey": "v5-vector-key",
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": null,
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": null
+      },
+      "tags": [
+        "round-trip-only",
+        "encrypt",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-binary-edge-plain-scopeO",
+      "description": "binary edge bytes, no-compress, checksumScope=output",
+      "input": {
+        "raw": "00017f80ff",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": "뜌뜌뜡뎼야땼뎾뭐CKO37b2c8d3",
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": "37b2c8d3"
+      },
+      "tags": [
+        "deterministic",
+        "plain",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-binary-edge-deflate-scopeO",
+      "description": "binary edge bytes, deflate, checksumScope=output",
+      "input": {
+        "raw": "00017f80ff",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "compress": true,
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": "뜌뜌뜡뎼야땼뎾뭐CKO37b2c8d3",
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": "37b2c8d3"
+      },
+      "tags": [
+        "deterministic",
+        "deflate",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-binary-edge-encrypt-scopeO",
+      "description": "binary edge bytes, AES-256-GCM, checksumScope=output (round-trip only)",
+      "input": {
+        "raw": "00017f80ff",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "encryptionKey": "v5-vector-key",
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": null,
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": null
+      },
+      "tags": [
+        "round-trip-only",
+        "encrypt",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-compressible-plain-scopeP",
+      "description": "highly compressible (200x 'A'), no-compress, checksumScope=plaintext",
+      "input": {
+        "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": "이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜢뭐CKP28bb3d98",
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": "28bb3d98"
+      },
+      "tags": [
+        "deterministic",
+        "plain",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-compressible-deflate-scopeP",
+      "description": "highly compressible (200x 'A'), deflate, checksumScope=plaintext",
+      "input": {
+        "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "compress": true,
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": "웆댰이웆뜠야뜌뜌뭐ELYSIA0CKP28bb3d98",
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": "28bb3d98"
+      },
+      "tags": [
+        "deterministic",
+        "deflate",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-compressible-encrypt-scopeP",
+      "description": "highly compressible (200x 'A'), AES-256-GCM, checksumScope=plaintext (round-trip only)",
+      "input": {
+        "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "encryptionKey": "v5-vector-key",
+        "checksum": true,
+        "checksumScope": "plaintext"
+      },
+      "checksumSource": "plaintext",
+      "expected": {
+        "encoded": null,
+        "checksumMarker": "CK",
+        "scopeChar": "P",
+        "checksumHex": null
+      },
+      "tags": [
+        "round-trip-only",
+        "encrypt",
+        "scope-plaintext"
+      ]
+    },
+    {
+      "id": "v5-compressible-plain-scopeO",
+      "description": "highly compressible (200x 'A'), no-compress, checksumScope=output",
+      "input": {
+        "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": "이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜡뜍이잊뜢뭐CKO28bb3d98",
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": "28bb3d98"
+      },
+      "tags": [
+        "deterministic",
+        "plain",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-compressible-deflate-scopeO",
+      "description": "highly compressible (200x 'A'), deflate, checksumScope=output",
+      "input": {
+        "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "compress": true,
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": "웆댰이웆뜠야뜌뜌뭐ELYSIA0CKO3c51fe9e",
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": "3c51fe9e"
+      },
+      "tags": [
+        "deterministic",
+        "deflate",
+        "scope-output"
+      ]
+    },
+    {
+      "id": "v5-compressible-encrypt-scopeO",
+      "description": "highly compressible (200x 'A'), AES-256-GCM, checksumScope=output (round-trip only)",
+      "input": {
+        "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+        "encoding": "binary"
+      },
+      "charset": {
+        "preset": "ddu"
+      },
+      "options": {
+        "encryptionKey": "v5-vector-key",
+        "checksum": true,
+        "checksumScope": "output"
+      },
+      "checksumSource": "output",
+      "expected": {
+        "encoded": null,
+        "checksumMarker": "CK",
+        "scopeChar": "O",
+        "checksumHex": null
+      },
+      "tags": [
+        "round-trip-only",
+        "encrypt",
+        "scope-output"
+      ]
+    }
+  ]
+}

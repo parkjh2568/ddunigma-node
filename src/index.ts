@@ -65,7 +65,11 @@ export { detectRuntime, getAdapter } from "./adapters/detect.js";
 
 // ─── 난독화 ──────────────────────────────────────────────────────────────────
 
-export { HangulObfuscationLayer, createObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
+export {
+  HangulObfuscationLayer,
+  createObfuscationLayer,
+  createEncoderObfuscationLayer,
+} from "./obfuscation/ObfuscationLayer.js";
 
 // ─── WASM ───────────────────────────────────────────────────────────────────
 
