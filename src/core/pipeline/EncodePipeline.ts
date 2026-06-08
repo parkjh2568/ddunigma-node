@@ -67,8 +67,8 @@ export function runSyncEncodePipeline(
     const { algo, level } = resolveCompressionParams(options, context);
     reportCompress(context, workingData.length);
     const compressed = context.compress(workingData, algo, level);
-    compressedSize = compressed.length;
     if (compressed.length < workingData.length) {
+      compressedSize = compressed.length;
       workingData = compressed;
       compressionAlgorithm = algo;
     }
@@ -105,7 +105,7 @@ export async function runAsyncEncodePipeline(
   input: Uint8Array | string,
   options: DduOptions | undefined,
   context: AsyncEncodePipelineContext,
-): Promise<string> {
+): Promise<EncodePipelineResult> {
   const settings = resolveEncodeSettings(options, context);
   let workingData = typeof input === "string" ? stringToBytes(input) : input;
   reportStart(context, workingData.length);
@@ -116,11 +116,13 @@ export async function runAsyncEncodePipeline(
   }
 
   let compressionAlgorithm: CompressionAlgorithm | undefined;
+  let compressedSize: number | undefined;
   if (settings.shouldCompress) {
     const { algo, level } = resolveCompressionParams(options, context);
     reportCompress(context, workingData.length);
     const compressed = await context.compress(workingData, algo, level);
     if (compressed.length < workingData.length) {
+      compressedSize = compressed.length;
       workingData = compressed;
       compressionAlgorithm = algo;
     }
@@ -141,16 +143,19 @@ export async function runAsyncEncodePipeline(
     checksum = calculateCRC32(workingData);
   }
 
-  return context.finalize(
-    workingData,
-    compressionAlgorithm,
-    isEncrypted,
-    checksum,
-    settings.shouldChecksum,
-    settings.checksumScope,
-    settings.chunkSize,
-    settings.chunkSeparator,
-  );
+  return {
+    encoded: context.finalize(
+      workingData,
+      compressionAlgorithm,
+      isEncrypted,
+      checksum,
+      settings.shouldChecksum,
+      settings.checksumScope,
+      settings.chunkSize,
+      settings.chunkSeparator,
+    ),
+    compressedSize,
+  };
 }
 
 function resolveCompressionParams(

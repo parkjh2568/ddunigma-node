@@ -195,8 +195,8 @@ export interface DduOptions {
   /** 체크섬 추가 여부 (CRC32) */
   checksum?: boolean;
   /**
-   * 체크섬 계산 범위 (기본값: "plaintext").
-   * - `"plaintext"`: 원본 입력 바이트의 CRC32 (레거시 기본). 암호화와 함께 쓰면 평문 CRC가 출력에 노출됩니다.
+   * 체크섬 계산 범위 (기본값: "output").
+   * - `"plaintext"`: 원본 입력 바이트의 CRC32 (레거시 범위). 암호화와 함께 쓰면 평문 CRC가 출력에 노출됩니다.
    * - `"output"`: 인코딩 파이프라인 최종 바이트(압축/암호화 후, 와이어에 실리는 바이트)의 CRC32.
    *   암호화 시 평문 CRC를 노출하지 않고, 복호화 이전에 전송 손상을 감지합니다.
    *
@@ -221,6 +221,12 @@ export interface DduOptions {
 export interface DduConstructorOptions extends DduOptions {
   /** 미리 정의된 charset 심볼 */
   dduSetSymbol?: DduSetSymbol;
+  /**
+   * @deprecated Runtime string encode/decode paths are always UTF-8 based.
+   * This option is accepted for legacy type compatibility only and has no
+   * runtime effect.
+   */
+  encoding?: DduTextEncoding;
   /** 커스텀 charset 문자 배열 또는 문자열 */
   dduChar?: string[] | string;
   /** 종성 문자 배열 (dduChar × codaChar 조합으로 최종 charset 동적 생성) */

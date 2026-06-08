@@ -11,6 +11,7 @@
 
 import { describe, it, expect } from "vitest";
 import { BrowserAdapter } from "../adapters/BrowserAdapter.js";
+import type { PlatformAdapter } from "../core/types.js";
 
 function supportsCompressionFormat(format: string): boolean {
   if (typeof CompressionStream === "undefined" || typeof DecompressionStream === "undefined") {
@@ -27,7 +28,8 @@ function supportsCompressionFormat(format: string): boolean {
 }
 
 describe("BrowserAdapter", () => {
-  const adapter = new BrowserAdapter();
+  const browserAdapter = new BrowserAdapter();
+  const adapter: PlatformAdapter = browserAdapter;
 
   describe("capability flags", () => {
     it("reports supportsSyncCrypto as false", () => {
@@ -315,14 +317,14 @@ describe("BrowserAdapter", () => {
       const original = new TextEncoder().encode("Hello Brotli ".repeat(100));
 
       if (!adapter.supportsBrotli) {
-        await expect(adapter.brotliCompress(original)).rejects.toThrow(
+        await expect(browserAdapter.brotliCompress(original)).rejects.toThrow(
           "Brotli compression is unsupported",
         );
         return;
       }
 
-      const compressed = await adapter.brotliCompress(original);
-      const decompressed = await adapter.brotliDecompress(compressed);
+      const compressed = await browserAdapter.brotliCompress(original);
+      const decompressed = await browserAdapter.brotliDecompress(compressed);
 
       expect(decompressed).toEqual(original);
     });

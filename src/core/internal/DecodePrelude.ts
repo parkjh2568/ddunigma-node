@@ -16,6 +16,7 @@ import {
   type PipelineVersion,
 } from "../wireFormat.js";
 import type { DduOptions } from "../types.js";
+import { Ddu64ChecksumError } from "../errors.js";
 import {
   assertCanonicalPadding,
   assertDecodedBitLength,
@@ -81,6 +82,11 @@ export function runDecodePrelude(
     extractedChecksum = result.checksum;
     extractedChecksumScope = result.scope;
     workingInput = result.data;
+    if (!extractedChecksum) {
+      throw new Ddu64ChecksumError(
+        "[Ddu64 checksum] Checksum verification requested, but no checksum marker was found.",
+      );
+    }
   }
 
   if (context.shouldObfuscate(options)) {

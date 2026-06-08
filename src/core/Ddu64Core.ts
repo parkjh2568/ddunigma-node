@@ -73,6 +73,14 @@ const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 
 /**
+ * AES-GCM 와이어 오버헤드 (IV 12바이트 + authTag 16바이트).
+ * Node/Browser 어댑터 모두 `IV(12) + authTag(16) + 암호문(N)` 레이아웃을 사용하며,
+ * AES-GCM 암호문 길이는 평문 길이와 동일하므로 암호화 출력 길이는 항상 `평문 + 28`로 결정적입니다.
+ * `getStats`가 실제 암호화 없이 와이어 길이를 정확히 산출하는 데 사용합니다.
+ */
+const AEAD_OVERHEAD_BYTES = 28;
+
+/**
  * 플랫폼 독립 Ddu64 인코더/디코더.
  *
  * 모든 암호화 및 압축 연산에 PlatformAdapter를 사용합니다.
@@ -394,12 +402,13 @@ export class Ddu64Core {
     input: Uint8Array | string,
     options?: DduOptions,
   ): Promise<string> {
-    return runAsyncEncodePipeline(input, options, {
+    const result = await runAsyncEncodePipeline(input, options, {
       ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) =>
         compressAsyncWithAdapter(this.adapter, data, algorithm, level),
       encrypt: (data, aad) => encryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
     });
+    return result.encoded;
   }
 
   /**
@@ -489,10 +498,32 @@ export class Ddu64Core {
    */
   getStats(input: Uint8Array | string, options?: DduOptions): DduEncodeStats {
     const originalData = typeof input === "string" ? stringToBytes(input) : input;
-    const originalSize = originalData.length;
     // 이미 바이트로 변환된 originalData를 재사용해 문자열 입력의 중복 UTF-8 인코딩을 피합니다.
-    const { encoded, compressedSize } = this.encodeInternal(originalData, options);
-    const encodedSize = encoded.length;
+    // 실제 AES-GCM 연산을 건너뛰는 통계 전용 인코딩으로 와이어 길이만 정확히 산출합니다.
+    const { encoded, compressedSize } = this.encodeStatsInternal(originalData, options);
+    return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
+  }
+
+  /**
+   * 비동기 인코딩 통계를 가져옵니다.
+   *
+   * 브라우저/Workers처럼 압축이 비동기 API로만 제공되는 런타임에서는 `compress: true`
+   * 통계 계산에 이 메서드를 사용하세요.
+   *
+   * @group Introspection
+   */
+  async getStatsAsync(input: Uint8Array | string, options?: DduOptions): Promise<DduEncodeStats> {
+    const originalData = typeof input === "string" ? stringToBytes(input) : input;
+    const { encoded, compressedSize } = await this.encodeStatsAsyncInternal(originalData, options);
+    return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
+  }
+
+  private buildEncodeStats(
+    originalSize: number,
+    encodedSize: number,
+    compressedSize: number | undefined,
+    options: DduOptions | undefined,
+  ): DduEncodeStats {
     const expansionRatio = originalSize > 0 ? encodedSize / originalSize : 0;
     const shouldCompress = options?.compress ?? this.defaultCompress;
     const compressionRatio =
@@ -524,6 +555,39 @@ export class Ddu64Core {
       ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) => this.compressSync(data, algorithm, level),
       encrypt: (data, aad) => this.encryptSync(data, aad),
+    });
+  }
+
+  /**
+   * getStats 전용 인코딩: 실제 AES-GCM 연산을 생략하고 길이만 정확한 더미 암호화를 사용합니다.
+   *
+   * 암호화 출력 길이는 `평문 + AEAD_OVERHEAD_BYTES`로 결정적이고, 비트팩/푸터/체크섬/난독화/
+   * URL-safe/청킹은 모두 입력 바이트 "길이"에만 의존(바이트 "값"과 무관)하므로, 더미 암호문(0으로 채운
+   * 동일 길이 버퍼)으로 마무리해도 `encoded.length`는 실제 `encode()` 출력과 바이트 단위로 일치합니다.
+   * 압축은 결과 크기와 적용 여부 판단에 필요하므로 실제로 수행합니다.
+   *
+   * 이 등식(통계 길이 === 실제 encode 길이)은 property test로 고정됩니다.
+   */
+  private encodeStatsInternal(
+    input: Uint8Array,
+    options?: DduOptions,
+  ): { encoded: string; compressedSize?: number } {
+    return runSyncEncodePipeline(input, options, {
+      ...this.buildEncodeBaseContext(options),
+      compress: (data, algorithm, level) => this.compressSync(data, algorithm, level),
+      encrypt: (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
+    });
+  }
+
+  private async encodeStatsAsyncInternal(
+    input: Uint8Array,
+    options?: DduOptions,
+  ): Promise<{ encoded: string; compressedSize?: number }> {
+    return runAsyncEncodePipeline(input, options, {
+      ...this.buildEncodeBaseContext(options),
+      compress: (data, algorithm, level) =>
+        compressAsyncWithAdapter(this.adapter, data, algorithm, level),
+      encrypt: async (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
     });
   }
 
@@ -799,12 +863,13 @@ export class Ddu64Core {
    */
   private shouldObfuscate(options?: DduOptions): boolean {
     const obfuscate = options?.obfuscate ?? this.defaultObfuscate;
-    if (obfuscate && !this.encryptionKey) {
+    if (!obfuscate) return false;
+    if (!this.encryptionKey || options?.encrypt === false) {
       throw new Ddu64ObfuscationError(
         "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
       );
     }
-    return obfuscate;
+    return true;
   }
 
   // ─── 유틸리티 메서드 ───────────────────────────────────────────────────────

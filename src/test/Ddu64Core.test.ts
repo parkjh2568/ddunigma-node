@@ -28,6 +28,20 @@ function createEncoder(
   } as any);
 }
 
+function supportsCompressionFormat(format: string): boolean {
+  if (typeof CompressionStream === "undefined" || typeof DecompressionStream === "undefined") {
+    return false;
+  }
+
+  try {
+    new CompressionStream(format as CompressionFormat);
+    new DecompressionStream(format as CompressionFormat);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("Ddu64Core", () => {
   describe("Basic encode/decode round-trip", () => {
     it("should round-trip with Uint8Array input", () => {
@@ -247,6 +261,14 @@ describe("Ddu64Core", () => {
         expect(isDdu64Error(err)).toBe(true);
         expect((err as Ddu64ChecksumError).code).toBe(Ddu64ErrorCode.ChecksumMismatch);
       }
+    });
+
+    it("should reject missing checksum when checksum verification is requested", () => {
+      const plainEncoder = createEncoder();
+      const checksumEncoder = createEncoder({ checksum: true });
+      const encodedWithoutChecksum = plainEncoder.encode("no checksum marker");
+
+      expect(() => checksumEncoder.decode(encodedWithoutChecksum)).toThrow(Ddu64ChecksumError);
     });
   });
 
@@ -491,11 +513,45 @@ describe("Ddu64Core", () => {
       expect(stats.compressionRatio!).toBeLessThan(1); // Should compress well
     });
 
+    it("omits compression stats when compression is attempted but not applied", () => {
+      const encoder = createEncoder({ compress: true });
+      const input = new Uint8Array(64);
+      for (let i = 0; i < input.length; i++) input[i] = (i * 31 + 17) & 0xff;
+
+      const stats = encoder.getStats(input);
+      expect(stats.compressedSize).toBeUndefined();
+      expect(stats.compressionRatio).toBeUndefined();
+    });
+
     it("returns stats for Uint8Array input", () => {
       const encoder = createEncoder();
       const input = new Uint8Array([1, 2, 3, 4, 5]);
       const stats = encoder.getStats(input);
       expect(stats.originalSize).toBe(5);
+      expect(stats.encodedSize).toBeGreaterThan(0);
+    });
+
+    it("getStatsAsync matches getStats with a sync-capable adapter", async () => {
+      const encoder = createEncoder({ compress: true, encryptionKey: "stats-async-key" });
+      const input = "A".repeat(1000);
+
+      await expect(encoder.getStatsAsync(input)).resolves.toEqual(encoder.getStats(input));
+    });
+
+    it("getStatsAsync supports async-only compression adapters", async () => {
+      if (!supportsCompressionFormat("deflate-raw")) return;
+
+      const encoder = new Ddu64Core(undefined, undefined, {
+        adapter: new BrowserAdapter(),
+        compress: true,
+      });
+      const input = "A".repeat(1000);
+
+      expect(() => encoder.getStats(input)).toThrow();
+      const stats = await encoder.getStatsAsync(input);
+      expect(stats.originalSize).toBe(1000);
+      expect(stats.compressedSize).toBeDefined();
+      expect(stats.compressionRatio).toBeDefined();
       expect(stats.encodedSize).toBeGreaterThan(0);
     });
   });
@@ -585,6 +641,35 @@ describe("Ddu64Core", () => {
     it("should throw when per-call obfuscate: true without encryption key", () => {
       const encoder = createEncoder(); // no encryption key
       expect(() => encoder.encode("test", { obfuscate: true })).toThrow(
+        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
+      );
+    });
+
+    it("should throw when obfuscation is requested with per-call encrypt: false", async () => {
+      const encoder = createEncoder({ encryptionKey: "obfuscation-contract-key" });
+      const options = { encrypt: false, obfuscate: true };
+
+      expect(() => encoder.encode("test", options)).toThrow(
+        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
+      );
+      await expect(encoder.encodeAsync("test", options)).rejects.toThrow(
+        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
+      );
+      expect(() => encoder.getStats("test", options)).toThrow(
+        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
+      );
+      await expect(encoder.getStatsAsync("test", options)).rejects.toThrow(
+        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
+      );
+    });
+
+    it("should throw when default obfuscation is active and per-call encrypt is disabled", () => {
+      const encoder = createEncoder({
+        encryptionKey: "default-obfuscation-contract-key",
+        obfuscate: true,
+      });
+
+      expect(() => encoder.encode("test", { encrypt: false })).toThrow(
         "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
       );
     });

@@ -14,7 +14,8 @@
 //! - `alloc(size)` / `dealloc(ptr, size)` for memory management
 //! - `encode(input_ptr, input_len, bit_length, charset_size, use_power_of_two)` -> encoded ptr
 //! - `decode(indices_ptr, indices_len, bit_length, charset_size, use_power_of_two, padding_bits)` -> decoded ptr
-//! - `get_result_ptr()` / `get_result_len()` / `get_padding_bits()` for reading results
+//! - `get_result_ptr()` / `get_padding_bits()` for reading results
+//!   (encode/decode return the element count directly)
 //!
 //! Compatible with: browsers, Node.js 18+, Deno, Cloudflare Workers.
 
@@ -91,19 +92,6 @@ pub extern "C" fn get_result_ptr() -> *const u8 {
         st.result_u16_buf.as_ptr() as *const u8
     } else {
         st.result_buf.as_ptr()
-    }
-}
-
-/// Get the length of the result buffer in elements (not bytes).
-/// For encode: number of u16 indices.
-/// For decode: number of u8 bytes.
-#[no_mangle]
-pub extern "C" fn get_result_len() -> usize {
-    let st = state();
-    if st.last_result_is_u16 {
-        st.result_u16_buf.len()
-    } else {
-        st.result_buf.len()
     }
 }
 

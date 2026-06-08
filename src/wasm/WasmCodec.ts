@@ -55,7 +55,6 @@ interface WasmExports {
     paddingBits: number,
   ): number;
   get_result_ptr(): number;
-  get_result_len(): number;
   get_padding_bits(): number;
 }
 
@@ -239,7 +238,6 @@ async function instantiateWasm(bytes: ArrayBuffer): Promise<WasmExports | null> 
       typeof exports.encode !== "function" ||
       typeof exports.decode !== "function" ||
       typeof exports.get_result_ptr !== "function" ||
-      typeof exports.get_result_len !== "function" ||
       typeof exports.get_padding_bits !== "function" ||
       !exports.memory
     ) {

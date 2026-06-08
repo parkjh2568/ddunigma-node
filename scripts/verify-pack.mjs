@@ -12,6 +12,12 @@ const esbuildBin = join(
   ".bin",
   process.platform === "win32" ? "esbuild.cmd" : "esbuild",
 );
+const tscBin = join(
+  cwd,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "tsc.cmd" : "tsc",
+);
 
 function fail(message) {
   throw new Error(`[pack:check] ${message}`);
@@ -175,6 +181,110 @@ async function runBrowserBundleSmoke(packageDir) {
   }
 }
 
+function runTypeSmoke(packageDir) {
+  const tsconfigPath = join(packageDir, "__pack-types.tsconfig.json");
+  writeFileSync(
+    tsconfigPath,
+    JSON.stringify(
+      {
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          noEmit: true,
+          strict: true,
+          target: "ES2022",
+          typeRoots: [join(cwd, "node_modules", "@types")],
+        },
+        include: ["__pack-types-smoke.ts", "__pack-types-smoke.cts"],
+      },
+      null,
+      2,
+    ),
+    "utf-8",
+  );
+
+  writeSmokeFile(
+    packageDir,
+    "__pack-types-smoke.ts",
+    `
+      import {
+        Ddu64,
+        Ddu64Core,
+        Ddu64Node,
+        DduSetSymbol,
+        type DduConstructorOptions,
+        type DduOptions,
+        type PlatformAdapter,
+      } from "@ddunigma/node";
+      import { Ddu64 as BrowserDdu64, BrowserAdapter } from "@ddunigma/node/browser";
+      import { Ddu64 as CoreDdu64, CharsetBuilder } from "@ddunigma/node/core";
+
+      const constructorOptions: DduConstructorOptions = {
+        dduSetSymbol: DduSetSymbol.DDU,
+        checksum: true,
+        checksumScope: "output",
+        encoding: "latin1",
+        wasmThreshold: 16 * 1024,
+      };
+      const callOptions: DduOptions = { checksum: true, compress: false };
+
+      const nodeEncoder = new Ddu64(constructorOptions);
+      const explicitNodeEncoder: Ddu64Node = nodeEncoder;
+      const encoded = explicitNodeEncoder.encode("type smoke", callOptions);
+      explicitNodeEncoder.decode(encoded, callOptions);
+      const asyncStats = await explicitNodeEncoder.getStatsAsync("type smoke", callOptions);
+      const syncStats = explicitNodeEncoder.getStats("type smoke", callOptions);
+      asyncStats.encodedSize satisfies number;
+      syncStats.encodedSize satisfies number;
+
+      const browserEncoder = new BrowserDdu64();
+      const browserAdapter: PlatformAdapter = new BrowserAdapter();
+      browserAdapter.randomBytes(1);
+      await browserEncoder.encodeAsync("browser type smoke");
+      await browserEncoder.getStatsAsync("browser type smoke");
+
+      const coreEncoder: Ddu64Core = new CoreDdu64();
+      coreEncoder.decode(coreEncoder.encode("core type smoke"));
+      CharsetBuilder.uppercase().build();
+    `,
+  );
+
+  writeSmokeFile(
+    packageDir,
+    "__pack-types-smoke.cts",
+    `
+      import node = require("@ddunigma/node");
+      import browser = require("@ddunigma/node/browser");
+      import core = require("@ddunigma/node/core");
+
+      const callOptions: node.DduOptions = { checksum: true, compress: false };
+      const constructorOptions: node.DduConstructorOptions = {
+        dduSetSymbol: node.DduSetSymbol.DDU,
+        checksumScope: "output",
+      };
+
+      const nodeEncoder: node.Ddu64Node = new node.Ddu64(constructorOptions);
+      const encoded = nodeEncoder.encode("cjs type smoke", callOptions);
+      nodeEncoder.decode(encoded, callOptions);
+      const stats: node.DduEncodeStats = nodeEncoder.getStats("cjs type smoke");
+      const asyncStats: Promise<node.DduEncodeStats> = nodeEncoder.getStatsAsync("cjs type smoke");
+      stats.encodedSize satisfies number;
+      void asyncStats;
+
+      const browserEncoder = new browser.Ddu64();
+      const browserStats: Promise<browser.DduEncodeStats> =
+        browserEncoder.getStatsAsync("browser cjs type smoke");
+      void browserStats;
+
+      const coreEncoder: core.Ddu64Core = new core.Ddu64();
+      coreEncoder.decode(coreEncoder.encode("core cjs type smoke"));
+      core.CharsetBuilder.uppercase().build();
+    `,
+  );
+
+  run(tscBin, ["-p", tsconfigPath], { cwd: packageDir }, "TypeScript package smoke test");
+}
+
 try {
   const distDir = join(cwd, "dist");
   if (!existsSync(distDir)) {
@@ -264,10 +374,12 @@ try {
 
   const packageDir = join(extractDir, "package");
   runNodeSmoke(packageDir);
+  runTypeSmoke(packageDir);
   await runBrowserBundleSmoke(packageDir);
 
   console.log("[pack:check] npm pack dry-run passed");
   console.log("[pack:check] extracted package smoke tests passed");
+  console.log("[pack:check] TypeScript package smoke test passed");
   console.log("[pack:check] browser bundle smoke tests passed");
   console.log(`[pack:check] entryCount=${manifest.entryCount}`);
   console.log(`[pack:check] unpackedSize=${manifest.unpackedSize}`);

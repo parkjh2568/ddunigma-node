@@ -254,10 +254,10 @@ describe("Origin Cross-Platform Compatibility", () => {
           }
         }
 
-        expect(actualPaddingCount).toBe(
-          expectedPaddingCount,
+        expect(
+          actualPaddingCount,
           `Size ${size}: expected ${expectedPaddingCount} padding chars, got ${actualPaddingCount}`,
-        );
+        ).toBe(expectedPaddingCount);
       }
     });
   });
@@ -333,10 +333,10 @@ describe("Origin Cross-Platform Compatibility", () => {
         const nodeEncoded = encoder.encode(input);
         const originEncoded = originDdu64Encode(input);
 
-        expect(nodeEncoded).toBe(
-          originEncoded,
+        expect(
+          nodeEncoded,
           `Byte 0x${byte.toString(16).padStart(2, "0")}: Node="${nodeEncoded}" vs Origin="${originEncoded}"`,
-        );
+        ).toBe(originEncoded);
       }
     });
   });

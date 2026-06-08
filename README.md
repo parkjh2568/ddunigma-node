@@ -93,6 +93,10 @@ const ddu = new Ddu64({
 
 압축은 결과가 원본보다 작아질 때만 적용됩니다. 압축 여부는 출력에 기록되어 디코딩 시 자동 처리됩니다.
 
+브라우저/Workers 진입점은 런타임의 `CompressionStream` / `DecompressionStream` 지원에 의존합니다.
+`compressionLevel`은 Node.js `zlib`에서는 반영되지만, Web API 기반 브라우저 압축에서는 런타임이
+품질 레벨을 받지 않아 무시될 수 있습니다. Brotli 역시 런타임별 지원 여부가 다릅니다.
+
 ## Encryption
 
 ```typescript
@@ -121,7 +125,9 @@ const decoded = ddu.decode(encoded, { checksum: true }); // 무결성 검증 후
 ```
 
 - 우발적 손상 감지용입니다(변조 방지가 필요하면 `encryptionKey` 사용).
-- 디코딩 시에도 `checksum: true`를 지정해야 합니다.
+- 5.0 형식은 `CK[P|O][8 hex]` 접미사를 사용합니다. `P`는 plaintext CRC32, `O`는 인코딩 파이프라인 최종 바이트 CRC32입니다.
+- 기본 `checksumScope`는 `"output"`입니다. 암호화 시 평문 CRC 노출을 피합니다.
+- 디코딩 시에도 `checksum: true`를 지정해야 합니다. 이 옵션이 켜져 있는데 checksum 접미사가 없으면 실패합니다.
 
 ## URL-Safe
 
@@ -146,6 +152,12 @@ const ddu = new Ddu64({ encryptionKey: "secret", obfuscate: true });
 // 출력이 한글 음절 블록(U+AC00–U+D7A3)으로 변환됨 (암호화 필수)
 ```
 
+난독화는 실제 암호화된 payload에만 적용됩니다. `obfuscate: true`와 `encrypt: false`를 같은 호출에
+지정하면 실패합니다.
+
+`checksum: true`와 함께 쓰면 checksum 접미사(`CKO...` / `CKP...`)는 난독화 뒤에 붙는 ASCII 메타데이터로 남습니다.
+즉 전체 출력이 한글 음절만으로 구성된다고 가정하면 안 됩니다.
+
 ## Async (브라우저)
 
 브라우저 등에서는 비동기 메서드를 사용합니다.
@@ -160,13 +172,37 @@ const decoded = await ddu.decodeAsync(encoded);
 
 Node.js에서도 `encodeAsync` / `decodeAsync`를 사용할 수 있습니다.
 
+## Stats
+
+```typescript
+const stats = ddu.getStats("payload", { compress: true });
+const asyncStats = await ddu.getStatsAsync("payload", { compress: true });
+```
+
+`getStats`는 동기 압축 어댑터가 있는 런타임(Node.js)에 적합합니다. 브라우저/Workers처럼 압축이
+비동기 Web API로만 제공되는 런타임에서는 `getStatsAsync`를 사용하세요. 두 메서드는 실제 암호화
+연산 없이 AES-GCM 와이어 길이를 계산하지만, 압축 적용 여부와 `compressedSize` 산출을 위해 압축은
+실제로 수행합니다.
+
+## WASM
+
+대형 payload의 비트 패킹은 선택적으로 WASM 가속을 사용할 수 있습니다. WASM은 자동으로 강제되지 않으며,
+사용하려면 애플리케이션 시작 시 `preloadWasm()`을 호출해 준비시키는 것을 권장합니다.
+
+```typescript
+import { Ddu64, preloadWasm } from "@ddunigma/node";
+
+await preloadWasm();
+const ddu = new Ddu64({ wasmThreshold: 16 * 1024 });
+```
+
 ## Entry Points
 
 | Import 경로              | 용도                                          |
 | ------------------------ | --------------------------------------------- |
 | `@ddunigma/node`         | Node.js 전체 기능 (동기+비동기, `Buffer`)     |
 | `@ddunigma/node/browser` | 브라우저 / Workers / Deno / Bun (비동기)      |
-| `@ddunigma/node/core`    | 최소 코어 (인코딩/디코딩만, 어댑터 직접 주입) |
+| `@ddunigma/node/core`    | 최소 코어 (어댑터 직접 주입, WASM helper export) |
 
 ## Errors
 
@@ -197,11 +233,14 @@ try {
 | `encryptionKey`        | `string`                | -           | AES-256-GCM 암호화 키           |
 | `keyDerivation`        | `KeyDerivationOptions`  | `pbkdf2`    | 키 파생 방식 (레거시: `sha256`) |
 | `checksum`             | `boolean`               | `false`     | CRC32 체크섬                    |
+| `checksumScope`        | `"plaintext" \| "output"` | `"output"` | CRC32 계산 범위                 |
 | `urlSafe`              | `boolean`               | `false`     | URL-Safe 변환                   |
 | `obfuscate`            | `boolean`               | `false`     | 한글 난독화 (암호화 필요)       |
 | `chunkSize`            | `number`                | -           | 청크 분할 크기                  |
 | `chunkSeparator`       | `string`                | `"\n"`      | 청크 구분자                     |
 | `maxDecodedBytes`      | `number`                | `67108864`  | 디코딩 크기 제한                |
+| `maxDecompressedBytes` | `number`                | `67108864`  | 압축해제 크기 제한              |
+| `wasmThreshold`        | `number`                | `16384`     | WASM 사용 임계값 (`Infinity`로 비활성화) |
 | `throwOnError`         | `boolean`               | `true`      | 초기화 오류 시 throw            |
 
 ## License
