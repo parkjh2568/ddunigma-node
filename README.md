@@ -198,10 +198,10 @@ const ddu = new Ddu64({ wasmThreshold: 16 * 1024 });
 
 ## Entry Points
 
-| Import 경로              | 용도                                          |
-| ------------------------ | --------------------------------------------- |
-| `@ddunigma/node`         | Node.js 전체 기능 (동기+비동기, `Buffer`)     |
-| `@ddunigma/node/browser` | 브라우저 / Workers / Deno / Bun (비동기)      |
+| Import 경로              | 용도                                             |
+| ------------------------ | ------------------------------------------------ |
+| `@ddunigma/node`         | Node.js 전체 기능 (동기+비동기, `Buffer`)        |
+| `@ddunigma/node/browser` | 브라우저 / Workers / Deno / Bun (비동기)         |
 | `@ddunigma/node/core`    | 최소 코어 (어댑터 직접 주입, WASM helper export) |
 
 ## Errors
@@ -224,24 +224,46 @@ try {
 
 생성자(`new Ddu64({ ... })`) 또는 호출별(`encode`/`decode`의 두 번째 인자)로 지정합니다.
 
-| Option                 | Type                    | Default     | 설명                            |
-| ---------------------- | ----------------------- | ----------- | ------------------------------- |
-| `dduSetSymbol`         | `DduSetSymbol`          | `DDU`       | 프리셋 선택                     |
-| `compress`             | `boolean`               | `false`     | 압축 사용 여부                  |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | `"deflate"` | 압축 알고리즘                   |
-| `compressionLevel`     | `number`                | `6`         | 압축 레벨                       |
-| `encryptionKey`        | `string`                | -           | AES-256-GCM 암호화 키           |
-| `keyDerivation`        | `KeyDerivationOptions`  | `pbkdf2`    | 키 파생 방식 (레거시: `sha256`) |
-| `checksum`             | `boolean`               | `false`     | CRC32 체크섬                    |
-| `checksumScope`        | `"plaintext" \| "output"` | `"output"` | CRC32 계산 범위                 |
-| `urlSafe`              | `boolean`               | `false`     | URL-Safe 변환                   |
-| `obfuscate`            | `boolean`               | `false`     | 한글 난독화 (암호화 필요)       |
-| `chunkSize`            | `number`                | -           | 청크 분할 크기                  |
-| `chunkSeparator`       | `string`                | `"\n"`      | 청크 구분자                     |
-| `maxDecodedBytes`      | `number`                | `67108864`  | 디코딩 크기 제한                |
-| `maxDecompressedBytes` | `number`                | `67108864`  | 압축해제 크기 제한              |
-| `wasmThreshold`        | `number`                | `16384`     | WASM 사용 임계값 (`Infinity`로 비활성화) |
-| `throwOnError`         | `boolean`               | `true`      | 초기화 오류 시 throw            |
+| Option                 | Type                      | Default     | 설명                                     |
+| ---------------------- | ------------------------- | ----------- | ---------------------------------------- |
+| `dduSetSymbol`         | `DduSetSymbol`            | `DDU`       | 프리셋 선택                              |
+| `compress`             | `boolean`                 | `false`     | 압축 사용 여부                           |
+| `compressionAlgorithm` | `"deflate" \| "brotli"`   | `"deflate"` | 압축 알고리즘                            |
+| `compressionLevel`     | `number`                  | `6`         | 압축 레벨                                |
+| `encryptionKey`        | `string`                  | -           | AES-256-GCM 암호화 키                    |
+| `keyDerivation`        | `KeyDerivationOptions`    | `pbkdf2`    | 키 파생 방식 (레거시: `sha256`)          |
+| `checksum`             | `boolean`                 | `false`     | CRC32 체크섬                             |
+| `checksumScope`        | `"plaintext" \| "output"` | `"output"`  | CRC32 계산 범위                          |
+| `urlSafe`              | `boolean`                 | `false`     | URL-Safe 변환                            |
+| `obfuscate`            | `boolean`                 | `false`     | 한글 난독화 (암호화 필요)                |
+| `chunkSize`            | `number`                  | -           | 청크 분할 크기                           |
+| `chunkSeparator`       | `string`                  | `"\n"`      | 청크 구분자                              |
+| `maxDecodedBytes`      | `number`                  | `67108864`  | 디코딩 크기 제한                         |
+| `maxDecompressedBytes` | `number`                  | `67108864`  | 압축해제 크기 제한                       |
+| `wasmThreshold`        | `number`                  | `16384`     | WASM 사용 임계값 (`Infinity`로 비활성화) |
+| `throwOnError`         | `boolean`                 | `true`      | 초기화 오류 시 throw                     |
+
+## Migration (4.x → 5.0)
+
+5.0은 다음과 같은 **파괴적 변경(breaking changes)**을 포함합니다. 옵션을 쓰지 않는 기본 3종
+(`new Ddu64()`, `DDU_V1`, `new Ddu64(base64, "=")`)의 무옵션 와이어 출력은 4.x와 동일하게 유지되며
+테스트로 고정되어 있습니다. 아래 항목은 해당 기능을 **명시적으로 사용하던** 코드에만 영향을 줍니다.
+
+| 변경                          | 4.x              | 5.0               | 영향 / 대응                                                                                                                                                                                |
+| ----------------------------- | ---------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 키 파생 기본값                | `sha256`         | `pbkdf2`          | 4.x 기본값으로 암호화한 데이터는 `keyDerivation: { algorithm: "sha256" }`를 명시해야 복호화됩니다. 키 파생 방식은 와이어 포맷에 기록되지 않습니다(자기기술 불가).                          |
+| checksum 마커                 | `CHK[8 hex]`     | `CK[P\|O][8 hex]` | `P`=plaintext CRC32, `O`=출력 파이프라인 CRC32. 기본 `checksumScope`가 `"output"`이라 `checksum: true` 사용 시 출력 문자열이 4.x와 달라집니다. 레거시 `CHK` 입력 디코딩은 계속 지원됩니다. |
+| `checksumScope` 기본값        | (plaintext 고정) | `"output"`        | 암호화와 함께 쓸 때 평문 CRC 노출을 방지합니다. 4.x 동작이 필요하면 `checksumScope: "plaintext"`를 명시하세요.                                                                             |
+| checksum 마커 부재 검증       | 관대             | throw             | `decode(..., { checksum: true })`에서 checksum 접미사가 없으면 실패합니다. 체크섬 없는 데이터를 디코딩할 때는 `checksum`을 끄세요.                                                        |
+| `throwOnError` 기본값         | `false`          | `true`            | 잘못된 커스텀 charset에 대해 throw합니다. 레거시 fallback 동작이 필요하면 `throwOnError: false`를 명시하세요.                                                                              |
+| `wasmThreshold` 기본값        | `4096`           | `16384`           | WASM 사용 시점만 달라지며 와이어 출력에는 영향이 없습니다. 특정 성능 특성에 의존하면 `wasmThreshold`를 명시하세요.                                                                        |
+| 난독화 + `encrypt: false`     | 허용 가능        | throw             | 난독화는 실제 암호화된 payload에만 적용됩니다. `obfuscate: true`와 `encrypt: false`를 같은 호출에 지정하지 마세요.                                                                         |
+| `TestVector` 타입 export      | 제공             | 제거              | 공개 API에서 제거되었습니다.                                                                                                                                                               |
+
+추가된 기능: `getStatsAsync`, `createEncoderObfuscationLayer`, core 진입점 WASM helper export.
+
+> 디코딩 시 주의: checksum scope는 V5 마커에 기록되지만, checksum 검증을 수행할지 여부와
+> 키 파생 방식은 호출 옵션으로 지정해야 합니다(`checksum: true`, 레거시 키는 `algorithm: "sha256"`).
 
 ## License
 

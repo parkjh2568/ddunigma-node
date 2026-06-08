@@ -239,7 +239,10 @@ export interface DduConstructorOptions extends DduOptions {
   usePowerOfTwo?: boolean;
   /**
    * true이면 초기화 오류 시 throw합니다. false이면 fallback charset으로 대체합니다.
-   * @default false
+   *
+   * ⚠️ 5.0 변경: 기본값이 `false` → `true`로 전환되었습니다. 잘못된 커스텀 charset에
+   * 더 엄격하게 동작하며, 레거시의 묵시적 fallback 동작이 필요하면 `false`를 명시하세요.
+   * @default true
    */
   throwOnError?: boolean;
   /** URL-Safe 모드 (특수문자를 URL 안전 문자로 변환) */
