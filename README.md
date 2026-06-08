@@ -30,241 +30,208 @@ npm install @ddunigma/node
 ```typescript
 import { Ddu64, DduSetSymbol } from "@ddunigma/node";
 
-// 기본 (한글 종성 결합 64문자)
+// V2 (기본, 한글 종성 결합 64개)
 const ddu = new Ddu64();
-const encoded = ddu.encode("안녕하세요");
-const decoded = ddu.decode(encoded); // "안녕하세요"
+ddu.encode("안녕하세요"); // "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊"
+ddu.decode("뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊"); // "안녕하세요"
 
-// 구버전 호환 8문자 방식
+// V1 (구버전 호환, 8개 문자 쌍 방식)
 const dduV1 = new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+dduV1.encode("안녕하세요"); // ".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야"
+dduV1.decode(".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌이이.뜌.우땨땨!이이야"); // "안녕하세요"
 ```
 
-## Binary Data
+---
 
-문자열뿐 아니라 바이너리(`Uint8Array` / `Buffer`)도 인코딩할 수 있습니다.
+## 5.0.0 사용법
+
+### 문자열과 바이너리
 
 ```typescript
+import { Ddu64 } from "@ddunigma/node";
+
 const ddu = new Ddu64();
-const input = new Uint8Array([0, 1, 127, 128, 255]);
 
-const encoded = ddu.encode(input);
-const bytes = ddu.decodeToUint8Array(encoded); // Uint8Array
-const buffer = ddu.decodeToBuffer(encoded); // Buffer (Node 진입점 전용)
+const encodedText = ddu.encode("안녕하세요");
+const decodedText = ddu.decode(encodedText);
+
+const encodedBytes = ddu.encode(new Uint8Array([0, 1, 127, 128, 255]));
+const decodedBytes = ddu.decodeToUint8Array(encodedBytes);
+const decodedBuffer = ddu.decodeToBuffer(encodedBytes); // Node.js 전용
 ```
 
-## Presets
+### 프리셋
 
 ```typescript
-new Ddu64(); // 기본: DDU (한글 종성 결합 64문자)
-new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 }); // 구버전 호환 8문자
-new Ddu64({ dduSetSymbol: DduSetSymbol.ONECHARSET }); // 영문+숫자 64문자
+import { Ddu64, DduSetSymbol } from "@ddunigma/node";
+
+const ddu = new Ddu64();
+const legacy = new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+const oneCharset = new Ddu64({ dduSetSymbol: DduSetSymbol.ONECHARSET });
 ```
 
-| Symbol       | 문자 수 | 설명                               |
-| ------------ | ------: | ---------------------------------- |
-| `DDU`        |      64 | 한글 기본 문자 8개 × 종성 8개 조합 |
-| `DDU_V1`     |       8 | 기존 8문자 쌍 방식 (하위 호환)     |
-| `ONECHARSET` |      64 | 영문, 숫자, 일부 특수문자          |
-
-## Custom Charset
+### 커스텀 charset
 
 ```typescript
-// 표준 Base64 문자셋 (위치 인자: charset, padding)
+import { Ddu64 } from "@ddunigma/node";
+
 const base64 = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=");
 
-// 한글 종성 조합으로 charset 생성
 const hangul = new Ddu64(["가", "나", "다", "라"], "뭐", {
   codaChar: ["", "ㄱ", "ㄲ", "ㄷ"],
-}); // → 가, 각, 갂, 갇, 나, 낙, … (16문자)
+});
 ```
 
-- charset의 각 문자와 `paddingChar`는 단일 UTF-16 코드 유닛 문자여야 합니다(이모지 등 surrogate pair 불가).
-- 옵션 객체 형태(`new Ddu64({ ... })`)와 위치 인자 형태(`new Ddu64(charset, padding, options?)`)를 모두 지원합니다.
+charset 문자와 `paddingChar`는 각각 단일 UTF-16 코드 유닛이어야 합니다.
 
-## Compression
+### 사용 가능한 옵션
+
+생성자 옵션은 인스턴스의 기본값으로 적용됩니다. `encode`, `decode`, `getStats` 계열 메서드에
+같은 옵션을 전달하면 해당 호출에서만 기본값을 덮어씁니다.
+
+#### 공통 옵션
+
+| 옵션                   | 타입                              | 기본값      | 용도                               |
+| ---------------------- | --------------------------------- | ----------- | ---------------------------------- |
+| `compress`             | `boolean`                         | `false`     | 압축 사용                          |
+| `compressionAlgorithm` | `"deflate" \| "brotli"`           | `"deflate"` | 압축 알고리즘                      |
+| `compressionLevel`     | `number`                          | `6`         | 압축 레벨                          |
+| `checksum`             | `boolean`                         | `false`     | CRC32 체크섬 추가 및 검증          |
+| `checksumScope`        | `"plaintext" \| "output"`         | `"output"`  | CRC32 계산 범위                    |
+| `chunkSize`            | `number`                          | 미사용      | 출력 문자열 분할 크기              |
+| `chunkSeparator`       | `string`                          | `"\n"`      | 청크 구분자                        |
+| `maxDecodedBytes`      | `number`                          | `67108864`  | 최대 디코딩 바이트 수              |
+| `maxDecompressedBytes` | `number`                          | `67108864`  | 최대 압축 해제 바이트 수           |
+| `obfuscate`            | `boolean`                         | `false`     | 암호화된 출력을 한글 음절로 난독화 |
+| `onProgress`           | `(info: DduProgressInfo) => void` | 미사용      | 처리 진행률 콜백                   |
+
+#### 생성자 전용 옵션
+
+| 옵션               | 타입                   | 기본값      | 용도                                |
+| ------------------ | ---------------------- | ----------- | ----------------------------------- |
+| `dduSetSymbol`     | `DduSetSymbol`         | `DDU`       | 기본 charset 프리셋 선택            |
+| `dduChar`          | `string \| string[]`   | 프리셋 사용 | 커스텀 charset                      |
+| `codaChar`         | `string[]`             | 미사용      | 기본 문자와 조합할 한글 종성        |
+| `paddingChar`      | `string`               | 프리셋 사용 | 커스텀 패딩 문자                    |
+| `requiredLength`   | `number`               | `64`        | 필요한 charset 문자 수              |
+| `usePowerOfTwo`    | `boolean`              | 자동 결정   | 2의 제곱수 charset 직접 인덱스 모드 |
+| `useRepeatPadding` | `boolean`              | 프리셋 설정 | 반복 패딩 방식 사용                 |
+| `throwOnError`     | `boolean`              | `true`      | 잘못된 charset 설정에서 예외 발생   |
+| `urlSafe`          | `boolean`              | `false`     | URL-Safe 출력 변환                  |
+| `encryptionKey`    | `string`               | 미사용      | AES-256-GCM 암호화 키               |
+| `keyDerivation`    | `KeyDerivationOptions` | `pbkdf2`    | 암호화 키 파생 방식                 |
+| `adapter`          | `PlatformAdapter`      | 진입점 설정 | 플랫폼 어댑터 직접 주입             |
+| `wasmThreshold`    | `number`               | `16384`     | WASM 사용을 시작할 입력 크기        |
+
+`encoding`은 레거시 타입 호환을 위해서만 남아 있으며 런타임 문자열 처리는 항상 UTF-8입니다.
+`encrypt`와 `omitFooter`는 스트림 및 내부 파이프라인 제어용이므로 일반 사용에서는 지정하지 않습니다.
+
+### 압축, 암호화, 체크섬
 
 ```typescript
+import { Ddu64 } from "@ddunigma/node";
+
 const ddu = new Ddu64({
   compress: true,
-  compressionAlgorithm: "deflate", // "deflate" | "brotli"
-  compressionLevel: 6, // deflate: 0-9, brotli: 0-11
+  compressionAlgorithm: "deflate",
+  compressionLevel: 6,
+  encryptionKey: "my-secret-key",
+  keyDerivation: {
+    algorithm: "pbkdf2",
+    salt: "my-application-salt",
+    iterations: 210_000,
+  },
+  checksum: true,
 });
+
+const encoded = ddu.encode("보호할 데이터");
+const decoded = ddu.decode(encoded);
 ```
 
-압축은 결과가 원본보다 작아질 때만 적용됩니다. 압축 여부는 출력에 기록되어 디코딩 시 자동 처리됩니다.
-
-브라우저/Workers 진입점은 런타임의 `CompressionStream` / `DecompressionStream` 지원에 의존합니다.
-`compressionLevel`은 Node.js `zlib`에서는 반영되지만, Web API 기반 브라우저 압축에서는 런타임이
-품질 레벨을 받지 않아 무시될 수 있습니다. Brotli 역시 런타임별 지원 여부가 다릅니다.
-
-## Encryption
+복호화할 때는 인코딩에 사용한 `encryptionKey`와 키 파생 설정을 동일하게 사용해야 합니다.
+체크섬을 호출별 옵션으로 사용한 경우 디코딩에도 `checksum: true`를 지정합니다.
 
 ```typescript
-const ddu = new Ddu64({ encryptionKey: "my-secret-key" });
-
-const encoded = ddu.encode("secret message");
-const decoded = ddu.decode(encoded); // 같은 키로만 복호화 가능
-
-// 비밀번호 기반 키는 고유 salt 권장
-const ddu2 = new Ddu64({
-  encryptionKey: "user password",
-  keyDerivation: { algorithm: "pbkdf2", salt: "app-specific-salt", iterations: 210_000 },
-});
+const encoded = ddu.encode("data", { checksum: true });
+const decoded = ddu.decode(encoded, { checksum: true });
 ```
 
-- AES-256-GCM으로 암호화합니다.
-- 키 파생 기본값은 `pbkdf2`입니다. (구버전 sha256으로 암호화한 데이터는 `keyDerivation: { algorithm: "sha256" }`로 복호화)
-
-## Checksum
-
-```typescript
-const ddu = new Ddu64({ checksum: true });
-
-const encoded = ddu.encode("data"); // CRC32 체크섬 포함
-const decoded = ddu.decode(encoded, { checksum: true }); // 무결성 검증 후 반환
-```
-
-- 우발적 손상 감지용입니다(변조 방지가 필요하면 `encryptionKey` 사용).
-- 5.0 형식은 `CK[P|O][8 hex]` 접미사를 사용합니다. `P`는 plaintext CRC32, `O`는 인코딩 파이프라인 최종 바이트 CRC32입니다.
-- 기본 `checksumScope`는 `"output"`입니다. 암호화 시 평문 CRC 노출을 피합니다.
-- 디코딩 시에도 `checksum: true`를 지정해야 합니다. 이 옵션이 켜져 있는데 checksum 접미사가 없으면 실패합니다.
-
-## URL-Safe
+### URL-Safe와 청크 분할
 
 ```typescript
 const ddu = new Ddu64("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "=", {
   urlSafe: true,
+  chunkSize: 76,
+  chunkSeparator: "\n",
 });
-// +→- /→_ =→. 로 자동 변환
+
+const encoded = ddu.encode("long data");
+const decoded = ddu.decode(encoded);
 ```
 
-## Chunking
+### 한글 난독화
 
 ```typescript
-const ddu = new Ddu64({ chunkSize: 76, chunkSeparator: "\n" });
-// 76자마다 구분자 삽입
+const ddu = new Ddu64({
+  encryptionKey: "my-secret-key",
+  obfuscate: true,
+});
+
+const encoded = ddu.encode("secret");
+const decoded = ddu.decode(encoded);
 ```
 
-## Obfuscation (한글 난독화)
+난독화에는 암호화 키가 필요하며 `obfuscate: true`와 `encrypt: false`를 함께 사용할 수 없습니다.
 
-```typescript
-const ddu = new Ddu64({ encryptionKey: "secret", obfuscate: true });
-// 출력이 한글 음절 블록(U+AC00–U+D7A3)으로 변환됨 (암호화 필수)
-```
-
-난독화는 실제 암호화된 payload에만 적용됩니다. `obfuscate: true`와 `encrypt: false`를 같은 호출에
-지정하면 실패합니다.
-
-`checksum: true`와 함께 쓰면 checksum 접미사(`CKO...` / `CKP...`)는 난독화 뒤에 붙는 ASCII 메타데이터로 남습니다.
-즉 전체 출력이 한글 음절만으로 구성된다고 가정하면 안 됩니다.
-
-## Async (브라우저)
-
-브라우저 등에서는 비동기 메서드를 사용합니다.
+### 브라우저와 Workers
 
 ```typescript
 import { Ddu64 } from "@ddunigma/node/browser";
 
-const ddu = new Ddu64();
-const encoded = await ddu.encodeAsync("browser text");
+const ddu = new Ddu64({
+  compress: true,
+  checksum: true,
+});
+
+const encoded = await ddu.encodeAsync("browser data");
 const decoded = await ddu.decodeAsync(encoded);
+const bytes = await ddu.decodeToUint8ArrayAsync(encoded);
 ```
 
-Node.js에서도 `encodeAsync` / `decodeAsync`를 사용할 수 있습니다.
+브라우저 압축은 실행 환경의 `CompressionStream`과 `DecompressionStream` 지원 여부에 따라 사용할 수
+있습니다.
 
-## Stats
+### 인코딩 통계
 
 ```typescript
-const stats = ddu.getStats("payload", { compress: true });
+const stats = ddu.getStats("payload");
 const asyncStats = await ddu.getStatsAsync("payload", { compress: true });
 ```
 
-`getStats`는 동기 압축 어댑터가 있는 런타임(Node.js)에 적합합니다. 브라우저/Workers처럼 압축이
-비동기 Web API로만 제공되는 런타임에서는 `getStatsAsync`를 사용하세요. 두 메서드는 실제 암호화
-연산 없이 AES-GCM 와이어 길이를 계산하지만, 압축 적용 여부와 `compressedSize` 산출을 위해 압축은
-실제로 수행합니다.
+브라우저에서 압축 통계를 계산할 때는 `getStatsAsync`를 사용합니다.
 
-## WASM
-
-대형 payload의 비트 패킹은 선택적으로 WASM 가속을 사용할 수 있습니다. WASM은 자동으로 강제되지 않으며,
-사용하려면 애플리케이션 시작 시 `preloadWasm()`을 호출해 준비시키는 것을 권장합니다.
+### WASM 가속
 
 ```typescript
 import { Ddu64, preloadWasm } from "@ddunigma/node";
 
 await preloadWasm();
-const ddu = new Ddu64({ wasmThreshold: 16 * 1024 });
+
+const ddu = new Ddu64({
+  wasmThreshold: 16 * 1024,
+});
 ```
 
-## Entry Points
+`wasmThreshold: Infinity`를 지정하면 WASM 사용을 비활성화할 수 있습니다.
 
-| Import 경로              | 용도                                             |
-| ------------------------ | ------------------------------------------------ |
-| `@ddunigma/node`         | Node.js 전체 기능 (동기+비동기, `Buffer`)        |
-| `@ddunigma/node/browser` | 브라우저 / Workers / Deno / Bun (비동기)         |
-| `@ddunigma/node/core`    | 최소 코어 (어댑터 직접 주입, WASM helper export) |
-
-## Errors
-
-실패는 `Ddu64Error` 계열로 래핑되며 `code`로 분기할 수 있습니다.
+### 진입점
 
 ```typescript
-import { isDdu64Error, Ddu64ErrorCode } from "@ddunigma/node";
+import { Ddu64 as NodeDdu64 } from "@ddunigma/node";
+import { Ddu64 as BrowserDdu64 } from "@ddunigma/node/browser";
+import { Ddu64 as CoreDdu64 } from "@ddunigma/node/core";
 
-try {
-  ddu.decode(input, { checksum: true });
-} catch (err) {
-  if (isDdu64Error(err) && err.code === Ddu64ErrorCode.ChecksumMismatch) {
-    // 체크섬 불일치 처리
-  }
-}
+const nodeEncoder = new NodeDdu64();
+const browserEncoder = new BrowserDdu64();
+const coreEncoder = new CoreDdu64();
 ```
-
-## Options
-
-생성자(`new Ddu64({ ... })`) 또는 호출별(`encode`/`decode`의 두 번째 인자)로 지정합니다.
-
-| Option                 | Type                      | Default     | 설명                                     |
-| ---------------------- | ------------------------- | ----------- | ---------------------------------------- |
-| `dduSetSymbol`         | `DduSetSymbol`            | `DDU`       | 프리셋 선택                              |
-| `compress`             | `boolean`                 | `false`     | 압축 사용 여부                           |
-| `compressionAlgorithm` | `"deflate" \| "brotli"`   | `"deflate"` | 압축 알고리즘                            |
-| `compressionLevel`     | `number`                  | `6`         | 압축 레벨                                |
-| `encryptionKey`        | `string`                  | -           | AES-256-GCM 암호화 키                    |
-| `keyDerivation`        | `KeyDerivationOptions`    | `pbkdf2`    | 키 파생 방식 (레거시: `sha256`)          |
-| `checksum`             | `boolean`                 | `false`     | CRC32 체크섬                             |
-| `checksumScope`        | `"plaintext" \| "output"` | `"output"`  | CRC32 계산 범위                          |
-| `urlSafe`              | `boolean`                 | `false`     | URL-Safe 변환                            |
-| `obfuscate`            | `boolean`                 | `false`     | 한글 난독화 (암호화 필요)                |
-| `chunkSize`            | `number`                  | -           | 청크 분할 크기                           |
-| `chunkSeparator`       | `string`                  | `"\n"`      | 청크 구분자                              |
-| `maxDecodedBytes`      | `number`                  | `67108864`  | 디코딩 크기 제한                         |
-| `maxDecompressedBytes` | `number`                  | `67108864`  | 압축해제 크기 제한                       |
-| `wasmThreshold`        | `number`                  | `16384`     | WASM 사용 임계값 (`Infinity`로 비활성화) |
-| `throwOnError`         | `boolean`                 | `true`      | 초기화 오류 시 throw                     |
-
-## Migration (4.x → 5.0)
-
-5.0은 다음과 같은 **파괴적 변경(breaking changes)**을 포함합니다. 옵션을 쓰지 않는 기본 3종
-(`new Ddu64()`, `DDU_V1`, `new Ddu64(base64, "=")`)의 무옵션 와이어 출력은 4.x와 동일하게 유지되며
-테스트로 고정되어 있습니다. 아래 항목은 해당 기능을 **명시적으로 사용하던** 코드에만 영향을 줍니다.
-
-| 변경                          | 4.x              | 5.0               | 영향 / 대응                                                                                                                                                                                |
-| ----------------------------- | ---------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 키 파생 기본값                | `sha256`         | `pbkdf2`          | 4.x 기본값으로 암호화한 데이터는 `keyDerivation: { algorithm: "sha256" }`를 명시해야 복호화됩니다. 키 파생 방식은 와이어 포맷에 기록되지 않습니다(자기기술 불가).                          |
-| checksum 마커                 | `CHK[8 hex]`     | `CK[P\|O][8 hex]` | `P`=plaintext CRC32, `O`=출력 파이프라인 CRC32. 기본 `checksumScope`가 `"output"`이라 `checksum: true` 사용 시 출력 문자열이 4.x와 달라집니다. 레거시 `CHK` 입력 디코딩은 계속 지원됩니다. |
-| `checksumScope` 기본값        | (plaintext 고정) | `"output"`        | 암호화와 함께 쓸 때 평문 CRC 노출을 방지합니다. 4.x 동작이 필요하면 `checksumScope: "plaintext"`를 명시하세요.                                                                             |
-| checksum 마커 부재 검증       | 관대             | throw             | `decode(..., { checksum: true })`에서 checksum 접미사가 없으면 실패합니다. 체크섬 없는 데이터를 디코딩할 때는 `checksum`을 끄세요.                                                        |
-| `throwOnError` 기본값         | `false`          | `true`            | 잘못된 커스텀 charset에 대해 throw합니다. 레거시 fallback 동작이 필요하면 `throwOnError: false`를 명시하세요.                                                                              |
-| `wasmThreshold` 기본값        | `4096`           | `16384`           | WASM 사용 시점만 달라지며 와이어 출력에는 영향이 없습니다. 특정 성능 특성에 의존하면 `wasmThreshold`를 명시하세요.                                                                        |
-| 난독화 + `encrypt: false`     | 허용 가능        | throw             | 난독화는 실제 암호화된 payload에만 적용됩니다. `obfuscate: true`와 `encrypt: false`를 같은 호출에 지정하지 마세요.                                                                         |
-| `TestVector` 타입 export      | 제공             | 제거              | 공개 API에서 제거되었습니다.                                                                                                                                                               |
-
-추가된 기능: `getStatsAsync`, `createEncoderObfuscationLayer`, core 진입점 WASM helper export.
-
-> 디코딩 시 주의: checksum scope는 V5 마커에 기록되지만, checksum 검증을 수행할지 여부와
-> 키 파생 방식은 호출 옵션으로 지정해야 합니다(`checksum: true`, 레거시 키는 `algorithm: "sha256"`).
-
-## License
-
-BSD-2-Clause
