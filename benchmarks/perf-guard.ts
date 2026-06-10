@@ -42,16 +42,22 @@ function makeIndices(length: number): Uint16Array {
 
 function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boolean } {
   const gc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
-  gc?.();
   consume(testCase.fn());
 
-  const started = performance.now();
-  for (let i = 0; i < testCase.iterations; i++) {
-    consume(testCase.fn());
+  const samples: number[] = [];
+  for (let sample = 0; sample < 3; sample++) {
+    gc?.();
+    const started = performance.now();
+    for (let i = 0; i < testCase.iterations; i++) {
+      consume(testCase.fn());
+    }
+    const elapsedMs = performance.now() - started;
+    const totalMb = (testCase.bytes * testCase.iterations) / (1024 * 1024);
+    samples.push(totalMb / (elapsedMs / 1000));
   }
-  const elapsedMs = performance.now() - started;
-  const totalMb = (testCase.bytes * testCase.iterations) / (1024 * 1024);
-  const mbps = totalMb / (elapsedMs / 1000);
+
+  samples.sort((a, b) => a - b);
+  const mbps = samples[1];
   return { name: testCase.name, mbps, passed: mbps >= testCase.minMbps };
 }
 

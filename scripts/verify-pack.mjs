@@ -12,12 +12,7 @@ const esbuildBin = join(
   ".bin",
   process.platform === "win32" ? "esbuild.cmd" : "esbuild",
 );
-const tscBin = join(
-  cwd,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "tsc.cmd" : "tsc",
-);
+const tscBin = join(cwd, "node_modules", ".bin", process.platform === "win32" ? "tsc.cmd" : "tsc");
 
 function fail(message) {
   throw new Error(`[pack:check] ${message}`);
@@ -130,7 +125,9 @@ async function runBrowserBundleSmoke(packageDir) {
       packageDir,
       "__browser-root-bundle-smoke.mjs",
       `
-        import { Ddu64 } from "@ddunigma/node";
+        import { Ddu64, getWasmCodecSync, preloadWasm } from "@ddunigma/node";
+        await preloadWasm();
+        if (!getWasmCodecSync()?.ready) throw new Error("root browser bundle WASM preload failed");
         const encoder = new Ddu64();
         encoder.decode(encoder.encode("browser root bundle smoke"));
       `,
@@ -139,7 +136,9 @@ async function runBrowserBundleSmoke(packageDir) {
       packageDir,
       "__browser-bundle-smoke.mjs",
       `
-        import { Ddu64 } from "@ddunigma/node/browser";
+        import { Ddu64, getWasmCodecSync, preloadWasm } from "@ddunigma/node/browser";
+        await preloadWasm();
+        if (!getWasmCodecSync()?.ready) throw new Error("browser bundle WASM preload failed");
         const encoder = new Ddu64();
         encoder.decode(encoder.encode("browser bundle smoke"));
       `,
@@ -148,7 +147,9 @@ async function runBrowserBundleSmoke(packageDir) {
       packageDir,
       "__core-bundle-smoke.mjs",
       `
-        import { Ddu64 } from "@ddunigma/node/core";
+        import { Ddu64, getWasmCodecSync, preloadWasm } from "@ddunigma/node/core";
+        await preloadWasm();
+        if (!getWasmCodecSync()?.ready) throw new Error("core bundle WASM preload failed");
         const encoder = new Ddu64();
         encoder.decode(encoder.encode("core bundle smoke"));
       `,
@@ -157,7 +158,9 @@ async function runBrowserBundleSmoke(packageDir) {
       packageDir,
       "__browser-bundle-smoke.cjs",
       `
-        const { Ddu64 } = require("@ddunigma/node/browser");
+        const { Ddu64, getWasmCodecSync, preloadWasm } = require("@ddunigma/node/browser");
+        await preloadWasm();
+        if (!getWasmCodecSync()?.ready) throw new Error("browser CJS bundle WASM preload failed");
         const encoder = new Ddu64();
         encoder.decode(encoder.encode("browser cjs bundle smoke"));
       `,
@@ -165,6 +168,7 @@ async function runBrowserBundleSmoke(packageDir) {
   ];
 
   for (const [index, entry] of entries.entries()) {
+    const output = join(packageDir, `__bundle-smoke-${index}.js`);
     run(
       esbuildBin,
       [
@@ -172,12 +176,13 @@ async function runBrowserBundleSmoke(packageDir) {
         "--bundle",
         "--platform=browser",
         "--format=esm",
-        `--outfile=${join(packageDir, `__bundle-smoke-${index}.js`)}`,
+        `--outfile=${output}`,
         "--log-level=silent",
       ],
       undefined,
       `browser bundle smoke test (${entry})`,
     );
+    run(process.execPath, [output], { cwd: packageDir }, `browser bundle runtime smoke (${entry})`);
   }
 }
 
@@ -225,6 +230,8 @@ function runTypeSmoke(packageDir) {
         checksumScope: "output",
         encoding: "latin1",
         wasmThreshold: 16 * 1024,
+        wasmMaxBytes: 8 * 1024 * 1024,
+        requireEncryption: true,
       };
       const callOptions: DduOptions = { checksum: true, compress: false };
 

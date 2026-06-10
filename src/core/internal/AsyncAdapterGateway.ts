@@ -25,6 +25,7 @@ export interface AsyncAdapterGatewayContext {
   encryptionKey: string | undefined;
   keyDerivation: KeyDerivationOptions | undefined;
   encryptionKeyHash: Uint8Array | undefined;
+  encryptionKeyHashPromise?: Promise<Uint8Array>;
   setEncryptionKeyHash(hash: Uint8Array): void;
 }
 
@@ -122,9 +123,19 @@ async function getAsyncKeyHash(
   adapter: PlatformAdapter,
 ): Promise<Uint8Array> {
   if (context.encryptionKeyHash) return context.encryptionKeyHash;
-  const hash = await adapter.deriveKey(context.encryptionKey!, context.keyDerivation);
-  context.setEncryptionKeyHash(hash);
-  return hash;
+  if (context.encryptionKeyHashPromise) return context.encryptionKeyHashPromise;
+
+  const promise = adapter
+    .deriveKey(context.encryptionKey!, context.keyDerivation)
+    .then((hash) => {
+      context.setEncryptionKeyHash(hash);
+      return hash;
+    })
+    .finally(() => {
+      context.encryptionKeyHashPromise = undefined;
+    });
+  context.encryptionKeyHashPromise = promise;
+  return promise;
 }
 
 function toAsyncGatewayError(

@@ -19,6 +19,7 @@ export interface PayloadCodecContext {
   usePowerOfTwo: boolean;
   bitPackConfig: BitPackConfig;
   wasmThreshold: number;
+  wasmMaxBytes: number;
   canUseNativeBase64: boolean;
   dduCharCodes: Uint16Array;
   dduCharCodeLookup: Int32Array;
@@ -97,7 +98,7 @@ export function decodePayload(
     indices[i] = val;
   }
 
-  const wasm = shouldUseWasm(inputLen, context) ? getWasmCodecSync() : null;
+  const wasm = shouldUseWasmDecode(inputLen, context) ? getWasmCodecSync() : null;
   if (wasm?.ready && context.usePowerOfTwo) {
     const wasmIndices = indices instanceof Uint16Array ? indices : Uint16Array.from(indices);
     return wasm.decode(wasmIndices, context.bitLength, paddingBits);
@@ -110,13 +111,18 @@ function encodeWithBitPack(
   data: Uint8Array,
   context: PayloadCodecContext,
 ): { indices: ArrayLike<number>; paddingBits: number } {
-  const wasm = shouldUseWasm(data.length, context) ? getWasmCodecSync() : null;
+  const wasm = shouldUseWasmEncode(data.length, context) ? getWasmCodecSync() : null;
   if (wasm?.ready && context.usePowerOfTwo) {
     return wasm.encode(data, context.bitLength);
   }
   return bitPackEncode(data, context.bitPackConfig);
 }
 
-function shouldUseWasm(inputLength: number, context: PayloadCodecContext): boolean {
-  return inputLength >= context.wasmThreshold;
+function shouldUseWasmEncode(inputLength: number, context: PayloadCodecContext): boolean {
+  return inputLength >= context.wasmThreshold && inputLength <= context.wasmMaxBytes;
+}
+
+function shouldUseWasmDecode(inputLength: number, context: PayloadCodecContext): boolean {
+  const estimatedBytes = Math.ceil((inputLength * context.bitLength) / 8);
+  return estimatedBytes >= context.wasmThreshold && estimatedBytes <= context.wasmMaxBytes;
 }

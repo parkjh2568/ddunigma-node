@@ -17,6 +17,7 @@ export interface SyncAdapterGatewayContext {
   encryptionKey: string | undefined;
   keyDerivation: KeyDerivationOptions | undefined;
   encryptionKeyHash: Uint8Array | undefined;
+  encryptionKeyHashPromise?: Promise<Uint8Array>;
   setEncryptionKeyHash(hash: Uint8Array): void;
 }
 

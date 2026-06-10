@@ -9,6 +9,8 @@ export interface CharsetLookupTables {
   charCodes: Uint16Array;
 }
 
+const predefinedLookupCache = new Map<string, CharsetLookupTables>();
+
 /**
  * UTF-16 코드 유닛 → charset 인덱스 직접 룩업 테이블을 생성합니다.
  *
@@ -20,7 +22,16 @@ export interface CharsetLookupTables {
  * @param charset - 단일 BMP 심볼 charset
  * @returns 코드 유닛 룩업 테이블과 인덱스→코드 유닛 배열
  */
-export function buildCharsetLookupTables(charset: readonly string[]): CharsetLookupTables {
+export function buildCharsetLookupTables(
+  charset: readonly string[],
+  cachePredefined = false,
+): CharsetLookupTables {
+  const cacheKey = cachePredefined ? charset.join("") : undefined;
+  if (cacheKey !== undefined) {
+    const cached = predefinedLookupCache.get(cacheKey);
+    if (cached) return cached;
+  }
+
   const charCodes = new Uint16Array(charset.length);
   let maxCode = 0;
   for (let i = 0; i < charset.length; i++) {
@@ -35,7 +46,9 @@ export function buildCharsetLookupTables(charset: readonly string[]): CharsetLoo
     charCodeLookup[charCodes[i]] = i;
   }
 
-  return { charCodeLookup, charCodes };
+  const result = { charCodeLookup, charCodes };
+  if (cacheKey !== undefined) predefinedLookupCache.set(cacheKey, result);
+  return result;
 }
 
 /**

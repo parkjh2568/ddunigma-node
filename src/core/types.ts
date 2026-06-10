@@ -93,8 +93,12 @@ export interface CharSetInfo {
   defaultChecksumScope: "plaintext" | "output";
   /** 기본 난독화 사용 여부 */
   defaultObfuscate: boolean;
+  /** 암호화 키가 있을 때 암호화 payload만 허용하는지 여부 */
+  defaultRequireEncryption: boolean;
   /** WASM 사용 임계값 (바이트) */
   wasmThreshold: number;
+  /** WASM에 전달할 최대 payload 크기 */
+  wasmMaxBytes: number;
   /** 기본 청크 크기 */
   defaultChunkSize: number | undefined;
   /** 기본 청크 구분자 */
@@ -216,6 +220,20 @@ export interface DduOptions {
   onProgress?: (info: DduProgressInfo) => void;
   /** 한글 난독화 활성화 (encryptionKey 필요) */
   obfuscate?: boolean;
+  /**
+   * 암호화 키가 설정된 decoder에서 암호화 footer를 요구합니다.
+   * 기본값은 encryptionKey가 있으면 true입니다. 레거시 평문을 같은 인스턴스로
+   * 디코딩해야 하면 false 또는 호출별 `encrypt: false`를 명시하세요.
+   */
+  requireEncryption?: boolean;
+}
+
+/** Web Streams 버퍼 제한을 포함한 스트림 전용 옵션 */
+export interface DduStreamOptions extends DduOptions {
+  /** 압축/암호화/체크섬 인코딩 시 메모리에 축적할 최대 입력 바이트 수 */
+  maxBufferedBytes?: number;
+  /** 디코딩 시 메모리에 축적할 최대 입력 문자 수 */
+  maxBufferedChars?: number;
 }
 
 export interface DduConstructorOptions extends DduOptions {
@@ -261,6 +279,8 @@ export interface DduConstructorOptions extends DduOptions {
 
   /** WASM 임계값 (바이트 단위, 기본값: 16384, 범위: 1024-1048576, Infinity면 비활성화) */
   wasmThreshold?: number;
+  /** WASM 최대 payload 크기 (기본값: 8388608, Infinity면 상한 해제) */
+  wasmMaxBytes?: number;
 }
 
 export const dduDefaultConstructorOptions: DduConstructorOptions = {

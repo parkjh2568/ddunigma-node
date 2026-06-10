@@ -26,6 +26,26 @@ use std::vec::Vec;
 
 const BYTE_BITS: u32 = 8;
 const BYTE_MASK: u32 = 0xFF;
+const MAX_RETAINED_RESULT_BYTES: usize = 1024 * 1024;
+const ERROR_SENTINEL: usize = 0xFFFF_FFFF;
+
+#[inline]
+fn is_valid_config(bit_length: u32, charset_size: u32, use_power_of_two: u32) -> bool {
+    if bit_length == 0
+        || bit_length > 16
+        || charset_size < 2
+        || charset_size > (u16::MAX as u32) + 1
+    {
+        return false;
+    }
+
+    if use_power_of_two != 0 {
+        return charset_size == (1_u32 << bit_length);
+    }
+
+    let charset_capacity = (charset_size as u64) * (charset_size as u64);
+    charset_capacity >= (1_u64 << bit_length)
+}
 
 // ─── Global Result Storage ───────────────────────────────────────────────────
 //
@@ -73,6 +93,11 @@ pub extern "C" fn alloc(size: usize) -> *mut u8 {
 }
 
 /// Deallocate a previously allocated region of `size` bytes at `ptr`.
+///
+/// # Safety
+///
+/// `ptr` must have been returned by `alloc(size)` and must not have been
+/// deallocated previously.
 #[no_mangle]
 pub unsafe extern "C" fn dealloc(ptr: *mut u8, size: usize) {
     if !ptr.is_null() && size > 0 {
@@ -101,6 +126,21 @@ pub extern "C" fn get_padding_bits() -> u32 {
     state().last_padding_bits
 }
 
+/// Release retained result capacity after the host copied the result.
+#[no_mangle]
+pub extern "C" fn release_result() {
+    let st = state();
+    st.result_buf.clear();
+    if st.result_buf.capacity() > MAX_RETAINED_RESULT_BYTES {
+        st.result_buf.shrink_to(0);
+    }
+    st.result_u16_buf.clear();
+    if st.result_u16_buf.capacity() * core::mem::size_of::<u16>() > MAX_RETAINED_RESULT_BYTES {
+        st.result_u16_buf.shrink_to(0);
+    }
+    st.last_padding_bits = 0;
+}
+
 // ─── Encode ──────────────────────────────────────────────────────────────────
 
 /// Encode a byte array into charset indices using bit-packing.
@@ -115,6 +155,10 @@ pub extern "C" fn get_padding_bits() -> u32 {
 /// # Returns
 /// The number of indices written. Use `get_result_ptr()` to read the u16 array
 /// and `get_padding_bits()` to get the padding bit count.
+///
+/// # Safety
+///
+/// `input_ptr` must point to at least `input_len` readable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn encode(
     input_ptr: *const u8,
@@ -127,6 +171,12 @@ pub unsafe extern "C" fn encode(
     st.last_result_is_u16 = true;
     let out = &mut st.result_u16_buf;
 
+    if !is_valid_config(bit_length, charset_size, use_power_of_two) {
+        out.clear();
+        st.last_padding_bits = 0;
+        return ERROR_SENTINEL;
+    }
+
     if input_len == 0 {
         out.clear();
         st.last_padding_bits = 0;
@@ -137,7 +187,7 @@ pub unsafe extern "C" fn encode(
     let is_pot = use_power_of_two != 0;
 
     let total_bits = input_len as u32 * BYTE_BITS;
-    let estimated_chunks = (total_bits + bit_length - 1) / bit_length;
+    let estimated_chunks = total_bits.div_ceil(bit_length);
     let estimated_indices = if is_pot {
         estimated_chunks as usize
     } else {
@@ -215,6 +265,10 @@ pub unsafe extern "C" fn encode(
 /// # Returns
 /// The number of decoded bytes. Use `get_result_ptr()` to read the u8 array.
 /// Returns 0xFFFFFFFF on error (invalid index).
+///
+/// # Safety
+///
+/// `indices_ptr` must point to at least `indices_len` readable `u16` values.
 #[no_mangle]
 pub unsafe extern "C" fn decode(
     indices_ptr: *const u16,
@@ -228,6 +282,14 @@ pub unsafe extern "C" fn decode(
     st.last_result_is_u16 = false;
     let out = &mut st.result_buf;
 
+    if !is_valid_config(bit_length, charset_size, use_power_of_two)
+        || padding_bits >= bit_length
+        || (use_power_of_two == 0 && !indices_len.is_multiple_of(2))
+    {
+        out.clear();
+        return ERROR_SENTINEL;
+    }
+
     if indices_len == 0 {
         out.clear();
         return 0;
@@ -237,7 +299,7 @@ pub unsafe extern "C" fn decode(
     let is_pot = use_power_of_two != 0;
     let chunk_size: usize = if is_pot { 1 } else { 2 };
 
-    let num_chunks = (indices_len + chunk_size - 1) / chunk_size;
+    let num_chunks = indices_len.div_ceil(chunk_size);
     let estimated_bytes = ((num_chunks as u64 * bit_length as u64)
         .saturating_sub(padding_bits as u64)
         / BYTE_BITS as u64) as usize;
@@ -257,7 +319,7 @@ pub unsafe extern "C" fn decode(
             if val >= charset_size {
                 // Signal error: return sentinel value
                 out.clear();
-                return 0xFFFFFFFF;
+                return ERROR_SENTINEL;
             }
 
             accumulator = (accumulator << bit_length) | (val as u64);
@@ -286,14 +348,14 @@ pub unsafe extern "C" fn decode(
             // Validate index range
             if v1 >= charset_size || v2 >= charset_size {
                 out.clear();
-                return 0xFFFFFFFF;
+                return ERROR_SENTINEL;
             }
 
             let value = v1 * charset_size + v2;
             let max_binary_value = 1u32 << bit_length;
             if value >= max_binary_value {
                 out.clear();
-                return 0xFFFFFFFF;
+                return ERROR_SENTINEL;
             }
 
             accumulator = (accumulator << bit_length) | (value as u64);
@@ -317,4 +379,42 @@ pub unsafe extern "C" fn decode(
     }
 
     out.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codec_round_trip_and_invalid_index() {
+        let input = b"hello wasm";
+        let encoded_len = unsafe { encode(input.as_ptr(), input.len(), 6, 64, 1) };
+        let padding_bits = get_padding_bits();
+        let encoded =
+            unsafe { slice::from_raw_parts(get_result_ptr() as *const u16, encoded_len).to_vec() };
+
+        let decoded_len =
+            unsafe { decode(encoded.as_ptr(), encoded.len(), 6, 64, 1, padding_bits) };
+        let decoded = unsafe { slice::from_raw_parts(get_result_ptr(), decoded_len).to_vec() };
+        assert_eq!(decoded, input);
+        release_result();
+        assert!(state().result_buf.capacity() <= MAX_RETAINED_RESULT_BYTES);
+        assert!(
+            state().result_u16_buf.capacity() * core::mem::size_of::<u16>()
+                <= MAX_RETAINED_RESULT_BYTES
+        );
+
+        let invalid = [64_u16];
+        let result = unsafe { decode(invalid.as_ptr(), invalid.len(), 6, 64, 1, 0) };
+        assert_eq!(result, ERROR_SENTINEL);
+
+        let invalid_padding = unsafe { decode(invalid.as_ptr(), 1, 6, 64, 1, 7) };
+        assert_eq!(invalid_padding, ERROR_SENTINEL);
+        let invalid_bits = unsafe { encode(input.as_ptr(), input.len(), 0, 1, 1) };
+        assert_eq!(invalid_bits, ERROR_SENTINEL);
+        let insufficient_pair_space = unsafe { encode(input.as_ptr(), input.len(), 16, 2, 0) };
+        assert_eq!(insufficient_pair_space, ERROR_SENTINEL);
+        let oversized_charset = unsafe { encode(input.as_ptr(), input.len(), 16, 65_537, 0) };
+        assert_eq!(oversized_charset, ERROR_SENTINEL);
+    }
 }

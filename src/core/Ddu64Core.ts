@@ -24,9 +24,15 @@ import type {
   KeyDerivationOptions,
 } from "./types.js";
 import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
-import { validateWasmThreshold, DEFAULT_WASM_THRESHOLD } from "../wasm/WasmCodec.js";
+import {
+  validateWasmMaxBytes,
+  validateWasmThreshold,
+  DEFAULT_WASM_MAX_BYTES,
+  DEFAULT_WASM_THRESHOLD,
+} from "../wasm/WasmCodec.js";
 import {
   Ddu64CompressionError,
+  Ddu64CharsetError,
   Ddu64DecompressionError,
   Ddu64DecryptionError,
   Ddu64EncryptionError,
@@ -57,6 +63,11 @@ import { applyPostEncoding as applyEncodePostProcessing } from "./internal/Encod
 import { decodePayload, encodePayload, type PayloadCodecContext } from "./internal/PayloadCodec.js";
 import { buildObfuscationAlphabet } from "./internal/ObfuscationAlphabet.js";
 import { isAdapterCapabilityErrorMessage } from "./internal/AdapterCapability.js";
+import {
+  validateDecodeInput,
+  validateEncodeInput,
+  validateRuntimeOptions,
+} from "./internal/OptionValidation.js";
 import {
   runAsyncDecodePipeline,
   runSyncDecodePipeline,
@@ -160,6 +171,9 @@ export class Ddu64Core {
   /** WASM 사용 임계값 */
   private readonly wasmThreshold: number;
 
+  /** WASM 최대 payload 크기 */
+  private readonly wasmMaxBytes: number;
+
   /** 표준 Base64 charset에서 네이티브 Base64 fast path 사용 여부 */
   private readonly canUseNativeBase64: boolean;
 
@@ -171,6 +185,12 @@ export class Ddu64Core {
 
   /** 기본 난독화 활성화 */
   private readonly defaultObfuscate: boolean;
+
+  /** 기본 진행률 콜백 */
+  private readonly defaultOnProgress: ((info: DduProgressInfo) => void) | undefined;
+
+  /** 암호화 키가 설정된 decoder에서 암호화 footer 요구 */
+  private readonly defaultRequireEncryption: boolean;
 
   /** 지연 초기화되는 난독화 레이어 */
   private obfuscationLayer: ObfuscationLayer | undefined;
@@ -199,6 +219,7 @@ export class Ddu64Core {
     dduChar = resolved.dduChar;
     paddingChar = resolved.paddingChar;
     dduOptions = resolved.dduOptions;
+    validateRuntimeOptions(dduOptions);
 
     // 5.0: 초기화 오류 시 기본적으로 throw (기본 3종 등 유효 설정은 영향 없음; 잘못된 charset만 throw).
     // 레거시 묵시적 fallback이 필요하면 throwOnError: false를 명시.
@@ -212,8 +233,15 @@ export class Ddu64Core {
     }
 
     // Charset 초기화
-    const initial = resolveInitialCharSet(dduChar, paddingChar, dduOptions, shouldThrow);
-    const normalized = normalizeCharSet(initial, shouldThrow, dduOptions);
+    let initial: ReturnType<typeof resolveInitialCharSet>;
+    let normalized: ReturnType<typeof normalizeCharSet>;
+    try {
+      initial = resolveInitialCharSet(dduChar, paddingChar, dduOptions, shouldThrow);
+      normalized = normalizeCharSet(initial, shouldThrow, dduOptions);
+    } catch (error) {
+      if (isDdu64Error(error)) throw error;
+      throw new Ddu64CharsetError(toErrorMessage(error), error);
+    }
 
     this.dduChar = normalized.charSet;
     this.paddingChar = normalized.padding;
@@ -252,20 +280,18 @@ export class Ddu64Core {
       (initial.isPredefined && initial.usePowerOfTwo !== undefined ? initial.bitLength : undefined);
     this.bitLength = presetBitLength ?? calculateBitLength(dduLength, this.usePowerOfTwo);
 
-    const lookupTables = buildCharsetLookupTables(this.dduChar);
+    const lookupTables = buildCharsetLookupTables(this.dduChar, isPredefinedCharSet);
     this.dduCharCodeLookup = lookupTables.charCodeLookup;
     this.dduCharCodes = lookupTables.charCodes;
 
-    // 커스텀 charset 조합 검증
-    if (!isPredefinedCharSet) {
-      validateCombinationDuplicates(this.dduChar, this.paddingChar, dduLength);
-    }
-
-    // URL-Safe 모드
-    const requestUrlSafe = dduOptions?.urlSafe ?? false;
-    this.urlSafe = requestUrlSafe
-      ? isUrlSafeCompatible(this.dduChar, this.paddingChar, shouldThrow)
-      : false;
+    this.urlSafe = validateFinalCharsetConfiguration(
+      this.dduChar,
+      this.paddingChar,
+      dduLength,
+      isPredefinedCharSet,
+      dduOptions?.urlSafe ?? false,
+      shouldThrow,
+    );
 
     // 암호화 키 (원시 저장, 해시는 첫 암/복호화 시점에 지연 파생 후 캐시)
     // 생성 시점에 즉시 파생하면 암호화를 쓰지 않는 인스턴스나 고비용 PBKDF2 파생에서
@@ -290,6 +316,9 @@ export class Ddu64Core {
 
     // 난독화
     this.defaultObfuscate = dduOptions?.obfuscate ?? false;
+    this.defaultOnProgress = dduOptions?.onProgress;
+    this.defaultRequireEncryption =
+      dduOptions?.requireEncryption ?? this.encryptionKey !== undefined;
     if (this.defaultObfuscate && !this.encryptionKey) {
       throw new Ddu64ObfuscationError(
         "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
@@ -303,6 +332,7 @@ export class Ddu64Core {
       charsetSize: dduLength,
     };
     this.wasmThreshold = validateWasmThreshold(dduOptions?.wasmThreshold ?? DEFAULT_WASM_THRESHOLD);
+    this.wasmMaxBytes = validateWasmMaxBytes(dduOptions?.wasmMaxBytes ?? DEFAULT_WASM_MAX_BYTES);
     this.canUseNativeBase64 = canUseNativeBase64FastPath(
       this.dduChar,
       this.paddingChar,
@@ -314,6 +344,7 @@ export class Ddu64Core {
       usePowerOfTwo: this.usePowerOfTwo,
       bitPackConfig: this.bitPackConfig,
       wasmThreshold: this.wasmThreshold,
+      wasmMaxBytes: this.wasmMaxBytes,
       canUseNativeBase64: this.canUseNativeBase64,
       dduCharCodes: this.dduCharCodes,
       dduCharCodeLookup: this.dduCharCodeLookup,
@@ -337,6 +368,8 @@ export class Ddu64Core {
    */
   encode(input: Uint8Array | string, options?: DduOptions): string {
     try {
+      validateRuntimeOptions(options, "encode");
+      validateEncodeInput(input);
       return this.encodeInternal(input, options).encoded;
     } catch (err) {
       throw wrapDdu64Error(err, "encode");
@@ -353,6 +386,8 @@ export class Ddu64Core {
    */
   decode(input: string, options?: DduOptions): string {
     try {
+      validateRuntimeOptions(options, "decode");
+      validateDecodeInput(input);
       const bytes = this.decodeToUint8Array(input, options);
       return bytesToString(bytes);
     } catch (err) {
@@ -370,6 +405,8 @@ export class Ddu64Core {
    */
   decodeToUint8Array(input: string, options?: DduOptions): Uint8Array {
     try {
+      validateRuntimeOptions(options, "decode");
+      validateDecodeInput(input);
       return this.decodeToUint8ArrayInternal(input, options);
     } catch (err) {
       throw wrapDdu64Error(err, "decode");
@@ -392,6 +429,8 @@ export class Ddu64Core {
    */
   async encodeAsync(input: Uint8Array | string, options?: DduOptions): Promise<string> {
     try {
+      validateRuntimeOptions(options, "encode");
+      validateEncodeInput(input);
       return await this.encodeAsyncInternal(input, options);
     } catch (err) {
       throw wrapDdu64Error(err, "encode");
@@ -418,6 +457,8 @@ export class Ddu64Core {
    */
   async decodeAsync(input: string, options?: DduOptions): Promise<string> {
     try {
+      validateRuntimeOptions(options, "decode");
+      validateDecodeInput(input);
       const bytes = await this.decodeToUint8ArrayAsync(input, options);
       return bytesToString(bytes);
     } catch (err) {
@@ -432,6 +473,8 @@ export class Ddu64Core {
    */
   async decodeToUint8ArrayAsync(input: string, options?: DduOptions): Promise<Uint8Array> {
     try {
+      validateRuntimeOptions(options, "decode");
+      validateDecodeInput(input);
       return await this.decodeToUint8ArrayAsyncInternal(input, options);
     } catch (err) {
       throw wrapDdu64Error(err, "decode");
@@ -483,7 +526,9 @@ export class Ddu64Core {
       defaultChecksum: this.defaultChecksum,
       defaultChecksumScope: this.defaultChecksumScope,
       defaultObfuscate: this.defaultObfuscate,
+      defaultRequireEncryption: this.defaultRequireEncryption,
       wasmThreshold: this.wasmThreshold,
+      wasmMaxBytes: this.wasmMaxBytes,
       defaultChunkSize: this.defaultChunkSize,
       defaultChunkSeparator: this.defaultChunkSeparator,
       defaultCompressionLevel: this.defaultCompressionLevel,
@@ -497,6 +542,8 @@ export class Ddu64Core {
    * @group Introspection
    */
   getStats(input: Uint8Array | string, options?: DduOptions): DduEncodeStats {
+    validateRuntimeOptions(options, "encode");
+    validateEncodeInput(input);
     const originalData = typeof input === "string" ? stringToBytes(input) : input;
     // 이미 바이트로 변환된 originalData를 재사용해 문자열 입력의 중복 UTF-8 인코딩을 피합니다.
     // 실제 AES-GCM 연산을 건너뛰는 통계 전용 인코딩으로 와이어 길이만 정확히 산출합니다.
@@ -513,6 +560,8 @@ export class Ddu64Core {
    * @group Introspection
    */
   async getStatsAsync(input: Uint8Array | string, options?: DduOptions): Promise<DduEncodeStats> {
+    validateRuntimeOptions(options, "encode");
+    validateEncodeInput(input);
     const originalData = typeof input === "string" ? stringToBytes(input) : input;
     const { encoded, compressedSize } = await this.encodeStatsAsyncInternal(originalData, options);
     return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
@@ -728,6 +777,7 @@ export class Ddu64Core {
       dduCharCodeLookup: this.dduCharCodeLookup,
       charSetSize: this.dduChar.length,
       encryptionKey: this.encryptionKey,
+      defaultRequireEncryption: this.defaultRequireEncryption,
       shouldObfuscate: (callOptions) => this.shouldObfuscate(callOptions),
       deobfuscate: (value) => this.getObfuscationLayer().deobfuscate(value),
       decodeChars: (cleanedInput, paddingBits) =>
@@ -756,7 +806,7 @@ export class Ddu64Core {
   }
 
   private reportProgress(options: DduOptions | undefined, info: DduProgressInfo): void {
-    options?.onProgress?.(info);
+    (options?.onProgress ?? this.defaultOnProgress)?.(info);
   }
 
   // ─── 동기 암호화/압축 헬퍼 ───────────────────────────────────────
@@ -887,5 +937,24 @@ export class Ddu64Core {
 
   private isLineBreakSeparator(separator: string): boolean {
     return separator === "\n" || separator === "\r\n" || separator === "\r";
+  }
+}
+
+function validateFinalCharsetConfiguration(
+  charSet: string[],
+  paddingChar: string,
+  requiredLength: number,
+  isPredefined: boolean,
+  requestUrlSafe: boolean,
+  shouldThrow: boolean,
+): boolean {
+  try {
+    if (!isPredefined) {
+      validateCombinationDuplicates(charSet, paddingChar, requiredLength);
+    }
+    return requestUrlSafe ? isUrlSafeCompatible(charSet, paddingChar, shouldThrow) : false;
+  } catch (error) {
+    if (isDdu64Error(error)) throw error;
+    throw new Ddu64CharsetError(toErrorMessage(error), error);
   }
 }

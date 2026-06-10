@@ -16,7 +16,7 @@ import {
   type PipelineVersion,
 } from "../wireFormat.js";
 import type { DduOptions } from "../types.js";
-import { Ddu64ChecksumError } from "../errors.js";
+import { Ddu64ChecksumError, Ddu64DecryptionError } from "../errors.js";
 import {
   assertCanonicalPadding,
   assertDecodedBitLength,
@@ -37,6 +37,7 @@ export interface DecodePreludeContext {
   dduCharCodeLookup: Int32Array;
   charSetSize: number;
   encryptionKey: string | undefined;
+  defaultRequireEncryption: boolean;
   shouldObfuscate(options?: DduOptions): boolean;
   deobfuscate(input: string): string;
   decodeChars(cleanedInput: string, paddingBits: number): Uint8Array;
@@ -96,6 +97,12 @@ export function runDecodePrelude(
   const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted, pipelineVersion } =
     parseFooter(workingInput, context.paddingChar, context.bitLength, context.bitsPerPadChar);
 
+  const requireEncryption = options?.requireEncryption ?? context.defaultRequireEncryption;
+  if (requireEncryption && allowInternalDecrypt && !isEncrypted) {
+    throw new Ddu64DecryptionError(
+      "[Ddu64 decode] Encryption is required, but the payload has no authenticated encryption footer.",
+    );
+  }
   if (isEncrypted && allowInternalDecrypt && !context.encryptionKey) {
     throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
   }

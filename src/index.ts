@@ -16,6 +16,7 @@ export { Ddu64Core } from "./core/Ddu64Core.js";
 export { DduSetSymbol } from "./core/types.js";
 export type {
   DduOptions,
+  DduStreamOptions,
   DduConstructorOptions,
   DduEncodeStats,
   DduProgressInfo,
@@ -44,6 +45,7 @@ export {
   Ddu64DecryptionError,
   Ddu64ChecksumError,
   Ddu64CharsetError,
+  Ddu64InvalidInputError,
   Ddu64LimitError,
   Ddu64AdapterError,
   Ddu64ObfuscationError,

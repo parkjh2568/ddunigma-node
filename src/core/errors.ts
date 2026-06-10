@@ -105,6 +105,12 @@ export class Ddu64CharsetError extends Ddu64Error {
   }
 }
 
+export class Ddu64InvalidInputError extends Ddu64Error {
+  constructor(message: string, operation: Ddu64Operation = "construct", cause?: unknown) {
+    super(message, { code: Ddu64ErrorCode.InvalidInput, operation, cause });
+  }
+}
+
 export class Ddu64LimitError extends Ddu64Error {
   constructor(message: string, operation: Ddu64Operation, cause?: unknown) {
     super(message, { code: Ddu64ErrorCode.LimitExceeded, operation, cause });
@@ -152,6 +158,9 @@ export function wrapDdu64Error(
   const isInternalError = lower.startsWith("[ddu64") || lower.startsWith("[bitpack");
 
   if (isInternalError) {
+    if (lower.includes("[ddu64 options]") || lower.includes("[ddu64 input]")) {
+      return new Ddu64InvalidInputError(message, fallbackOperation, error);
+    }
     if (lower.includes("checksum")) return new Ddu64ChecksumError(message, error);
     if (lower.includes("obfuscation")) return new Ddu64ObfuscationError(message, error);
     if (isAdapterCapabilityErrorMessage(message)) {

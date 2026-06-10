@@ -18,8 +18,6 @@ import {
   preloadWasm as preloadWasmBase,
 } from "./WasmCodec.js";
 
-let nodeWasmByteLoaderInstalled = false;
-
 async function readWasmFile(path: string): Promise<ArrayBuffer | null> {
   try {
     const buffer = await readFile(path);
@@ -46,9 +44,7 @@ async function loadWasmBytesFromNodeFs(): Promise<ArrayBuffer | null> {
 }
 
 function ensureNodeWasmByteLoader(): void {
-  if (nodeWasmByteLoaderInstalled) return;
   _setWasmByteLoader(loadWasmBytesFromNodeFs);
-  nodeWasmByteLoaderInstalled = true;
 }
 
 export async function preloadWasm(): Promise<void> {
@@ -68,7 +64,9 @@ export function getWasmCodecSync(): WasmCodec | null {
 
 export {
   validateWasmThreshold,
+  validateWasmMaxBytes,
   DEFAULT_WASM_THRESHOLD,
+  DEFAULT_WASM_MAX_BYTES,
   MIN_WASM_THRESHOLD,
   MAX_WASM_THRESHOLD,
 } from "./WasmCodec.js";

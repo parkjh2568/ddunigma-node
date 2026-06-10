@@ -146,8 +146,8 @@ export class BrowserAdapter implements PlatformAdapter {
 
     const encrypted = new Uint8Array(encryptedBuffer);
     // Web Crypto 출력: 암호문(N바이트) + authTag(16바이트)
-    const ciphertext = encrypted.slice(0, encrypted.length - 16);
-    const authTag = encrypted.slice(encrypted.length - 16);
+    const ciphertext = encrypted.subarray(0, encrypted.length - 16);
+    const authTag = encrypted.subarray(encrypted.length - 16);
 
     // 와이어 포맷: IV(12) + authTag(16) + 암호문(N)
     const result = new Uint8Array(12 + 16 + ciphertext.length);
@@ -171,9 +171,9 @@ export class BrowserAdapter implements PlatformAdapter {
       );
     }
 
-    const iv = data.slice(0, 12);
-    const authTag = data.slice(12, 28);
-    const ciphertext = data.slice(28);
+    const iv = data.subarray(0, 12);
+    const authTag = data.subarray(12, 28);
+    const ciphertext = data.subarray(28);
 
     // Web Crypto 기대 형식: 암호문 + authTag
     const webCryptoInput = new Uint8Array(ciphertext.length + 16);
@@ -189,7 +189,11 @@ export class BrowserAdapter implements PlatformAdapter {
     );
 
     try {
-      const algorithm: AesGcmParams = { name: "AES-GCM", iv, tagLength: 128 };
+      const algorithm: AesGcmParams = {
+        name: "AES-GCM",
+        iv: toArrayBuffer(iv),
+        tagLength: 128,
+      };
       if (aad && aad.length > 0) {
         algorithm.additionalData = toArrayBuffer(aad);
       }
@@ -333,6 +337,10 @@ export class BrowserAdapter implements PlatformAdapter {
         );
       }
       chunks.push(value);
+    }
+
+    if (chunks.length === 1) {
+      return chunks[0];
     }
 
     const result = new Uint8Array(totalLength);

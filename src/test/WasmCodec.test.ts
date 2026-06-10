@@ -10,8 +10,11 @@ import {
   preloadWasm,
   getWasmCodec,
   getWasmCodecSync,
+  validateWasmMaxBytes,
   validateWasmThreshold,
   _resetWasmState,
+  _setWasmByteLoader,
+  DEFAULT_WASM_MAX_BYTES,
   DEFAULT_WASM_THRESHOLD,
   MIN_WASM_THRESHOLD,
   MAX_WASM_THRESHOLD,
@@ -50,6 +53,16 @@ describe("WasmCodec", () => {
       expect(decoded).toEqual(new Uint8Array([72, 101, 108, 108, 111]));
     });
 
+    it("rejects invalid bit lengths and padding before entering WASM", async () => {
+      await preloadNodeWasm();
+      const codec = getNodeWasmCodecSync()!;
+
+      expect(() => codec.encode(new Uint8Array([1]), 0)).toThrow(RangeError);
+      expect(() => codec.encode(new Uint8Array([1]), 17)).toThrow(RangeError);
+      expect(() => codec.decode(new Uint16Array([0]), 6, 6)).toThrow(RangeError);
+      expect(() => codec.decode(new Uint16Array(0), 6, 1)).toThrow(RangeError);
+    });
+
     it("should not throw synchronously", () => {
       // Calling preloadWasm should not throw — it returns a promise
       const promise = preloadWasm();
@@ -67,6 +80,20 @@ describe("WasmCodec", () => {
   });
 
   describe("getWasmCodec()", () => {
+    it("does not retry a failed loader when the same loader is installed again", async () => {
+      let calls = 0;
+      const loader = async () => {
+        calls++;
+        return null;
+      };
+
+      _setWasmByteLoader(loader);
+      await expect(preloadWasm()).rejects.toThrow(/initialization failed/);
+      _setWasmByteLoader(loader);
+      expect(getWasmCodec()).toBeNull();
+      expect(calls).toBe(1);
+    });
+
     it("should return null before on-demand initialization settles", async () => {
       const codec = getWasmCodec();
       if (codec) {
@@ -142,9 +169,26 @@ describe("WasmCodec", () => {
     });
   });
 
+  describe("validateWasmMaxBytes()", () => {
+    it("accepts bounded and unbounded limits", () => {
+      expect(validateWasmMaxBytes(1024)).toBe(1024);
+      expect(validateWasmMaxBytes(8192.9)).toBe(8192);
+      expect(validateWasmMaxBytes(Number.POSITIVE_INFINITY)).toBe(Number.POSITIVE_INFINITY);
+    });
+
+    it("rejects invalid limits", () => {
+      expect(() => validateWasmMaxBytes(1023)).toThrow(/at least/);
+      expect(() => validateWasmMaxBytes(NaN)).toThrow(/at least/);
+    });
+  });
+
   describe("constants", () => {
     it("should export correct default threshold", () => {
       expect(DEFAULT_WASM_THRESHOLD).toBe(16 * 1024);
+    });
+
+    it("should export the default maximum payload size", () => {
+      expect(DEFAULT_WASM_MAX_BYTES).toBe(8 * 1024 * 1024);
     });
 
     it("should export correct min threshold", () => {

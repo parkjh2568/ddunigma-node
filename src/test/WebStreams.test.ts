@@ -17,6 +17,7 @@ import { NodeAdapter } from "../adapters/NodeAdapter.js";
 import { createReadableEncodeStream, createReadableDecodeStream } from "../streams/WebStreams.js";
 import { DduSetSymbol, type DduConstructorOptions } from "../core/types.js";
 import {
+  buildStreamHeader,
   getStreamHeaderLength,
   parseStreamHeader,
   WIRE_FORMAT_VERSION,
@@ -25,6 +26,8 @@ import {
   Ddu64ChecksumError,
   Ddu64DecryptionError,
   Ddu64ErrorCode,
+  Ddu64LimitError,
+  Ddu64StreamError,
   isDdu64Error,
 } from "../core/errors.js";
 
@@ -291,6 +294,42 @@ describe("WebStreams", () => {
       expect(decoded).toEqual(input);
     });
 
+    it("authenticates empty encrypted streams", async () => {
+      const encoder = createEncoder({ encryptionKey: "empty-stream-key" });
+      const encoded = await encodeViaStream(encoder, new Uint8Array(0), {
+        encrypt: true,
+        checksum: true,
+      });
+
+      expect(encoded.length).toBeGreaterThan(
+        getStreamHeaderLength(encoder.getCharSetInfo().paddingChar),
+      );
+      await expect(decodeViaStream(encoder, encoded, { checksum: true })).resolves.toEqual(
+        new Uint8Array(0),
+      );
+
+      const wrongKey = createEncoder({ encryptionKey: "wrong-empty-stream-key" });
+      await expect(decodeViaStream(wrongKey, encoded, { checksum: true })).rejects.toThrow(
+        Ddu64DecryptionError,
+      );
+    });
+
+    it("rejects header-only encrypted and checksum streams", async () => {
+      const encrypted = createEncoder({ encryptionKey: "header-only-key" });
+      const info = encrypted.getCharSetInfo();
+      const encryptedHeader = `${info.paddingChar}DDS1N1${info.paddingChar}`;
+      await expect(decodeViaStream(encrypted, encryptedHeader)).rejects.toThrow(
+        Ddu64DecryptionError,
+      );
+
+      const plain = createEncoder();
+      const plainInfo = plain.getCharSetInfo();
+      const checksumHeader = `${plainInfo.paddingChar}DDS1N0${plainInfo.paddingChar}`;
+      await expect(decodeViaStream(plain, checksumHeader, { checksum: true })).rejects.toThrow(
+        Ddu64ChecksumError,
+      );
+    });
+
     it("round-trips single byte correctly", async () => {
       const encoder = createEncoder();
       const input = new Uint8Array([42]);
@@ -415,6 +454,42 @@ describe("WebStreams", () => {
   });
 
   describe("Error signaling", () => {
+    it("limits buffered encode input for compression and encryption modes", async () => {
+      const encoder = createEncoder();
+      const input = new Uint8Array(64);
+
+      await expect(
+        encodeViaStream(encoder, input, { compress: true, maxBufferedBytes: 16 }),
+      ).rejects.toThrow(Ddu64LimitError);
+    });
+
+    it("limits buffered encoded text before decode flush", async () => {
+      const encoder = createEncoder();
+      const encoded = await encodeViaStream(encoder, new Uint8Array(1024));
+
+      await expect(decodeViaStream(encoder, encoded, { maxBufferedChars: 16 })).rejects.toThrow(
+        Ddu64LimitError,
+      );
+    });
+
+    it("does not count chunk separators toward maxDecodedBytes", async () => {
+      const encoder = createEncoder();
+      const input = new Uint8Array(1024);
+      const encoded = encoder.encode(input, { chunkSize: 1, chunkSeparator: "\n" });
+      const info = encoder.getCharSetInfo();
+      const header = buildStreamHeader(info.paddingChar, {
+        compressionAlgorithm: undefined,
+        encrypted: false,
+      });
+
+      await expect(
+        decodeViaStream(encoder, header + encoded, {
+          maxDecodedBytes: input.length,
+          maxBufferedChars: encoded.length + 1,
+        }),
+      ).resolves.toEqual(input);
+    });
+
     it("signals error on corrupted encoded data", async () => {
       const encoder = createEncoder();
       const info = encoder.getCharSetInfo();
@@ -433,6 +508,28 @@ describe("WebStreams", () => {
 
       const corrupted = info.paddingChar + "XXXX" + "N0" + info.paddingChar;
       await expectDecodeError(encoder, corrupted);
+    });
+
+    it("wraps invalid stream headers in Ddu64StreamError", async () => {
+      const encoder = createEncoder();
+
+      await expect(decodeViaStream(encoder, "INVALID_DATA_WITHOUT_HEADER")).rejects.toThrow(
+        Ddu64StreamError,
+      );
+
+      try {
+        await decodeViaStream(encoder, "INVALID_DATA_WITHOUT_HEADER");
+      } catch (err) {
+        expect(isDdu64Error(err)).toBe(true);
+        expect((err as Ddu64StreamError).code).toBe(Ddu64ErrorCode.StreamFailed);
+      }
+    });
+
+    it("wraps incomplete stream headers in Ddu64StreamError", async () => {
+      const encoder = createEncoder();
+      const info = encoder.getCharSetInfo();
+
+      await expect(decodeViaStream(encoder, info.paddingChar)).rejects.toThrow(Ddu64StreamError);
     });
 
     it("signals error when decryption fails (wrong key)", async () => {

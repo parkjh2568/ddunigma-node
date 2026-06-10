@@ -21,6 +21,9 @@ export const MIN_WASM_THRESHOLD = 1024;
 /** 설정 가능한 최대 WASM 임계값 */
 export const MAX_WASM_THRESHOLD = 1048576;
 
+/** WASM linear memory 보유량을 제한하기 위한 기본 최대 payload 크기 */
+export const DEFAULT_WASM_MAX_BYTES = 8 * 1024 * 1024;
+
 /** preloadWasm() 타임아웃 (밀리초) */
 const PRELOAD_TIMEOUT_MS = 10_000;
 
@@ -56,6 +59,7 @@ interface WasmExports {
   ): number;
   get_result_ptr(): number;
   get_padding_bits(): number;
+  release_result(): void;
 }
 
 // ─── 모듈 상태 ──────────────────────────────────────────────────────────────
@@ -96,6 +100,7 @@ class WasmCodecImpl implements WasmCodec {
    */
   encode(input: Uint8Array, bitLength: number): { indices: Uint16Array; paddingBits: number } {
     const { exports } = this;
+    assertWasmBitLength(bitLength);
 
     if (input.length === 0) {
       return { indices: new Uint16Array(0), paddingBits: 0 };
@@ -119,6 +124,10 @@ class WasmCodecImpl implements WasmCodec {
         charsetSize,
         usePowerOfTwo,
       );
+      const expectedLength = Math.ceil((input.length * 8) / bitLength);
+      if (resultLen === 0xffffffff || resultLen !== expectedLength) {
+        throw new Error("[WasmCodec encode] Invalid result length");
+      }
 
       // WASM 메모리에서 결과 읽기
       const resultPtr = exports.get_result_ptr();
@@ -130,6 +139,7 @@ class WasmCodecImpl implements WasmCodec {
 
       return { indices: result, paddingBits: exports.get_padding_bits() };
     } finally {
+      exports.release_result();
       // 입력 메모리 해제
       exports.dealloc(inputPtr, input.length);
     }
@@ -140,8 +150,17 @@ class WasmCodecImpl implements WasmCodec {
    */
   decode(indices: Uint16Array, bitLength: number, paddingBits: number): Uint8Array {
     const { exports } = this;
+    assertWasmBitLength(bitLength);
+    if (!Number.isInteger(paddingBits) || paddingBits < 0 || paddingBits >= bitLength) {
+      throw new RangeError(
+        `[WasmCodec decode] paddingBits must be an integer in [0, ${bitLength - 1}], got ${paddingBits}`,
+      );
+    }
 
     if (indices.length === 0) {
+      if (paddingBits !== 0) {
+        throw new RangeError("[WasmCodec decode] Empty input requires paddingBits=0");
+      }
       return new Uint8Array(0);
     }
 
@@ -168,6 +187,10 @@ class WasmCodecImpl implements WasmCodec {
       if (resultLen === 0xffffffff) {
         throw new Error("[WasmCodec decode] Invalid index in input");
       }
+      const expectedLength = Math.floor((indices.length * bitLength - paddingBits) / 8);
+      if (resultLen !== expectedLength) {
+        throw new Error("[WasmCodec decode] Invalid result length");
+      }
 
       // WASM 메모리에서 결과 읽기
       const resultPtr = exports.get_result_ptr();
@@ -179,8 +202,15 @@ class WasmCodecImpl implements WasmCodec {
 
       return result;
     } finally {
+      exports.release_result();
       exports.dealloc(indicesPtr, byteLen);
     }
+  }
+}
+
+function assertWasmBitLength(bitLength: number): void {
+  if (!Number.isInteger(bitLength) || bitLength < 1 || bitLength > 16) {
+    throw new RangeError(`[WasmCodec] bitLength must be an integer in [1, 16], got ${bitLength}`);
   }
 }
 
@@ -239,6 +269,7 @@ async function instantiateWasm(bytes: ArrayBuffer): Promise<WasmExports | null> 
       typeof exports.decode !== "function" ||
       typeof exports.get_result_ptr !== "function" ||
       typeof exports.get_padding_bits !== "function" ||
+      typeof exports.release_result !== "function" ||
       !exports.memory
     ) {
       return null;
@@ -414,11 +445,22 @@ export function validateWasmThreshold(threshold: number): number {
   return Math.max(MIN_WASM_THRESHOLD, Math.min(MAX_WASM_THRESHOLD, Math.round(threshold)));
 }
 
+export function validateWasmMaxBytes(maxBytes: number): number {
+  if (maxBytes === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(maxBytes) || maxBytes < MIN_WASM_THRESHOLD) {
+    throw new Error(
+      `[Ddu64 config] wasmMaxBytes must be at least ${MIN_WASM_THRESHOLD} or Infinity, got ${maxBytes}`,
+    );
+  }
+  return Math.floor(maxBytes);
+}
+
 /**
  * WASM 바이트 로더를 교체합니다. 플랫폼별 진입점에서만 사용합니다.
  * @internal
  */
 export function _setWasmByteLoader(loader: WasmByteLoader): void {
+  if (wasmByteLoader === loader) return;
   wasmByteLoader = loader;
   if (!wasmCodecInstance && !initPromise) {
     initAttempted = false;
@@ -435,4 +477,5 @@ export function _resetWasmState(): void {
   initAttempted = false;
   initFailed = false;
   initPromise = null;
+  wasmByteLoader = loadWasmBytesViaFetch;
 }

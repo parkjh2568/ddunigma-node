@@ -5,7 +5,6 @@
 # Prerequisites:
 #   1. Rust toolchain (rustup): https://rustup.rs/
 #   2. WASM target: rustup target add wasm32-unknown-unknown
-#   3. (Optional) wasm-opt from binaryen: https://github.com/WebAssembly/binaryen
 #
 # Usage:
 #   cd src/wasm && ./build.sh
@@ -40,17 +39,7 @@ fi
 cp "$WASM_OUTPUT" ./codec.wasm
 echo "✅ Copied to src/wasm/codec.wasm"
 
-# Step 3: (Optional) Optimize with wasm-opt if available
-if command -v wasm-opt &> /dev/null; then
-  echo "🔧 Optimizing with wasm-opt..."
-  wasm-opt -O3 --strip-debug --strip-producers ./codec.wasm -o ./codec.wasm
-  echo "✅ wasm-opt optimization complete"
-else
-  echo "ℹ️  wasm-opt not found, skipping additional optimization."
-  echo "   Install binaryen for smaller binaries: https://github.com/WebAssembly/binaryen"
-fi
-
-# Step 4: Report size
+# Step 3: Report size
 WASM_SIZE=$(wc -c < ./codec.wasm | tr -d ' ')
 echo ""
 echo "📦 Final WASM binary: codec.wasm (${WASM_SIZE} bytes)"
@@ -62,3 +51,4 @@ echo "  - encode(input_ptr, input_len, bit_length, charset_size, use_power_of_tw
 echo "  - decode(indices_ptr, indices_len, bit_length, charset_size, use_power_of_two, padding_bits) -> count"
 echo "  - get_result_ptr() -> ptr"
 echo "  - get_padding_bits() -> bits"
+echo "  - release_result()"

@@ -98,6 +98,17 @@ export class CharsetBuilder {
    * 유니코드 범위에서 문자들을 추가합니다.
    */
   addUnicodeRange(start: number, end: number): CharsetBuilder {
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start < 0 ||
+      end > 0x10ffff ||
+      start > end
+    ) {
+      throw new RangeError(
+        "Unicode range must use integer code points with 0 <= start <= end <= 0x10FFFF",
+      );
+    }
     for (let i = start; i <= end; i++) {
       this.chars.push(String.fromCodePoint(i));
     }
@@ -189,6 +200,9 @@ export class CharsetBuilder {
    * 특정 길이로 자릅니다.
    */
   limit(length: number): CharsetBuilder {
+    if (!Number.isSafeInteger(length) || length < 0) {
+      throw new RangeError("Charset limit must be a non-negative safe integer");
+    }
     this.chars = this.chars.slice(0, length);
     return this;
   }
@@ -263,6 +277,13 @@ export class CharsetBuilder {
       if (!padding) {
         throw new Error("Cannot find suitable padding character");
       }
+    }
+
+    if (padding.length !== 1) {
+      throw new Error("Padding character must be one UTF-16 code unit");
+    }
+    if (charset.includes(padding)) {
+      throw new Error("Padding character must not appear in charset");
     }
 
     return { charset, padding };

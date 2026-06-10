@@ -22,8 +22,13 @@ import {
   getStreamHeaderLength,
   type StreamHeaderMeta,
 } from "../core/wireFormat.js";
-import type { CharSetInfo, DduOptions } from "../core/types.js";
-import { wrapDdu64Error } from "../core/errors.js";
+import type { CharSetInfo, DduStreamOptions } from "../core/types.js";
+import { Ddu64LimitError, wrapDdu64Error } from "../core/errors.js";
+import { normalizeLimit } from "../core/internal/DecodeValidation.js";
+import { validateRuntimeOptions } from "../core/internal/OptionValidation.js";
+
+const DEFAULT_MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
+const DEFAULT_MAX_BUFFERED_CHARS = 64 * 1024 * 1024;
 
 // ─── 인코딩 TransformStream ─────────────────────────────────────────────────
 
@@ -40,8 +45,9 @@ import { wrapDdu64Error } from "../core/errors.js";
  */
 export function createReadableEncodeStream(
   encoder: Ddu64Core,
-  options?: DduOptions,
+  options?: DduStreamOptions,
 ): TransformStream<Uint8Array, string> {
+  validateRuntimeOptions(options, "stream");
   const info = encoder.getCharSetInfo();
   const shouldCompress = options?.compress ?? info.defaultCompress;
   const shouldEncrypt = (options?.encrypt ?? true) && info.hasEncryptionKey;
@@ -50,6 +56,12 @@ export function createReadableEncodeStream(
     ? (options?.compressionAlgorithm ?? info.defaultCompressionAlgorithm)
     : undefined;
   const paddingChar = info.paddingChar;
+  const maxBufferedBytes = normalizeLimit(
+    options?.maxBufferedBytes,
+    DEFAULT_MAX_BUFFERED_BYTES,
+    true,
+    "maxBufferedBytes",
+  );
 
   const canStreamChunks = canUseChunkStreaming(info, {
     compressed: shouldCompress,
@@ -114,6 +126,15 @@ export function createReadableEncodeStream(
         }
       } else {
         // 축적 모드: 압축/암호화/체크섬 또는 비-2의 제곱수 charset은 전체 데이터 필요
+        if (totalLength + chunk.length > maxBufferedBytes) {
+          controller.error(
+            new Ddu64LimitError(
+              `[WebStreams encode] Buffered input exceeds limit. Limit: ${maxBufferedBytes} bytes`,
+              "stream",
+            ),
+          );
+          return;
+        }
         chunks.push(chunk);
         totalLength += chunk.length;
       }
@@ -150,22 +171,22 @@ export function createReadableEncodeStream(
           });
           controller.enqueue(header);
 
-          if (totalLength > 0) {
-            const combined = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of chunks) {
-              combined.set(chunk, offset);
-              offset += chunk.length;
-            }
+          const combined = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const chunk of chunks) {
+            combined.set(chunk, offset);
+            offset += chunk.length;
+          }
 
-            const encoded = await encoder.encodeAsync(combined, {
-              ...options,
-              compress: shouldCompress,
-              encrypt: shouldEncrypt,
-              checksum: shouldChecksum,
-              chunkSize: undefined,
-              chunkSeparator: undefined,
-            });
+          const encoded = await encoder.encodeAsync(combined, {
+            ...options,
+            compress: shouldCompress,
+            encrypt: shouldEncrypt,
+            checksum: shouldChecksum,
+            chunkSize: undefined,
+            chunkSeparator: undefined,
+          });
+          if (encoded.length > 0) {
             controller.enqueue(encoded);
           }
 
@@ -194,12 +215,19 @@ export function createReadableEncodeStream(
  */
 export function createReadableDecodeStream(
   encoder: Ddu64Core,
-  options?: DduOptions,
+  options?: DduStreamOptions,
 ): TransformStream<string, Uint8Array> {
+  validateRuntimeOptions(options, "stream");
   const info = encoder.getCharSetInfo();
   const paddingChar = info.paddingChar;
   const headerLength = getStreamHeaderLength(paddingChar);
   const shouldChecksum = options?.checksum ?? info.defaultChecksum;
+  const maxBufferedChars = normalizeLimit(
+    options?.maxBufferedChars,
+    DEFAULT_MAX_BUFFERED_CHARS,
+    true,
+    "maxBufferedChars",
+  );
 
   let textBuffer = "";
   let headerParsed = false;
@@ -207,32 +235,37 @@ export function createReadableDecodeStream(
 
   return new TransformStream<string, Uint8Array>({
     async transform(chunk, controller) {
-      textBuffer += chunk;
-
-      // 헤더가 아직 파싱되지 않았으면 시도
-      if (!headerParsed && textBuffer.length >= headerLength) {
-        if (!textBuffer.startsWith(paddingChar)) {
-          controller.error(new Error("[WebStreams decode] Invalid or missing stream header"));
-          return;
-        }
-
-        headerMeta = parseStreamHeader(textBuffer, paddingChar);
-        if (headerMeta === null) {
-          controller.error(new Error("[WebStreams decode] Invalid or missing stream header"));
-          return;
-        }
-
-        if (headerMeta.encrypted && !info.hasEncryptionKey) {
-          controller.error(
-            new Error("[WebStreams decode] Encrypted stream requires an encryptionKey"),
+      try {
+        textBuffer += chunk;
+        if (textBuffer.length > maxBufferedChars) {
+          throw new Ddu64LimitError(
+            `[WebStreams decode] Buffered encoded input exceeds limit. Limit: ${maxBufferedChars} characters`,
+            "stream",
           );
-          return;
         }
 
-        headerParsed = true;
+        // 헤더가 아직 파싱되지 않았으면 시도
+        if (!headerParsed && textBuffer.length >= headerLength) {
+          if (!textBuffer.startsWith(paddingChar)) {
+            throw new Error("[WebStreams decode] Invalid or missing stream header");
+          }
 
-        // 헤더 제거
-        textBuffer = textBuffer.slice(headerLength);
+          headerMeta = parseStreamHeader(textBuffer, paddingChar);
+          if (headerMeta === null) {
+            throw new Error("[WebStreams decode] Invalid or missing stream header");
+          }
+
+          if (headerMeta.encrypted && !info.hasEncryptionKey) {
+            throw new Error("[WebStreams decode] Encrypted stream requires an encryptionKey");
+          }
+
+          headerParsed = true;
+
+          // 헤더 제거
+          textBuffer = textBuffer.slice(headerLength);
+        }
+      } catch (err) {
+        controller.error(wrapDdu64Error(err, "stream"));
       }
     },
 
@@ -240,12 +273,8 @@ export function createReadableDecodeStream(
       try {
         if (!headerParsed) {
           if (textBuffer.length === 0) return;
-          controller.error(new Error("[WebStreams decode] Incomplete stream header"));
-          return;
+          throw new Error("[WebStreams decode] Incomplete stream header");
         }
-
-        // 잔여 텍스트 처리
-        if (textBuffer.length === 0) return;
 
         const detectedCompression = headerMeta!.compressionAlgorithm;
 

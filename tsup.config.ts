@@ -15,6 +15,9 @@ export default defineConfig({
   minify: true,
   treeshake: true,
   sourcemap: true,
+  loader: {
+    ".wasm": "dataurl",
+  },
   // 크로스 플랫폼: 셸(mkdir/cp) 대신 Node API로 WASM 자산을 복사합니다.
   onSuccess: async () => {
     const destDir = join(root, "dist", "wasm");

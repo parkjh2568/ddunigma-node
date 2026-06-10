@@ -810,5 +810,24 @@ describe("Ddu64Core", () => {
       expect(decoderStages).toContain("decode");
       expect(decoderStages).toContain("done");
     });
+
+    it("uses constructor progress callback unless a call overrides it", () => {
+      const constructorStages: Array<string | undefined> = [];
+      const overrideStages: Array<string | undefined> = [];
+      const encoder = createEncoder({
+        onProgress: (info) => constructorStages.push(info.stage),
+      });
+
+      const encoded = encoder.encode("constructor progress");
+      encoder.decode(encoded, {
+        onProgress: (info) => overrideStages.push(info.stage),
+      });
+
+      expect(constructorStages).toContain("start");
+      expect(constructorStages).toContain("done");
+      expect(overrideStages).toContain("decode");
+      expect(overrideStages).toContain("done");
+      expect(constructorStages.filter((stage) => stage === "decode")).toHaveLength(0);
+    });
   });
 });

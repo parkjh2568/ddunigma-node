@@ -29,6 +29,7 @@ export {
   Ddu64DecryptionError,
   Ddu64ChecksumError,
   Ddu64CharsetError,
+  Ddu64InvalidInputError,
   Ddu64LimitError,
   Ddu64AdapterError,
   Ddu64ObfuscationError,
@@ -39,7 +40,7 @@ export type { Ddu64Operation, Ddu64ErrorOptions } from "./core/errors.js";
 
 // ─── WASM ───────────────────────────────────────────────────────────────────
 
-export { preloadWasm, getWasmCodec, getWasmCodecSync } from "./wasm/WasmCodec.js";
+export { preloadWasm, getWasmCodec, getWasmCodecSync } from "./wasm/WasmCodecBrowser.js";
 
 // ─── 타입 및 열거형 ──────────────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ export { DduSetSymbol } from "./core/types.js";
 
 export type {
   DduOptions,
+  DduStreamOptions,
   DduConstructorOptions,
   DduEncodeStats,
   DduProgressInfo,
