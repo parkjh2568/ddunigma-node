@@ -88,6 +88,18 @@ function runNodeSmoke(packageDir) {
       if (asyncDecoded !== "browser:async-pack-smoke") {
         throw new Error("Browser entry async round-trip failed");
       }
+
+      // 미니파이된 published 빌드에서 커스텀 에러 name이 보존되는지 검증합니다.
+      // (keepNames 없이 빌드하면 error.name이 "N" 같은 축약 식별자가 됩니다.)
+      for (const errMod of [node, browser]) {
+        const err = new errMod.Ddu64InvalidInputError("name-smoke");
+        if (err.name !== "Ddu64InvalidInputError") {
+          throw new Error("Custom error name mangled in published build: " + err.name);
+        }
+        if (!(err instanceof errMod.Ddu64Error) || err.code !== "DDU64_INVALID_INPUT") {
+          throw new Error("Custom error identity broken in published build");
+        }
+      }
     `,
   );
 
@@ -220,6 +232,7 @@ function runTypeSmoke(packageDir) {
         type DduConstructorOptions,
         type DduOptions,
         type PlatformAdapter,
+        type WasmCodecConfig,
       } from "@ddunigma/node";
       import { Ddu64 as BrowserDdu64, BrowserAdapter } from "@ddunigma/node/browser";
       import { Ddu64 as CoreDdu64, CharsetBuilder } from "@ddunigma/node/core";
@@ -234,6 +247,8 @@ function runTypeSmoke(packageDir) {
         requireEncryption: true,
       };
       const callOptions: DduOptions = { checksum: true, compress: false };
+      const wasmConfig: WasmCodecConfig = { charsetSize: 64, usePowerOfTwo: true };
+      wasmConfig.charsetSize satisfies number | undefined;
 
       const nodeEncoder = new Ddu64(constructorOptions);
       const explicitNodeEncoder: Ddu64Node = nodeEncoder;
@@ -265,6 +280,8 @@ function runTypeSmoke(packageDir) {
       import core = require("@ddunigma/node/core");
 
       const callOptions: node.DduOptions = { checksum: true, compress: false };
+      const wasmConfig: node.WasmCodecConfig = { charsetSize: 64, usePowerOfTwo: true };
+      wasmConfig.usePowerOfTwo satisfies boolean | undefined;
       const constructorOptions: node.DduConstructorOptions = {
         dduSetSymbol: node.DduSetSymbol.DDU,
         checksumScope: "output",

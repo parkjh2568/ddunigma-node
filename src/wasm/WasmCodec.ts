@@ -8,7 +8,7 @@
  * @module wasm/WasmCodec
  */
 
-import type { WasmCodec } from "../core/types.js";
+import type { WasmCodec, WasmCodecConfig } from "../core/types.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -76,8 +76,14 @@ let initFailed = false;
 /** 진행 중인 초기화 Promise (동시 호출 중복 제거) */
 let initPromise: Promise<void> | null = null;
 
+/** 진행 중인 초기화가 사용 중인 로더 세대 */
+let initPromiseGeneration: number | null = null;
+
 /** 현재 런타임에서 사용할 WASM 바이트 로더 */
 let wasmByteLoader: WasmByteLoader = loadWasmBytesViaFetch;
+
+/** 로더 교체 시 진행 중인 stale 초기화를 구분하는 세대값 */
+let wasmByteLoaderGeneration = 0;
 
 // ─── WasmCodecImpl ───────────────────────────────────────────────────────────
 
@@ -98,9 +104,14 @@ class WasmCodecImpl implements WasmCodec {
   /**
    * WASM 비트 패킹을 사용하여 바이트를 charset 인덱스로 인코딩합니다.
    */
-  encode(input: Uint8Array, bitLength: number): { indices: Uint16Array; paddingBits: number } {
+  encode(
+    input: Uint8Array,
+    bitLength: number,
+    config?: WasmCodecConfig,
+  ): { indices: Uint16Array; paddingBits: number } {
     const { exports } = this;
     assertWasmBitLength(bitLength);
+    const wasmConfig = resolveWasmConfig(bitLength, config);
 
     if (input.length === 0) {
       return { indices: new Uint16Array(0), paddingBits: 0 };
@@ -111,20 +122,16 @@ class WasmCodecImpl implements WasmCodec {
     const wasmMemory = new Uint8Array(exports.memory.buffer);
     wasmMemory.set(input, inputPtr);
 
-    // WASM 인코딩 호출 (bitLength 기반 2의 제곱수 감지 사용)
-    // 표준 DDU charset(64자)의 경우, charsetSize = 2^bitLength
-    const charsetSize = 1 << bitLength;
-    const usePowerOfTwo = 1; // DDU charset은 항상 2의 제곱수
-
     try {
       const resultLen = exports.encode(
         inputPtr,
         input.length,
         bitLength,
-        charsetSize,
-        usePowerOfTwo,
+        wasmConfig.charsetSize,
+        wasmConfig.usePowerOfTwo ? 1 : 0,
       );
-      const expectedLength = Math.ceil((input.length * 8) / bitLength);
+      const logicalChunks = Math.ceil((input.length * 8) / bitLength);
+      const expectedLength = wasmConfig.usePowerOfTwo ? logicalChunks : logicalChunks * 2;
       if (resultLen === 0xffffffff || resultLen !== expectedLength) {
         throw new Error("[WasmCodec encode] Invalid result length");
       }
@@ -148,13 +155,22 @@ class WasmCodecImpl implements WasmCodec {
   /**
    * WASM 비트 언패킹을 사용하여 charset 인덱스를 바이트로 디코딩합니다.
    */
-  decode(indices: Uint16Array, bitLength: number, paddingBits: number): Uint8Array {
+  decode(
+    indices: Uint16Array,
+    bitLength: number,
+    paddingBits: number,
+    config?: WasmCodecConfig,
+  ): Uint8Array {
     const { exports } = this;
     assertWasmBitLength(bitLength);
+    const wasmConfig = resolveWasmConfig(bitLength, config);
     if (!Number.isInteger(paddingBits) || paddingBits < 0 || paddingBits >= bitLength) {
       throw new RangeError(
         `[WasmCodec decode] paddingBits must be an integer in [0, ${bitLength - 1}], got ${paddingBits}`,
       );
+    }
+    if (!wasmConfig.usePowerOfTwo && indices.length % 2 !== 0) {
+      throw new RangeError("[WasmCodec decode] Non-power-of-two input requires index pairs");
     }
 
     if (indices.length === 0) {
@@ -167,19 +183,19 @@ class WasmCodecImpl implements WasmCodec {
     // WASM에 인덱스용 메모리 할당 (u16 = 각 2바이트)
     const byteLen = indices.length * 2;
     const indicesPtr = exports.alloc(byteLen);
-    const wasmMemory = new Uint16Array(exports.memory.buffer, indicesPtr, indices.length);
-    wasmMemory.set(indices);
-
-    const charsetSize = 1 << bitLength;
-    const usePowerOfTwo = 1;
+    // alloc은 u8 정렬(Vec<u8>)만 보장하므로 Uint16Array 뷰(2바이트 정렬 요구)를
+    // 직접 만들지 않고 바이트 단위로 복사합니다. WASM은 리틀엔디안이고 모든 주요
+    // 플랫폼의 typed array도 리틀엔디안이라 바이트 복사가 u16 값을 그대로 보존합니다.
+    const indicesBytes = new Uint8Array(indices.buffer, indices.byteOffset, indices.length * 2);
+    new Uint8Array(exports.memory.buffer, indicesPtr, byteLen).set(indicesBytes);
 
     try {
       const resultLen = exports.decode(
         indicesPtr,
         indices.length,
         bitLength,
-        charsetSize,
-        usePowerOfTwo,
+        wasmConfig.charsetSize,
+        wasmConfig.usePowerOfTwo ? 1 : 0,
         paddingBits,
       );
 
@@ -187,7 +203,8 @@ class WasmCodecImpl implements WasmCodec {
       if (resultLen === 0xffffffff) {
         throw new Error("[WasmCodec decode] Invalid index in input");
       }
-      const expectedLength = Math.floor((indices.length * bitLength - paddingBits) / 8);
+      const logicalChunks = wasmConfig.usePowerOfTwo ? indices.length : indices.length / 2;
+      const expectedLength = Math.floor((logicalChunks * bitLength - paddingBits) / 8);
       if (resultLen !== expectedLength) {
         throw new Error("[WasmCodec decode] Invalid result length");
       }
@@ -212,6 +229,35 @@ function assertWasmBitLength(bitLength: number): void {
   if (!Number.isInteger(bitLength) || bitLength < 1 || bitLength > 16) {
     throw new RangeError(`[WasmCodec] bitLength must be an integer in [1, 16], got ${bitLength}`);
   }
+}
+
+function resolveWasmConfig(
+  bitLength: number,
+  config: WasmCodecConfig | undefined,
+): { charsetSize: number; usePowerOfTwo: boolean } {
+  const usePowerOfTwo = config?.usePowerOfTwo ?? true;
+  const charsetSize = config?.charsetSize ?? (1 << bitLength);
+
+  if (!Number.isSafeInteger(charsetSize) || charsetSize < 2 || charsetSize > 65536) {
+    throw new RangeError(
+      `[WasmCodec] charsetSize must be a safe integer in [2, 65536], got ${charsetSize}`,
+    );
+  }
+
+  if (usePowerOfTwo) {
+    const expected = 1 << bitLength;
+    if (charsetSize !== expected) {
+      throw new RangeError(
+        `[WasmCodec] power-of-two mode requires charsetSize=${expected}, got ${charsetSize}`,
+      );
+    }
+  } else if (charsetSize * charsetSize < 2 ** bitLength) {
+    throw new RangeError(
+      `[WasmCodec] charsetSize=${charsetSize} cannot represent ${bitLength}-bit values with index pairs`,
+    );
+  }
+
+  return { charsetSize, usePowerOfTwo };
 }
 
 // ─── WASM 로딩 ───────────────────────────────────────────────────────────────
@@ -286,27 +332,32 @@ async function instantiateWasm(bytes: ArrayBuffer): Promise<WasmExports | null> 
  * WASM 모듈을 로드하고 인스턴스화합니다.
  * throw하지 않음 — 성공 시 true, 실패 시 false를 반환합니다.
  */
-async function initWasm(): Promise<boolean> {
+async function initWasm(loader: WasmByteLoader, generation: number): Promise<boolean> {
   try {
     if (wasmCodecInstance) return true;
-    if (initFailed) return false;
+    if (generation === wasmByteLoaderGeneration && initFailed) return false;
 
-    const bytes = await wasmByteLoader();
+    const bytes = await loader();
+    if (generation !== wasmByteLoaderGeneration) return false;
     if (!bytes) {
       initFailed = true;
       return false;
     }
 
     const exports = await instantiateWasm(bytes);
+    if (generation !== wasmByteLoaderGeneration) return false;
     if (!exports) {
       initFailed = true;
       return false;
     }
 
     wasmCodecInstance = new WasmCodecImpl(exports);
+    initFailed = false;
     return true;
   } catch {
-    initFailed = true;
+    if (generation === wasmByteLoaderGeneration) {
+      initFailed = true;
+    }
     return false;
   }
 }
@@ -343,7 +394,15 @@ export async function preloadWasm(): Promise<void> {
   if (wasmCodecInstance) return;
 
   // 초기화가 진행 중이면 대기
-  if (initPromise) return initPromise;
+  if (initPromise) {
+    if (initPromiseGeneration === wasmByteLoaderGeneration) return initPromise;
+    const stalePromise = initPromise;
+    await stalePromise.catch(() => undefined);
+    return preloadWasm();
+  }
+
+  const generation = wasmByteLoaderGeneration;
+  const loader = wasmByteLoader;
 
   const timeout = createTimeout(
     PRELOAD_TIMEOUT_MS,
@@ -352,7 +411,7 @@ export async function preloadWasm(): Promise<void> {
 
   const doInit = async (): Promise<void> => {
     try {
-      const success = await initWasm();
+      const success = await initWasm(loader, generation);
       if (!success) {
         throw new Error("[Ddu64 wasm] WASM initialization failed");
       }
@@ -361,12 +420,19 @@ export async function preloadWasm(): Promise<void> {
     }
   };
 
-  initPromise = Promise.race([doInit(), timeout.promise]).finally(() => {
-    initPromise = null;
-    initAttempted = true;
+  const promise = Promise.race([doInit(), timeout.promise]).finally(() => {
+    if (initPromise === promise) {
+      initPromise = null;
+      initPromiseGeneration = null;
+    }
+    if (generation === wasmByteLoaderGeneration) {
+      initAttempted = true;
+    }
   });
+  initPromise = promise;
+  initPromiseGeneration = generation;
 
-  return initPromise;
+  return promise;
 }
 
 /**
@@ -387,30 +453,43 @@ export function getWasmCodec(): WasmCodec | null {
   // preloadWasm()이 호출되지 않았으면 온디맨드 초기화 트리거
   if (!initAttempted && !initPromise) {
     initAttempted = true;
+    const generation = wasmByteLoaderGeneration;
+    const loader = wasmByteLoader;
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     // 온디맨드 초기화는 reject하지 않음 — 모든 에러를 삼킴
-    initPromise = new Promise<void>((resolve) => {
+    const promise = new Promise<void>((resolve) => {
       timeoutId = setTimeout(() => {
-        initFailed = true;
+        if (generation === wasmByteLoaderGeneration) {
+          initFailed = true;
+        }
         resolve();
       }, ON_DEMAND_TIMEOUT_MS);
 
-      initWasm()
+      initWasm(loader, generation)
         .then((success) => {
-          if (!success) initFailed = true;
+          if (!success && generation === wasmByteLoaderGeneration) {
+            initFailed = true;
+          }
         })
         .catch(() => {
-          initFailed = true;
+          if (generation === wasmByteLoaderGeneration) {
+            initFailed = true;
+          }
         })
         .finally(() => {
           if (timeoutId !== undefined) clearTimeout(timeoutId);
           resolve();
         });
     }).finally(() => {
-      initPromise = null;
+      if (initPromise === promise) {
+        initPromise = null;
+        initPromiseGeneration = null;
+      }
     });
+    initPromise = promise;
+    initPromiseGeneration = generation;
   }
 
   // 온디맨드 초기화는 비동기이므로 이번 호출에서는 WASM이 아직 준비되지 않음
@@ -462,7 +541,8 @@ export function validateWasmMaxBytes(maxBytes: number): number {
 export function _setWasmByteLoader(loader: WasmByteLoader): void {
   if (wasmByteLoader === loader) return;
   wasmByteLoader = loader;
-  if (!wasmCodecInstance && !initPromise) {
+  wasmByteLoaderGeneration++;
+  if (!wasmCodecInstance) {
     initAttempted = false;
     initFailed = false;
   }
@@ -473,9 +553,11 @@ export function _setWasmByteLoader(loader: WasmByteLoader): void {
  * @internal
  */
 export function _resetWasmState(): void {
+  wasmByteLoaderGeneration++;
   wasmCodecInstance = null;
   initAttempted = false;
   initFailed = false;
   initPromise = null;
+  initPromiseGeneration = null;
   wasmByteLoader = loadWasmBytesViaFetch;
 }

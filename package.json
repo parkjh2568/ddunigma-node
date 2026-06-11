@@ -19,7 +19,7 @@
     "wasm:check": "node scripts/verify-wasm.mjs",
     "gen:v5-vectors": "node --import tsx scripts/gen-v5-vectors.ts",
     "pack:check": "node scripts/verify-pack.mjs",
-    "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test && pnpm wasm:check && pnpm build && pnpm pack:check",
+    "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm wasm:check && pnpm build && pnpm pack:check",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

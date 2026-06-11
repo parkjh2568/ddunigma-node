@@ -4,9 +4,9 @@
 
 커스텀 charset을 사용하는 Base64 스타일 인코더/디코더 라이브러리입니다.
 
-V2 추가사항
-
-- 이제 한글 종성 결합 시스템을 활용하여 8개 기본 문자 × 8개 종성으로 64가지 조합을 만들어, 6비트를 한 글자로 표현합니다.
+기본 charset은 한글 종성 결합 시스템(8개 기본 문자 × 8개 종성 = 64조합)으로 6비트를 한
+글자에 담습니다. 5.0에서는 압축·AES-256-GCM 암호화·CRC32 체크섬·URL-Safe·청크 분할·한글
+난독화·Web Streams·WASM 가속과 Node/브라우저/Workers 멀티 진입점을 제공합니다.
 
 ### Credits
 
@@ -236,7 +236,8 @@ const ddu = new Ddu64({
 
 `wasmThreshold: Infinity`를 지정하면 WASM 사용을 비활성화할 수 있습니다.
 WASM hot path는 `preloadWasm()`이 완료된 뒤 사용됩니다. 사전 로드 전 동기 `encode`/`decode`는
-같은 출력의 JavaScript 구현으로 폴백합니다.
+같은 출력의 JavaScript 구현으로 폴백합니다. WASM 가속은 2의 제곱수 charset뿐 아니라
+DDU_V1처럼 인덱스 쌍을 쓰는 비-2의 제곱수 charset에도 적용됩니다.
 브라우저/core 진입점은 WASM 바이너리를 bundle에 포함하므로 별도 `codec.wasm` 배포 경로가 필요 없습니다.
 
 ### 진입점

@@ -76,8 +76,14 @@ function toBufferView(data: Uint8Array): Buffer {
   return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 }
 
-function toUint8View(data: Buffer): Uint8Array {
-  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+/**
+ * Node Buffer 풀/백킹 버퍼와 공유하지 않는 정확한 크기의 독립 복사본을 반환합니다.
+ * 공개 Uint8Array의 `.buffer`를 통해 인접 메모리가 노출되지 않도록 합니다.
+ */
+function toOwnedUint8Array(data: Uint8Array): Uint8Array {
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return copy;
 }
 
 /**
@@ -102,14 +108,14 @@ export class NodeAdapter implements PlatformAdapter {
         32,
         normalizePbkdf2HashForNode(options?.hash),
       );
-      return toUint8View(derived);
+      return toOwnedUint8Array(derived);
     }
     return this.deriveKeySync(key, options);
   }
 
   deriveKeySync(key: string, options?: KeyDerivationOptions): Uint8Array {
     if (resolveKeyDerivationAlgorithm(options) === "pbkdf2") {
-      return toUint8View(
+      return toOwnedUint8Array(
         pbkdf2Sync(
           key,
           pbkdf2SaltToBytes(options?.salt),
@@ -119,7 +125,7 @@ export class NodeAdapter implements PlatformAdapter {
         ),
       );
     }
-    return toUint8View(createHash("sha256").update(key).digest());
+    return toOwnedUint8Array(createHash("sha256").update(key).digest());
   }
 
   async encrypt(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Promise<Uint8Array> {
@@ -159,11 +165,11 @@ export class NodeAdapter implements PlatformAdapter {
     }
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-    return toUint8View(decrypted);
+    return toOwnedUint8Array(decrypted);
   }
 
   randomBytes(length: number): Uint8Array {
-    return toUint8View(cryptoRandomBytes(length));
+    return toOwnedUint8Array(cryptoRandomBytes(length));
   }
 
   // ─── Compression ─────────────────────────────────────────────────────────
@@ -174,7 +180,7 @@ export class NodeAdapter implements PlatformAdapter {
       options.level = level;
     }
     const result = await deflateRawAsync(toBufferView(data), options);
-    return toUint8View(result);
+    return toOwnedUint8Array(result);
   }
 
   deflateSync(data: Uint8Array, level?: number): Uint8Array {
@@ -182,18 +188,18 @@ export class NodeAdapter implements PlatformAdapter {
     if (level !== undefined) {
       options.level = level;
     }
-    return toUint8View(deflateRawSync(toBufferView(data), options));
+    return toOwnedUint8Array(deflateRawSync(toBufferView(data), options));
   }
 
   async inflate(data: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
     if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
       const result = await inflateRawAsync(toBufferView(data));
-      return toUint8View(result);
+      return toOwnedUint8Array(result);
     }
     const options: ZlibOptions = { maxOutputLength: maxBytes };
     try {
       const result = await inflateRawAsync(toBufferView(data), options);
-      return toUint8View(result);
+      return toOwnedUint8Array(result);
     } catch (e: unknown) {
       rethrowDecompressLimitError(e, maxBytes, "inflate");
     }
@@ -201,10 +207,10 @@ export class NodeAdapter implements PlatformAdapter {
 
   inflateSync(data: Uint8Array, maxBytes?: number): Uint8Array {
     if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
-      return toUint8View(inflateRawSync(toBufferView(data)));
+      return toOwnedUint8Array(inflateRawSync(toBufferView(data)));
     }
     try {
-      return toUint8View(
+      return toOwnedUint8Array(
         inflateRawSync(toBufferView(data), { maxOutputLength: maxBytes } as ZlibOptions),
       );
     } catch (e: unknown) {
@@ -220,7 +226,7 @@ export class NodeAdapter implements PlatformAdapter {
       };
     }
     const result = await brotliCompressAsync(toBufferView(data), options);
-    return toUint8View(result);
+    return toOwnedUint8Array(result);
   }
 
   brotliCompressSync(data: Uint8Array, level?: number): Uint8Array {
@@ -230,19 +236,19 @@ export class NodeAdapter implements PlatformAdapter {
         [zlibConstants.BROTLI_PARAM_QUALITY]: Math.max(0, Math.min(11, level)),
       };
     }
-    return toUint8View(zlibBrotliCompressSync(toBufferView(data), options));
+    return toOwnedUint8Array(zlibBrotliCompressSync(toBufferView(data), options));
   }
 
   async brotliDecompress(data: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
     if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
       const result = await brotliDecompressAsync(toBufferView(data));
-      return toUint8View(result);
+      return toOwnedUint8Array(result);
     }
     try {
       const result = await brotliDecompressAsync(toBufferView(data), {
         maxOutputLength: maxBytes,
       } as BrotliOptions);
-      return toUint8View(result);
+      return toOwnedUint8Array(result);
     } catch (e: unknown) {
       rethrowDecompressLimitError(e, maxBytes, "brotli");
     }
@@ -250,10 +256,10 @@ export class NodeAdapter implements PlatformAdapter {
 
   brotliDecompressSync(data: Uint8Array, maxBytes?: number): Uint8Array {
     if (maxBytes === undefined || maxBytes === Number.POSITIVE_INFINITY) {
-      return toUint8View(zlibBrotliDecompressSync(toBufferView(data)));
+      return toOwnedUint8Array(zlibBrotliDecompressSync(toBufferView(data)));
     }
     try {
-      return toUint8View(
+      return toOwnedUint8Array(
         zlibBrotliDecompressSync(toBufferView(data), {
           maxOutputLength: maxBytes,
         } as BrotliOptions),

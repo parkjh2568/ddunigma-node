@@ -3,8 +3,14 @@
  *
  * 플랫폼 독립적인 Ddu64 인코더/디코더와 CharsetBuilder만 내보냅니다.
  *
- * 압축이나 암호화 없이 기본 인코딩/디코딩만 필요할 때
- * 최소 번들 크기를 위해 이 진입점을 사용하세요.
+ * Node 전용 어댑터(zlib/crypto)를 제외하므로 압축·암호화는 호출 측에서 `adapter`를
+ * 주입해야 동작합니다. 압축/암호화가 필요 없는 순수 인코딩/디코딩에 적합한 진입점입니다.
+ *
+ * 참고: 이 진입점은 WASM 가속 API(`preloadWasm` 등)를 재노출하며, WASM 바이너리를
+ * data URL로 번들에 임베드합니다(약 20KB). 따라서 "압축/암호화 코드 제외"라는 의미의
+ * 최소 진입점이지, WASM까지 0바이트인 초경량 번들은 아닙니다. WASM이 전혀 필요 없다면
+ * `new Ddu64({ wasmThreshold: Infinity })`로 비활성화하고 `preloadWasm`을 호출하지
+ * 않으면 됩니다.
  *
  * @module core
  * @packageDocumentation
@@ -58,6 +64,7 @@ export type {
   PlatformAdapter,
   ObfuscationLayer,
   WasmCodec,
+  WasmCodecConfig,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
   DduTextEncoding,

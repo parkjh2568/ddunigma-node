@@ -99,9 +99,12 @@ export function decodePayload(
   }
 
   const wasm = shouldUseWasmDecode(inputLen, context) ? getWasmCodecSync() : null;
-  if (wasm?.ready && context.usePowerOfTwo) {
+  if (wasm?.ready) {
     const wasmIndices = indices instanceof Uint16Array ? indices : Uint16Array.from(indices);
-    return wasm.decode(wasmIndices, context.bitLength, paddingBits);
+    return wasm.decode(wasmIndices, context.bitLength, paddingBits, {
+      charsetSize: context.bitPackConfig.charsetSize,
+      usePowerOfTwo: context.usePowerOfTwo,
+    });
   }
 
   return bitPackDecode(indices, paddingBits, context.bitPackConfig);
@@ -112,8 +115,11 @@ function encodeWithBitPack(
   context: PayloadCodecContext,
 ): { indices: ArrayLike<number>; paddingBits: number } {
   const wasm = shouldUseWasmEncode(data.length, context) ? getWasmCodecSync() : null;
-  if (wasm?.ready && context.usePowerOfTwo) {
-    return wasm.encode(data, context.bitLength);
+  if (wasm?.ready) {
+    return wasm.encode(data, context.bitLength, {
+      charsetSize: context.bitPackConfig.charsetSize,
+      usePowerOfTwo: context.usePowerOfTwo,
+    });
   }
   return bitPackEncode(data, context.bitPackConfig);
 }

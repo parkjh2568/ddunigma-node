@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
 
+function expectOwnedBytes(value: Uint8Array): void {
+  expect(value.byteOffset).toBe(0);
+  expect(value.buffer.byteLength).toBe(value.byteLength);
+}
+
 describe("NodeAdapter", () => {
   const adapter = new NodeAdapter();
 
@@ -108,6 +113,13 @@ describe("NodeAdapter", () => {
       const asyncDecrypted = await adapter.decrypt(encrypted, keyHash);
       expect(syncDecrypted).toEqual(asyncDecrypted);
     });
+
+    it("returns decrypted bytes in an exact-size owned buffer", () => {
+      const plaintext = new TextEncoder().encode("owned secret");
+      const encrypted = adapter.encryptSync(plaintext, keyHash);
+
+      expectOwnedBytes(adapter.decryptSync(encrypted, keyHash));
+    });
   });
 
   describe("randomBytes", () => {
@@ -121,6 +133,10 @@ describe("NodeAdapter", () => {
       const a = adapter.randomBytes(16);
       const b = adapter.randomBytes(16);
       expect(a).not.toEqual(b);
+    });
+
+    it("returns random bytes in an exact-size owned buffer", () => {
+      expectOwnedBytes(adapter.randomBytes(16));
     });
   });
 
@@ -173,6 +189,15 @@ describe("NodeAdapter", () => {
       const decompressed = adapter.inflateSync(compressed);
       expect(decompressed).toEqual(data);
     });
+
+    it("returns compressed and decompressed bytes in exact-size owned buffers", () => {
+      const data = new TextEncoder().encode("owned deflate output");
+      const compressed = adapter.deflateSync(data);
+      const decompressed = adapter.inflateSync(compressed);
+
+      expectOwnedBytes(compressed);
+      expectOwnedBytes(decompressed);
+    });
   });
 
   describe("brotli compress/decompress", () => {
@@ -222,6 +247,15 @@ describe("NodeAdapter", () => {
       const compressed = adapter.brotliCompressSync(data);
       const decompressed = adapter.brotliDecompressSync(compressed);
       expect(decompressed).toEqual(data);
+    });
+
+    it("returns Brotli bytes in exact-size owned buffers", () => {
+      const data = new TextEncoder().encode("owned brotli output");
+      const compressed = adapter.brotliCompressSync(data);
+      const decompressed = adapter.brotliDecompressSync(compressed);
+
+      expectOwnedBytes(compressed);
+      expectOwnedBytes(decompressed);
     });
   });
 });

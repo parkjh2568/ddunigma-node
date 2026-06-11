@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
+import { readFile } from "node:fs/promises";
 import {
   preloadWasm,
   getWasmCodec,
@@ -23,6 +24,9 @@ import {
   getWasmCodecSync as getNodeWasmCodecSync,
   preloadWasm as preloadNodeWasm,
 } from "../wasm/WasmCodecNode.js";
+import { bitPackDecode, bitPackEncode, type BitPackConfig } from "../core/BitPack.js";
+import { Ddu64Node } from "../Ddu64Node.js";
+import { DduSetSymbol } from "../core/types.js";
 
 describe("WasmCodec", () => {
   beforeEach(() => {
@@ -53,6 +57,51 @@ describe("WasmCodec", () => {
       expect(decoded).toEqual(new Uint8Array([72, 101, 108, 108, 111]));
     });
 
+    it("matches JS bitpack for non-power-of-two charset configs", async () => {
+      await preloadNodeWasm();
+      const codec = getNodeWasmCodecSync()!;
+      const config: BitPackConfig = { bitLength: 6, usePowerOfTwo: false, charsetSize: 8 };
+      const input = Uint8Array.from({ length: 257 }, (_, i) => (i * 37 + 11) & 0xff);
+
+      const wasmEncoded = codec.encode(input, config.bitLength, {
+        charsetSize: config.charsetSize,
+        usePowerOfTwo: config.usePowerOfTwo,
+      });
+      const jsEncoded = bitPackEncode(input, config);
+
+      expect(Array.from(wasmEncoded.indices)).toEqual(jsEncoded.indices);
+      expect(wasmEncoded.paddingBits).toBe(jsEncoded.paddingBits);
+
+      const wasmDecoded = codec.decode(
+        wasmEncoded.indices,
+        config.bitLength,
+        wasmEncoded.paddingBits,
+        {
+          charsetSize: config.charsetSize,
+          usePowerOfTwo: config.usePowerOfTwo,
+        },
+      );
+      expect(wasmDecoded).toEqual(bitPackDecode(jsEncoded.indices, jsEncoded.paddingBits, config));
+      expect(wasmDecoded).toEqual(input);
+    });
+
+    it("round-trips DDU_V1 through the WASM-enabled payload path", async () => {
+      await preloadNodeWasm();
+      const input = Uint8Array.from({ length: 4096 }, (_, i) => (i * 13 + 7) & 0xff);
+      const wasmEncoder = new Ddu64Node({
+        dduSetSymbol: DduSetSymbol.DDU_V1,
+        wasmThreshold: 1024,
+      });
+      const jsEncoder = new Ddu64Node({
+        dduSetSymbol: DduSetSymbol.DDU_V1,
+        wasmThreshold: Number.POSITIVE_INFINITY,
+      });
+
+      const encoded = wasmEncoder.encode(input);
+      expect(encoded).toBe(jsEncoder.encode(input));
+      expect(wasmEncoder.decodeToUint8Array(encoded)).toEqual(input);
+    });
+
     it("rejects invalid bit lengths and padding before entering WASM", async () => {
       await preloadNodeWasm();
       const codec = getNodeWasmCodecSync()!;
@@ -61,6 +110,12 @@ describe("WasmCodec", () => {
       expect(() => codec.encode(new Uint8Array([1]), 17)).toThrow(RangeError);
       expect(() => codec.decode(new Uint16Array([0]), 6, 6)).toThrow(RangeError);
       expect(() => codec.decode(new Uint16Array(0), 6, 1)).toThrow(RangeError);
+      expect(() =>
+        codec.decode(new Uint16Array([0]), 6, 0, {
+          charsetSize: 8,
+          usePowerOfTwo: false,
+        }),
+      ).toThrow(RangeError);
     });
 
     it("should not throw synchronously", () => {
@@ -69,6 +124,32 @@ describe("WasmCodec", () => {
       expect(promise).toBeInstanceOf(Promise);
       // Attach a handler to prevent unhandled rejection
       promise.catch(() => {});
+    });
+
+    it("retries with a new loader installed during initialization", async () => {
+      let resolveStaleLoader: ((bytes: ArrayBuffer | null) => void) | undefined;
+      const staleLoader = () =>
+        new Promise<ArrayBuffer | null>((resolve) => {
+          resolveStaleLoader = resolve;
+        });
+      const wasmFile = await readFile(new URL("../wasm/codec.wasm", import.meta.url));
+      const validBytes = wasmFile.buffer.slice(
+        wasmFile.byteOffset,
+        wasmFile.byteOffset + wasmFile.byteLength,
+      );
+      const replacementLoader = async () => validBytes;
+
+      _setWasmByteLoader(staleLoader);
+      const staleInit = preloadWasm();
+      await Promise.resolve();
+
+      _setWasmByteLoader(replacementLoader);
+      const replacementInit = preloadWasm();
+      resolveStaleLoader?.(null);
+
+      await expect(staleInit).rejects.toThrow(/initialization failed/);
+      await expect(replacementInit).resolves.toBeUndefined();
+      expect(getWasmCodecSync()?.ready).toBe(true);
     });
   });
 

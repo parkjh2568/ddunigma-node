@@ -26,6 +26,7 @@ export type {
   PlatformAdapter,
   ObfuscationLayer,
   WasmCodec,
+  WasmCodecConfig,
   DduTextEncoding,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,

@@ -13,7 +13,10 @@ export function validateRuntimeOptions(
   options: PublicOptions | undefined,
   operation: Ddu64Operation = "construct",
 ): void {
-  if (!options) return;
+  if (options === undefined) return;
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new Ddu64InvalidInputError("[Ddu64 options] Options must be an object.", operation);
+  }
 
   validateBoolean(options.compress, "compress", operation);
   validateBoolean(options.encrypt, "encrypt", operation);
@@ -176,7 +179,7 @@ export function validateRuntimeOptions(
   if (
     derivation.salt !== undefined &&
     typeof derivation.salt !== "string" &&
-    !(derivation.salt instanceof Uint8Array)
+    !isUint8Array(derivation.salt)
   ) {
     invalid(operation, "keyDerivation.salt must be a string or Uint8Array");
   }
@@ -186,7 +189,7 @@ export function validateEncodeInput(
   input: unknown,
   operation: Ddu64Operation = "encode",
 ): asserts input is Uint8Array | string {
-  if (typeof input !== "string" && !(input instanceof Uint8Array)) {
+  if (typeof input !== "string" && !isUint8Array(input)) {
     throw new Ddu64InvalidInputError(
       "[Ddu64 input] Encode input must be a string or Uint8Array.",
       operation,
@@ -201,6 +204,12 @@ export function validateDecodeInput(
   if (typeof input !== "string") {
     throw new Ddu64InvalidInputError("[Ddu64 input] Decode input must be a string.", operation);
   }
+}
+
+function isUint8Array(value: unknown): value is Uint8Array {
+  return (
+    ArrayBuffer.isView(value) && Object.prototype.toString.call(value) === "[object Uint8Array]"
+  );
 }
 
 function validateBoolean(
@@ -221,9 +230,12 @@ function validatePositiveLimit(
   if (
     value !== undefined &&
     value !== Number.POSITIVE_INFINITY &&
-    (!Number.isFinite(value) || value <= 0)
+    // 바이트 한도는 정수여야 합니다. 소수(예: 0.5)는 다운스트림 normalizeLimit의
+    // Math.floor에서 0으로 접혀 모든 입력이 한도를 초과한 것처럼 오탐되므로
+    // API 경계에서 거부합니다.
+    (!Number.isSafeInteger(value) || value <= 0)
   ) {
-    invalid(operation, `${name} must be a positive finite number or Infinity`);
+    invalid(operation, `${name} must be a positive safe integer or Infinity`);
   }
 }
 
