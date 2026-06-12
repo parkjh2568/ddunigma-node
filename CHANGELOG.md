@@ -41,3 +41,13 @@ WASM 가속 경로를 전면 제거하고 인코딩/디코딩 hot path를 순수
 - CI에서 Rust 설치 및 WASM 검증 단계를 제거.
 - pnpm 11 호환: `.npmrc`에 `verify-deps-before-run=false`를 추가하여 스크립트 실행
   전 암묵적 install이 hang하는 문제를 회피.
+
+### 지원 Node 버전
+
+- `engines.node`를 `>=22.0.0`에서 **`>=18.0.0`**으로 완화. 라이브러리는 Web Streams를
+  포함한 전 기능이 Node 18에서 동작합니다(WASM 제거로 하한이 더 내려갈 여지는 Web
+  Streams 글로벌 게이트인 18에 막힘). 네이티브 Base64 가속(`Uint8Array.toBase64`,
+  Node 22+)은 미지원 환경에서 `Buffer` 경로로 폴백하므로 하한에 영향이 없습니다.
+- CI는 Node 20/22/24에서 전체 게이트를, Node 18에서는 빌드 + 런타임 smoke(`pnpm smoke`)를
+  실행해 하한 호환을 검증합니다. (ESLint·Vitest 툴체인이 Node 20+를 요구하므로 Node 18은
+  smoke 전용)

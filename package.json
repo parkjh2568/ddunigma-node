@@ -8,7 +8,7 @@
   "type": "module",
   "sideEffects": false,
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=18.0.0"
   },
   "scripts": {
     "build": "tsup",
@@ -17,6 +17,7 @@
     "bench:guard": "node --expose-gc --import tsx benchmarks/perf-guard.ts",
     "gen:v5-vectors": "node --import tsx scripts/gen-v5-vectors.ts",
     "pack:check": "node scripts/verify-pack.mjs",
+    "smoke": "node scripts/runtime-smoke.mjs",
     "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm build && pnpm pack:check",
     "test": "vitest run",
     "test:watch": "vitest",

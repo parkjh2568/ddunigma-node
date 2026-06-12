@@ -8,7 +8,35 @@ permissions:
   contents: read
 
 jobs:
+  # 전체 게이트: ESLint/Vitest 툴체인이 Node 20+를 요구하므로 20/22/24에서 실행.
   verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test:coverage
+      - run: pnpm build
+      - run: pnpm pack:check
+
+  # 최소 지원 런타임(Node 18) 호환 검증: 빌드 + 런타임 smoke만 실행.
+  # (ESLint/Vitest는 Node 18을 지원하지 않으므로 게이트에서 제외)
+  compat-node18:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,12 +47,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 18
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test:coverage
       - run: pnpm build
-      - run: pnpm pack:check
+      - run: pnpm smoke
