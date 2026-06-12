@@ -1,3 +1,8 @@
+# pnpm 11+는 설정을 .npmrc가 아닌 이 파일에서 읽습니다.
+# `pnpm <script>` 실행 전 deps 정합성 검증(암묵적 install)을 비활성화합니다.
+# 전역 minimumReleaseAge와 맞물리면 사전 검증이 hang하기 때문이며,
+# 설치는 항상 명시적 `pnpm install`로 수행합니다.
+verifyDepsBeforeRun: false
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
