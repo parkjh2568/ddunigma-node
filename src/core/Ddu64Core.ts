@@ -326,8 +326,6 @@ export class Ddu64Core {
       this.bitLength,
     );
     this.payloadCodecContext = {
-      bitLength: this.bitLength,
-      usePowerOfTwo: this.usePowerOfTwo,
       bitPackConfig: this.bitPackConfig,
       canUseNativeBase64: this.canUseNativeBase64,
       dduCharCodes: this.dduCharCodes,

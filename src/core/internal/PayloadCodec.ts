@@ -17,8 +17,6 @@ type CompressionAlgorithm = "deflate" | "brotli";
 const TYPED_INDEX_THRESHOLD = 16384;
 
 export interface PayloadCodecContext {
-  bitLength: number;
-  usePowerOfTwo: boolean;
   bitPackConfig: BitPackConfig;
   canUseNativeBase64: boolean;
   dduCharCodes: Uint16Array;
