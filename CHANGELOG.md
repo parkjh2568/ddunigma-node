@@ -52,8 +52,9 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 
 - `engines.node`를 `>=22.0.0`에서 **`>=18.0.0`**으로 완화. 라이브러리는 Web Streams를
   포함한 전 기능이 Node 18에서 동작합니다(WASM 제거로 하한이 더 내려갈 여지는 Web
-  Streams 글로벌 게이트인 18에 막힘). 네이티브 Base64 가속(`Uint8Array.toBase64`,
-  Node 22+)은 미지원 환경에서 `Buffer` 경로로 폴백하므로 하한에 영향이 없습니다.
+  Streams 글로벌 게이트인 18에 막힘). 네이티브 Base64 가속(`Uint8Array.toBase64`/
+  `fromBase64`, TC39 Stage-4 API)은 이를 지원하는 런타임에서만 쓰이고 미지원 환경(현재
+  Node 24.13 포함 대부분)에서는 `Buffer` 경로로 폴백하므로 하한·동작에 영향이 없습니다.
 - CI는 Node 20/22/24에서 전체 게이트를, Node 18에서는 빌드 + 런타임 smoke(`pnpm smoke`)를
   실행해 하한 호환을 검증합니다. (ESLint·Vitest 툴체인이 Node 20+를 요구하므로 Node 18은
   smoke 전용)

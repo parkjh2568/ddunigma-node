@@ -89,9 +89,10 @@ export function validateRuntimeOptions(
 
   if (
     constructorOptions.encryptionKey !== undefined &&
-    typeof constructorOptions.encryptionKey !== "string"
+    (typeof constructorOptions.encryptionKey !== "string" ||
+      constructorOptions.encryptionKey.length === 0)
   ) {
-    invalid(operation, "encryptionKey must be a string");
+    invalid(operation, "encryptionKey must be a non-empty string");
   }
   if (
     constructorOptions.dduChar !== undefined &&

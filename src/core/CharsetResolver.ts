@@ -246,10 +246,23 @@ export function normalizeCharSet(
             `[Ddu64 normalizeCharSet] Newline and carriage return characters are reserved.`,
           );
         }
+        if (isLoneSurrogate(c)) {
+          throw new Error(
+            `[Ddu64 normalizeCharSet] Lone surrogate code unit (U+${c
+              .charCodeAt(0)
+              .toString(16)
+              .toUpperCase()}) is not allowed; it corrupts on UTF-8/URL/JSON boundaries.`,
+          );
+        }
       }
       if (state.padding.includes("\n") || state.padding.includes("\r")) {
         throw new Error(
           `[Ddu64 normalizeCharSet] Newline and carriage return characters are reserved.`,
+        );
+      }
+      if (isLoneSurrogate(state.padding)) {
+        throw new Error(
+          `[Ddu64 normalizeCharSet] Padding character must not be a lone surrogate code unit.`,
         );
       }
 
@@ -346,6 +359,13 @@ export function validateCombinationDuplicates(
 }
 
 // ─── 내부 헬퍼 ───────────────────────────────────────────────────────────────
+
+/** 단일 UTF-16 코드 유닛이 짝 없는 surrogate(U+D800–U+DFFF)인지 판별합니다. */
+function isLoneSurrogate(symbol: string): boolean {
+  if (symbol.length !== 1) return false;
+  const code = symbol.charCodeAt(0);
+  return code >= 0xd800 && code <= 0xdfff;
+}
 
 function shouldUsePowerOfTwo(length: number, preference?: boolean): boolean {
   if (preference !== undefined) return preference ? length > 0 : false;

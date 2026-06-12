@@ -45,7 +45,7 @@ export function runSyncDecodePipeline(
   if (checksumScope === "output") verifyWireChecksum(prep, context);
   decoded = runPreDecompressDecrypt(prep, context, decoded);
   decoded = runDecompress(prep, options, context, decoded);
-  if (checksumScope === "plaintext") verifyDecodedChecksum(prep, context, options, decoded);
+  if (checksumScope === "plaintext") verifyDecodedChecksum(prep, context, decoded);
   decoded = runPostChecksumDecrypt(prep, context, decoded);
   reportDone(context, decoded);
 
@@ -73,7 +73,7 @@ export async function runAsyncDecodePipeline(
     decoded = await context.decompress(decoded, prep.compressionAlgorithm!, maxDecompressedBytes);
   }
 
-  if (checksumScope === "plaintext") verifyDecodedChecksum(prep, context, options, decoded);
+  if (checksumScope === "plaintext") verifyDecodedChecksum(prep, context, decoded);
 
   if (shouldRunPostChecksumDecrypt(prep, context)) {
     reportStage(context, decoded.length, 90, "decrypt");
@@ -165,7 +165,6 @@ function verifyWireChecksum(prep: DecodePreludeResult, context: DecodePipelineCo
 function verifyDecodedChecksum(
   prep: DecodePreludeResult,
   context: DecodePipelineContext,
-  options: DduOptions | undefined,
   decoded: Uint8Array,
 ): void {
   if (!prep.extractedChecksum) return;
