@@ -173,6 +173,11 @@ export class CharsetBuilder {
 
   /**
    * 문자셋을 무작위로 섞습니다.
+   *
+   * ⚠️ 보안 주의: `seed` 없이 호출하면 `Math.random`을 사용하므로 암호학적으로 안전하지
+   * 않습니다(예측 가능). charset 순서를 비밀로 취급해 보안 경계로 삼지 마세요. 기밀성이
+   * 필요하면 `encryptionKey`(AES-256-GCM)를 사용하세요. `seed`를 주면 결정론적(재현 가능)
+   * 셔플이 되며, 이 역시 비밀이 아니라 재현성 용도입니다.
    */
   shuffle(seed?: number): CharsetBuilder {
     const random = seed !== undefined ? this.seededRandom(seed) : Math.random;

@@ -45,7 +45,7 @@ export function encodePayload(
     paddingBits = nativeEncoded.paddingBits;
     payload = nativeEncoded.payload;
   } else {
-    const encoded = encodeWithBitPack(data, context);
+    const encoded = bitPackEncode(data, context.bitPackConfig);
     paddingBits = encoded.paddingBits;
     payload = indicesToString(encoded.indices, context.dduCharCodes);
   }
@@ -97,11 +97,4 @@ export function decodePayload(
   }
 
   return bitPackDecode(indices, paddingBits, context.bitPackConfig);
-}
-
-function encodeWithBitPack(
-  data: Uint8Array,
-  context: PayloadCodecContext,
-): { indices: ArrayLike<number>; paddingBits: number } {
-  return bitPackEncode(data, context.bitPackConfig);
 }
