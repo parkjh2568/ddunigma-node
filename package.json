@@ -18,15 +18,15 @@
     "gen:v5-vectors": "node --import tsx scripts/gen-v5-vectors.ts",
     "pack:check": "node scripts/verify-pack.mjs",
     "smoke": "node scripts/runtime-smoke.mjs",
-    "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm build && pnpm pack:check",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm build && pnpm pack:check",
+    "prepublishOnly": "pnpm verify",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "lint": "eslint src scripts eslint.config.mjs tsup.config.ts vitest.config.ts",
     "lint:fix": "eslint src scripts eslint.config.mjs tsup.config.ts vitest.config.ts --fix",
-    "format": "prettier --write src/",
-    "test:all": "vitest run"
+    "format": "prettier --write src/"
   },
   "exports": {
     ".": {

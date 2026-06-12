@@ -7,8 +7,14 @@ on:
 permissions:
   contents: read
 
+# 같은 ref에 새 푸시가 오면 진행 중인 실행을 취소(CI 분 절약, 빠른 피드백).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # 전체 게이트: ESLint/Vitest 툴체인이 Node 20+를 요구하므로 20/22/24에서 실행.
+  # 전체 게이트: 로컬 `pnpm verify`와 동일한 단일 명령으로 실행(정의 중복 제거).
+  # ESLint/Vitest 툴체인이 Node 20+를 요구하므로 20/22/24에서 실행.
   verify:
     runs-on: ubuntu-latest
     strategy:
@@ -28,11 +34,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test:coverage
-      - run: pnpm build
-      - run: pnpm pack:check
+      - run: pnpm verify
 
   # 최소 지원 런타임(Node 18) 호환 검증: 빌드 + 런타임 smoke만 실행.
   # (ESLint/Vitest는 Node 18을 지원하지 않으므로 게이트에서 제외)
