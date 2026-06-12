@@ -1,12 +1,11 @@
 /**
- * Payload BitPack/WASM/native Base64 encode/decode helpers.
+ * Payload BitPack/native Base64 encode/decode helpers.
  *
  * @module core/internal/PayloadCodec
  */
 
 import { bitPackDecode, bitPackEncode, type BitPackConfig } from "../BitPack.js";
 import type { DduOptions } from "../types.js";
-import { getWasmCodecSync } from "../../wasm/WasmCodec.js";
 import { decodeNativeBase64, encodeNativeBase64 } from "./NativeBase64FastPath.js";
 import { indicesToString } from "./IndexStringMapper.js";
 import { buildEncodeFooter } from "./EncodeFinalize.js";
@@ -14,12 +13,13 @@ import { lookupCharIndex } from "./CharsetLookup.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
 
+/** 대형 입력에서 typed index 배열(Uint16Array)로 전환하는 임계값(문자 수). */
+const TYPED_INDEX_THRESHOLD = 16384;
+
 export interface PayloadCodecContext {
   bitLength: number;
   usePowerOfTwo: boolean;
   bitPackConfig: BitPackConfig;
-  wasmThreshold: number;
-  wasmMaxBytes: number;
   canUseNativeBase64: boolean;
   dduCharCodes: Uint16Array;
   dduCharCodeLookup: Int32Array;
@@ -83,8 +83,8 @@ export function decodePayload(
     : null;
   if (nativeDecoded) return nativeDecoded;
 
-  // WASM 전환 임계값부터 typed indices를 써서 대형 payload 메모리 형태를 통일합니다.
-  const shouldUseTypedIndices = inputLen >= context.wasmThreshold;
+  // 대형 payload는 typed indices(Uint16Array)로 메모리 형태를 통일합니다.
+  const shouldUseTypedIndices = inputLen >= TYPED_INDEX_THRESHOLD;
   const indices = shouldUseTypedIndices ? new Uint16Array(inputLen) : new Array<number>(inputLen);
 
   const lookup = context.dduCharCodeLookup;
@@ -98,15 +98,6 @@ export function decodePayload(
     indices[i] = val;
   }
 
-  const wasm = shouldUseWasmDecode(inputLen, context) ? getWasmCodecSync() : null;
-  if (wasm?.ready) {
-    const wasmIndices = indices instanceof Uint16Array ? indices : Uint16Array.from(indices);
-    return wasm.decode(wasmIndices, context.bitLength, paddingBits, {
-      charsetSize: context.bitPackConfig.charsetSize,
-      usePowerOfTwo: context.usePowerOfTwo,
-    });
-  }
-
   return bitPackDecode(indices, paddingBits, context.bitPackConfig);
 }
 
@@ -114,21 +105,5 @@ function encodeWithBitPack(
   data: Uint8Array,
   context: PayloadCodecContext,
 ): { indices: ArrayLike<number>; paddingBits: number } {
-  const wasm = shouldUseWasmEncode(data.length, context) ? getWasmCodecSync() : null;
-  if (wasm?.ready) {
-    return wasm.encode(data, context.bitLength, {
-      charsetSize: context.bitPackConfig.charsetSize,
-      usePowerOfTwo: context.usePowerOfTwo,
-    });
-  }
   return bitPackEncode(data, context.bitPackConfig);
-}
-
-function shouldUseWasmEncode(inputLength: number, context: PayloadCodecContext): boolean {
-  return inputLength >= context.wasmThreshold && inputLength <= context.wasmMaxBytes;
-}
-
-function shouldUseWasmDecode(inputLength: number, context: PayloadCodecContext): boolean {
-  const estimatedBytes = Math.ceil((inputLength * context.bitLength) / 8);
-  return estimatedBytes >= context.wasmThreshold && estimatedBytes <= context.wasmMaxBytes;
 }

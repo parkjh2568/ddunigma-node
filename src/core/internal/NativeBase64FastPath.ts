@@ -84,9 +84,8 @@ function base64ToBytes(input: string): Uint8Array | null {
   const bufferCtor = (globalThis as unknown as { Buffer?: typeof Buffer }).Buffer;
   if (bufferCtor?.from) {
     const buffer = bufferCtor.from(input, "base64");
-    return new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    return new Uint8Array(buffer);
   }
 
   return null;
 }
-

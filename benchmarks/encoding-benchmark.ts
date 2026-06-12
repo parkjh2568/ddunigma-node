@@ -5,7 +5,6 @@ import {
   createReadableEncodeStream,
   Ddu64,
   DduSetSymbol,
-  preloadWasm,
 } from "../src/index.js";
 
 type BenchCase = {
@@ -13,12 +12,10 @@ type BenchCase = {
   mode:
     | "native-base64"
     | "js-bitpack"
-    | "wasm-bitpack"
     | "variable-charset"
     | "pipeline"
     | "legacy-v1"
     | "large-js"
-    | "large-wasm"
     | "stream";
   encoder: Ddu64;
   input: Uint8Array | string;
@@ -217,15 +214,6 @@ async function runBenchCase(testCase: BenchCase): Promise<BenchResult> {
 }
 
 async function main(): Promise<void> {
-  let wasmReady = false;
-  try {
-    await preloadWasm();
-    wasmReady = true;
-  } catch {
-    wasmReady = false;
-  }
-  console.log(`WASM: ${wasmReady ? "ready" : "unavailable, using JS fallback"}`);
-
   const smallText = makeText(16 * 1024);
   const largeText = makeText(256 * 1024);
   const binary = makeBinary(256 * 1024);
@@ -245,15 +233,7 @@ async function main(): Promise<void> {
     {
       name: "DDU text 256KB",
       mode: "js-bitpack",
-      encoder: new Ddu64({ wasmThreshold: 1024 * 1024 }),
-      input: largeText,
-      iterations: 15,
-      disableNativeBase64: true,
-    },
-    {
-      name: "DDU text 256KB",
-      mode: "wasm-bitpack",
-      encoder: new Ddu64({ wasmThreshold: 1024 }),
+      encoder: new Ddu64(),
       input: largeText,
       iterations: 15,
       disableNativeBase64: true,
@@ -268,7 +248,7 @@ async function main(): Promise<void> {
     },
     {
       name: "ONECHARSET binary 256KB",
-      mode: "wasm-bitpack",
+      mode: "js-bitpack",
       encoder: new Ddu64({ dduSetSymbol: DduSetSymbol.ONECHARSET }),
       input: binary,
       iterations: 30,
@@ -283,15 +263,7 @@ async function main(): Promise<void> {
     {
       name: "DDU binary 8MB",
       mode: "large-js",
-      encoder: new Ddu64({ wasmThreshold: Number.POSITIVE_INFINITY }),
-      input: largeBinary,
-      iterations: 2,
-      disableNativeBase64: true,
-    },
-    {
-      name: "DDU binary 8MB",
-      mode: "large-wasm",
-      encoder: new Ddu64({ wasmThreshold: 1024 }),
+      encoder: new Ddu64(),
       input: largeBinary,
       iterations: 2,
       disableNativeBase64: true,
@@ -299,15 +271,7 @@ async function main(): Promise<void> {
     {
       name: "DDU text 16KB",
       mode: "js-bitpack",
-      encoder: new Ddu64({ wasmThreshold: 1024 * 1024 }),
-      input: smallText,
-      iterations: 200,
-      disableNativeBase64: true,
-    },
-    {
-      name: "DDU text 16KB",
-      mode: "wasm-bitpack",
-      encoder: new Ddu64({ wasmThreshold: 1024 }),
+      encoder: new Ddu64(),
       input: smallText,
       iterations: 200,
       disableNativeBase64: true,

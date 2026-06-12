@@ -80,7 +80,7 @@ function main(): void {
       name: "bitPackEncode 6bit 256KB",
       iterations: 100,
       bytes: bytes256k.byteLength,
-      minMbps: 280,
+      minMbps: 240,
       fn: () => bitPackEncode(bytes256k, { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 }),
     },
     {

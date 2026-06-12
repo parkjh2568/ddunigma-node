@@ -5,8 +5,8 @@
 커스텀 charset을 사용하는 Base64 스타일 인코더/디코더 라이브러리입니다.
 
 기본 charset은 한글 종성 결합 시스템(8개 기본 문자 × 8개 종성 = 64조합)으로 6비트를 한
-글자에 담습니다. 5.0에서는 압축·AES-256-GCM 암호화·CRC32 체크섬·URL-Safe·청크 분할·한글
-난독화·Web Streams·WASM 가속과 Node/브라우저/Workers 멀티 진입점을 제공합니다.
+글자에 담습니다. 압축·AES-256-GCM 암호화·CRC32 체크섬·URL-Safe·청크 분할·한글 난독화·Web
+Streams와 Node/브라우저/Workers 멀티 진입점을 제공합니다.
 
 ### Credits
 
@@ -43,7 +43,7 @@ dduV1.decode(".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌
 
 ---
 
-## 5.0.0 사용법
+## 5.1.0 사용법
 
 ### 문자열과 바이너리
 
@@ -128,8 +128,6 @@ Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코�
 | `encryptionKey`    | `string`               | 미사용      | AES-256-GCM 암호화 키               |
 | `keyDerivation`    | `KeyDerivationOptions` | `pbkdf2`    | 암호화 키 파생 방식                 |
 | `adapter`          | `PlatformAdapter`      | 진입점 설정 | 플랫폼 어댑터 직접 주입             |
-| `wasmThreshold`    | `number`               | `16384`     | WASM 사용을 시작할 입력 크기        |
-| `wasmMaxBytes`     | `number`               | `8388608`   | WASM에 전달할 최대 payload 크기     |
 
 `encoding`은 레거시 타입 호환을 위해서만 남아 있으며 런타임 문자열 처리는 항상 UTF-8입니다.
 `encrypt`와 `omitFooter`는 스트림 및 내부 파이프라인 제어용이므로 일반 사용에서는 지정하지 않습니다.
@@ -196,14 +194,13 @@ const decoded = ddu.decode(encoded);
 ### 브라우저와 Workers
 
 ```typescript
-import { Ddu64, preloadWasm } from "@ddunigma/node/browser";
+import { Ddu64 } from "@ddunigma/node/browser";
 
 const ddu = new Ddu64({
   compress: true,
   checksum: true,
 });
 
-await preloadWasm();
 const encoded = await ddu.encodeAsync("browser data");
 const decoded = await ddu.decodeAsync(encoded);
 const bytes = await ddu.decodeToUint8ArrayAsync(encoded);
@@ -221,25 +218,6 @@ const asyncStats = await ddu.getStatsAsync("payload", { compress: true });
 
 브라우저에서 압축 통계를 계산할 때는 `getStatsAsync`를 사용합니다.
 
-### WASM 가속
-
-```typescript
-import { Ddu64, preloadWasm } from "@ddunigma/node";
-
-await preloadWasm();
-
-const ddu = new Ddu64({
-  wasmThreshold: 16 * 1024,
-  wasmMaxBytes: 8 * 1024 * 1024,
-});
-```
-
-`wasmThreshold: Infinity`를 지정하면 WASM 사용을 비활성화할 수 있습니다.
-WASM hot path는 `preloadWasm()`이 완료된 뒤 사용됩니다. 사전 로드 전 동기 `encode`/`decode`는
-같은 출력의 JavaScript 구현으로 폴백합니다. WASM 가속은 2의 제곱수 charset뿐 아니라
-DDU_V1처럼 인덱스 쌍을 쓰는 비-2의 제곱수 charset에도 적용됩니다.
-브라우저/core 진입점은 WASM 바이너리를 bundle에 포함하므로 별도 `codec.wasm` 배포 경로가 필요 없습니다.
-
 ### 진입점
 
 ```typescript
@@ -251,3 +229,12 @@ const nodeEncoder = new NodeDdu64();
 const browserEncoder = new BrowserDdu64();
 const coreEncoder = new CoreDdu64();
 ```
+
+진입점은 `package.json`의 조건부 `exports`로 런타임에 맞춰 자동 선택됩니다.
+
+- **Node.js**: `@ddunigma/node` → Node 빌드(zlib/crypto 동기 API 포함, `decodeToBuffer` 제공)
+- **브라우저 / Workers / Deno / Bun / Edge**: 브라우저 빌드(Web Crypto·CompressionStream 기반)
+- 조건 분기로 매칭되지 않는 환경의 최종 `default`는 **브라우저 빌드**입니다. Node 내장
+  모듈에 의존하지 않아 미지의 번들러·런타임에서 가장 안전하기 때문입니다. Node 전용
+  기능(동기 압축/암호화, `decodeToBuffer`)이 필요하면 `@ddunigma/node`를 Node 조건에서
+  사용하세요.

@@ -95,10 +95,6 @@ export interface CharSetInfo {
   defaultObfuscate: boolean;
   /** 암호화 키가 있을 때 암호화 payload만 허용하는지 여부 */
   defaultRequireEncryption: boolean;
-  /** WASM 사용 임계값 (바이트) */
-  wasmThreshold: number;
-  /** WASM에 전달할 최대 payload 크기 */
-  wasmMaxBytes: number;
   /** 기본 청크 크기 */
   defaultChunkSize: number | undefined;
   /** 기본 청크 구분자 */
@@ -276,11 +272,6 @@ export interface DduConstructorOptions extends DduOptions {
 
   /** 명시적 플랫폼 어댑터 (자동 감지 대신 사용) */
   adapter?: PlatformAdapter;
-
-  /** WASM 임계값 (바이트 단위, 기본값: 16384, 범위: 1024-1048576, Infinity면 비활성화) */
-  wasmThreshold?: number;
-  /** WASM 최대 payload 크기 (기본값: 8388608, Infinity면 상한 해제) */
-  wasmMaxBytes?: number;
 }
 
 export const dduDefaultConstructorOptions: DduConstructorOptions = {
@@ -354,39 +345,6 @@ export interface PlatformAdapter {
   readonly supportsBrotli: boolean;
   /** 감지된 런타임 환경 */
   readonly runtime: "node" | "browser" | "edge" | "deno" | "bun" | "unknown";
-}
-
-// ─── WASM Codec ──────────────────────────────────────────────────────────────
-
-/**
- * WASM 가속 비트 패킹 코덱 인터페이스.
- * 순수 JavaScript 구현과 바이트 단위로 동일한 인코딩/디코딩 연산을 제공합니다.
- */
-export interface WasmCodecConfig {
-  /** charset 크기. 기본값은 `1 << bitLength`입니다. */
-  charsetSize?: number;
-  /** 2의 제곱수 charset 직접 인덱스 모드 여부. 기본값은 true입니다. */
-  usePowerOfTwo?: boolean;
-}
-
-export interface WasmCodec {
-  /** 바이트를 charset 인덱스로 인코딩 */
-  encode(
-    input: Uint8Array,
-    bitLength: number,
-    config?: WasmCodecConfig,
-  ): { indices: Uint16Array; paddingBits: number };
-
-  /** charset 인덱스를 바이트로 디코딩 */
-  decode(
-    indices: Uint16Array,
-    bitLength: number,
-    paddingBits: number,
-    config?: WasmCodecConfig,
-  ): Uint8Array;
-
-  /** WASM 모듈이 초기화되어 사용 가능한지 확인 */
-  readonly ready: boolean;
 }
 
 // ─── Obfuscation Layer ───────────────────────────────────────────────────────

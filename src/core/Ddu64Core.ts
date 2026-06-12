@@ -25,12 +25,6 @@ import type {
 } from "./types.js";
 import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
 import {
-  validateWasmMaxBytes,
-  validateWasmThreshold,
-  DEFAULT_WASM_MAX_BYTES,
-  DEFAULT_WASM_THRESHOLD,
-} from "../wasm/WasmCodec.js";
-import {
   Ddu64CompressionError,
   Ddu64CharsetError,
   Ddu64DecompressionError,
@@ -167,12 +161,6 @@ export class Ddu64Core {
 
   /** BitPack 설정 */
   private readonly bitPackConfig: BitPackConfig;
-
-  /** WASM 사용 임계값 */
-  private readonly wasmThreshold: number;
-
-  /** WASM 최대 payload 크기 */
-  private readonly wasmMaxBytes: number;
 
   /** 표준 Base64 charset에서 네이티브 Base64 fast path 사용 여부 */
   private readonly canUseNativeBase64: boolean;
@@ -331,8 +319,6 @@ export class Ddu64Core {
       usePowerOfTwo: this.usePowerOfTwo,
       charsetSize: dduLength,
     };
-    this.wasmThreshold = validateWasmThreshold(dduOptions?.wasmThreshold ?? DEFAULT_WASM_THRESHOLD);
-    this.wasmMaxBytes = validateWasmMaxBytes(dduOptions?.wasmMaxBytes ?? DEFAULT_WASM_MAX_BYTES);
     this.canUseNativeBase64 = canUseNativeBase64FastPath(
       this.dduChar,
       this.paddingChar,
@@ -343,8 +329,6 @@ export class Ddu64Core {
       bitLength: this.bitLength,
       usePowerOfTwo: this.usePowerOfTwo,
       bitPackConfig: this.bitPackConfig,
-      wasmThreshold: this.wasmThreshold,
-      wasmMaxBytes: this.wasmMaxBytes,
       canUseNativeBase64: this.canUseNativeBase64,
       dduCharCodes: this.dduCharCodes,
       dduCharCodeLookup: this.dduCharCodeLookup,
@@ -527,8 +511,6 @@ export class Ddu64Core {
       defaultChecksumScope: this.defaultChecksumScope,
       defaultObfuscate: this.defaultObfuscate,
       defaultRequireEncryption: this.defaultRequireEncryption,
-      wasmThreshold: this.wasmThreshold,
-      wasmMaxBytes: this.wasmMaxBytes,
       defaultChunkSize: this.defaultChunkSize,
       defaultChunkSeparator: this.defaultChunkSeparator,
       defaultCompressionLevel: this.defaultCompressionLevel,

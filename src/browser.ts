@@ -64,10 +64,6 @@ export {
   createEncoderObfuscationLayer,
 } from "./obfuscation/ObfuscationLayer.js";
 
-// ─── WASM ───────────────────────────────────────────────────────────────────
-
-export { preloadWasm, getWasmCodec, getWasmCodecSync } from "./wasm/WasmCodecBrowser.js";
-
 // ─── 타입 및 열거형 ──────────────────────────────────────────────────────────
 
 export { DduSetSymbol } from "./core/types.js";
@@ -83,8 +79,6 @@ export type {
   EncodingProfile,
   PlatformAdapter,
   ObfuscationLayer,
-  WasmCodec,
-  WasmCodecConfig,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
   DduTextEncoding,

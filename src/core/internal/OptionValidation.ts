@@ -81,20 +81,6 @@ export function validateRuntimeOptions(
     validatePositiveLimit(options.maxBufferedChars, "maxBufferedChars", operation);
   }
 
-  if ("wasmThreshold" in options && options.wasmThreshold !== undefined) {
-    const threshold = options.wasmThreshold;
-    if (threshold !== Number.POSITIVE_INFINITY && (!Number.isFinite(threshold) || threshold < 0)) {
-      invalid(operation, "wasmThreshold must be a non-negative finite number or Infinity");
-    }
-  }
-
-  if ("wasmMaxBytes" in options && options.wasmMaxBytes !== undefined) {
-    const maxBytes = options.wasmMaxBytes;
-    if (maxBytes !== Number.POSITIVE_INFINITY && (!Number.isFinite(maxBytes) || maxBytes < 1024)) {
-      invalid(operation, "wasmMaxBytes must be at least 1024 or Infinity");
-    }
-  }
-
   const constructorOptions = options as Partial<DduConstructorOptions>;
   validateBoolean(constructorOptions.throwOnError, "throwOnError", operation);
   validateBoolean(constructorOptions.urlSafe, "urlSafe", operation);

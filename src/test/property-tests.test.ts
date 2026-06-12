@@ -576,15 +576,13 @@ describe("Property-Based Tests", () => {
     });
   });
 
-  // ─── Property 8: WASM/JS 동등성 (JS fallback 검증) ────────────────────────
-  describe("Property 8: WASM/JS 동등성 (JS fallback 검증)", () => {
-    it("WASM이 사용 불가능한 상태에서 JS fallback이 정상 동작", () => {
-      // preloadWasm() 없이 생성하면 동기 hot path는 JS 구현으로 폴백합니다.
+  // ─── Property 8: 대용량 입력 라운드트립 ────────────────────────
+  describe("Property 8: 대용량 입력 라운드트립", () => {
+    it("다양한 길이의 바이너리 입력이 정상 라운드트립", () => {
       const encoder = new Ddu64Node();
 
       fc.assert(
         fc.property(fc.uint8Array({ minLength: 0, maxLength: 2000 }), (data) => {
-          // JS fallback으로 인코딩/디코딩이 정상 동작해야 함
           const encoded = encoder.encode(data);
           const decoded = encoder.decodeToUint8Array(encoded);
           expect(decoded).toEqual(data);

@@ -22,15 +22,9 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@1.94.0
-        with:
-          targets: wasm32-unknown-unknown
-          components: clippy,rustfmt
-
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test:coverage
-      - run: pnpm wasm:check
       - run: pnpm build
       - run: pnpm pack:check

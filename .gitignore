@@ -5,5 +5,4 @@ package-lock.json
 coverage/
 test-decode.ts
 muyaho
-src/wasm/target/
 docs/

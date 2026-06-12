@@ -6,6 +6,6 @@
     "rootDir": ".",
     "types": ["node", "vitest/globals"]
   },
-  "exclude": ["node_modules", "dist", "src/wasm/target"],
+  "exclude": ["node_modules", "dist"],
   "include": ["src/**/*.ts", "scripts/**/*.ts"]
 }

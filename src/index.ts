@@ -25,8 +25,6 @@ export type {
   EncodingProfile,
   PlatformAdapter,
   ObfuscationLayer,
-  WasmCodec,
-  WasmCodecConfig,
   DduTextEncoding,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
@@ -72,7 +70,3 @@ export {
   createObfuscationLayer,
   createEncoderObfuscationLayer,
 } from "./obfuscation/ObfuscationLayer.js";
-
-// ─── WASM ───────────────────────────────────────────────────────────────────
-
-export { preloadWasm, getWasmCodec, getWasmCodecSync } from "./wasm/WasmCodecNode.js";

@@ -52,8 +52,8 @@ describe("vNext improvements", () => {
     });
   });
 
-  describe("large input typed-index path (JS fallback, no preloadWasm)", () => {
-    it("round-trips a buffer larger than the default WASM threshold", () => {
+  describe("large input typed-index path", () => {
+    it("round-trips a buffer larger than the typed-index threshold", () => {
       const enc = new Ddu64Node();
       const data = new Uint8Array(20000);
       for (let i = 0; i < data.length; i++) data[i] = (i * 31) & 0xff;

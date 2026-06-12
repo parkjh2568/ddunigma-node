@@ -118,6 +118,19 @@ describe("Ddu64Core", () => {
       expect(decoded).toBeInstanceOf(Uint8Array);
     });
 
+    it("returns native Base64 output in an exact-size owned buffer", () => {
+      const encoder = new Ddu64Core(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        "=",
+        { adapter: new NodeAdapter() },
+      );
+      const encoded = encoder.encode("owned secret");
+      const decoded = encoder.decodeToUint8Array(encoded);
+
+      expect(decoded.byteOffset).toBe(0);
+      expect(decoded.buffer.byteLength).toBe(decoded.byteLength);
+    });
+
     it("should return correct bytes for UTF-8 string", () => {
       const encoder = createEncoder();
       const input = "ABC";
@@ -471,7 +484,6 @@ describe("Ddu64Core", () => {
       // 5.0 신규 introspection 필드
       expect(info.defaultChecksumScope).toBe("output");
       expect(info.defaultObfuscate).toBe(false);
-      expect(info.wasmThreshold).toBe(16384);
     });
 
     it("returns correct info for ONECHARSET", () => {
