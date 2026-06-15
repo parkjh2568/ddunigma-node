@@ -10,10 +10,7 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { Ddu64Node } from "../Ddu64Node.js";
-import {
-  createEncoderObfuscationLayer,
-  createObfuscationLayer,
-} from "../obfuscation/ObfuscationLayer.js";
+import { createEncoderObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
 
 describe("vNext improvements", () => {
   describe("sync/async output equivalence (non-encrypted)", () => {
@@ -125,11 +122,6 @@ describe("vNext improvements", () => {
       const layer = createEncoderObfuscationLayer(["A", "B", "C", "D"], "X");
       const input = "ABCDENC123V4"; // 마커(ENC, V4) + 숫자 포함
       expect(layer.deobfuscate(layer.obfuscate(input))).toBe(input);
-    });
-
-    it("plain createObfuscationLayer throws on marker/digit chars (documents the difference)", () => {
-      const layer = createObfuscationLayer(["A", "B", "C", "D"], "X");
-      expect(() => layer.obfuscate("ABCDENC123V4")).toThrow();
     });
   });
 });

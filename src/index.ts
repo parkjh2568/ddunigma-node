@@ -25,7 +25,6 @@ export type {
   EncodingProfile,
   PlatformAdapter,
   ObfuscationLayer,
-  DduTextEncoding,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
 } from "./core/types.js";
@@ -67,6 +66,5 @@ export { detectRuntime, getAdapter } from "./adapters/detect.js";
 
 export {
   HangulObfuscationLayer,
-  createObfuscationLayer,
   createEncoderObfuscationLayer,
 } from "./obfuscation/ObfuscationLayer.js";

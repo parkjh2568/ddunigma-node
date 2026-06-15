@@ -111,28 +111,6 @@ export class HangulObfuscationLayer implements ObfuscationLayer {
 }
 
 /**
- * 주어진 charset 설정에 대한 ObfuscationLayer를 생성합니다.
- *
- * @deprecated 인코더 출력과 호환되지 않습니다(charset/패딩만 포함, footer 마커·숫자 미포함).
- * 인코더 출력을 deobfuscate하려면 `createEncoderObfuscationLayer`를, 일반 난독화는 `Ddu64`의
- * `obfuscate` 옵션을 사용하세요. 이 함수는 다음 메이저에서 제거될 수 있습니다.
- *
- * charset 문자와 패딩 문자로부터 알파벳을 구성한 후 한글 난독화 레이어를 생성합니다.
- *
- * @param charSet - 인코딩에 사용되는 charset 문자
- * @param paddingChar - 패딩 문자
- * @returns ObfuscationLayer 인스턴스
- */
-export function createObfuscationLayer(charSet: string[], paddingChar: string): ObfuscationLayer {
-  // 완전한 알파벳 구성: charset 문자 + 패딩 문자 (이미 포함되어 있지 않은 경우)
-  const alphabetSet = new Set<string>(charSet);
-  alphabetSet.add(paddingChar);
-
-  const alphabet = [...alphabetSet];
-  return new HangulObfuscationLayer(alphabet);
-}
-
-/**
  * Ddu64 인코더 출력과 호환되는 ObfuscationLayer를 생성합니다.
  *
  * `createObfuscationLayer`와 달리 charset/패딩 외에 footer 마커

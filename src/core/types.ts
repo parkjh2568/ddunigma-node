@@ -13,25 +13,6 @@ export enum DduSetSymbol {
   ONECHARSET = "oneCharSet",
 }
 
-/**
- * @deprecated ddunigma runtime string encode/decode paths are UTF-8 based.
- * This union remains for legacy type compatibility and `CharSetInfo.encoding`
- * metadata only; non-UTF-8 values do not change runtime text conversion.
- */
-export type DduTextEncoding =
-  | "utf-8"
-  | "utf8"
-  | "latin1"
-  | "ascii"
-  | "base64"
-  | "base64url"
-  | "hex"
-  | "binary"
-  | "ucs2"
-  | "ucs-2"
-  | "utf16le"
-  | "utf-16le";
-
 // ─── Charset Types ───────────────────────────────────────────────────────────
 
 export interface EncodingProfile {
@@ -75,8 +56,8 @@ export interface CharSetInfo {
   bitLength: number;
   /** 2의 제곱수 charset 여부 */
   usePowerOfTwo: boolean;
-  /** 문자열 인코딩 방식 */
-  encoding: DduTextEncoding;
+  /** 문자열 인코딩 방식 (런타임은 항상 UTF-8) */
+  encoding: "utf-8";
   /** 기본 압축 사용 여부 */
   defaultCompress: boolean;
   /** 기본 최대 디코딩 바이트 수 */
@@ -190,6 +171,12 @@ export interface DduOptions {
   compressionLevel?: number;
   /** 최대 디코딩 바이트 수 (Zip Bomb 방어) */
   maxDecodedBytes?: number;
+  /**
+   * 최대 디코딩 입력(인코딩 문자열) 길이(문자 수). 청크/개행 제거 등 전처리 이전에
+   * 선검사하여 거대한 입력에 의한 한도 우회·대량 할당을 차단합니다. 기본값은
+   * `maxDecodedBytes`에 비례합니다.
+   */
+  maxEncodedChars?: number;
   /** 최대 압축해제 바이트 수 (Zip Bomb 방어) */
   maxDecompressedBytes?: number;
   /** 체크섬 추가 여부 (CRC32) */
@@ -203,7 +190,7 @@ export interface DduOptions {
    * `checksum`과 마찬가지로 와이어에 자기기술 플래그가 없으므로 인코딩/디코딩에서 동일하게 지정해야 합니다.
    */
   checksumScope?: "plaintext" | "output";
-  /** 청크 분할 크기 */
+  /** 청크 분할 크기 (0이면 청킹 비활성화 — 생성자 기본값을 호출 단위로 끌 때 사용) */
   chunkSize?: number;
   /** 청크 구분자 (기본값: '\n') */
   chunkSeparator?: string;
@@ -235,12 +222,6 @@ export interface DduStreamOptions extends DduOptions {
 export interface DduConstructorOptions extends DduOptions {
   /** 미리 정의된 charset 심볼 */
   dduSetSymbol?: DduSetSymbol;
-  /**
-   * @deprecated Runtime string encode/decode paths are always UTF-8 based.
-   * This option is accepted for legacy type compatibility only and has no
-   * runtime effect.
-   */
-  encoding?: DduTextEncoding;
   /** 커스텀 charset 문자 배열 또는 문자열 */
   dduChar?: string[] | string;
   /** 종성 문자 배열 (dduChar × codaChar 조합으로 최종 charset 동적 생성) */

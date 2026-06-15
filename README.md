@@ -17,8 +17,7 @@ Streams와 Node/브라우저/Workers 멀티 진입점을 제공합니다.
 
 ## Requirements
 
-- **Node.js >= 18.0.0** (런타임). Web Streams를 포함한 전 기능이 18에서 동작합니다.
-  개발/빌드 툴체인(ESLint·Vitest)은 Node 20 이상이 필요합니다.
+- **Node.js >= 22.0.0** (활성 LTS/Current 기준 지원: Node 22·24 LTS, 26 Current).
 
 ## Install
 

@@ -14,13 +14,13 @@ concurrency:
 
 jobs:
   # 전체 게이트: 로컬 `pnpm verify`와 동일한 단일 명령으로 실행(정의 중복 제거).
-  # ESLint/Vitest 툴체인이 Node 20+를 요구하므로 20/22/24에서 실행.
+  # 지원 정책은 활성 LTS/Current 기준(Node 22 LTS, 24 LTS, 26 Current).
   verify:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22, 24]
+        node: [22, 24, 26]
     steps:
       - uses: actions/checkout@v4
 
@@ -35,23 +35,3 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
-
-  # 최소 지원 런타임(Node 18) 호환 검증: 빌드 + 런타임 smoke만 실행.
-  # (ESLint/Vitest는 Node 18을 지원하지 않으므로 게이트에서 제외)
-  compat-node18:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm smoke

@@ -60,19 +60,20 @@ export function validateRuntimeOptions(
 
   if (
     options.chunkSize !== undefined &&
-    (!Number.isSafeInteger(options.chunkSize) || options.chunkSize <= 0)
+    (!Number.isSafeInteger(options.chunkSize) || options.chunkSize < 0)
   ) {
-    invalid(operation, "chunkSize must be a positive safe integer");
+    invalid(operation, "chunkSize must be a non-negative safe integer (0 disables chunking)");
   }
 
   if (options.chunkSeparator !== undefined && typeof options.chunkSeparator !== "string") {
     invalid(operation, "chunkSeparator must be a string");
   }
-  if (options.chunkSize !== undefined && options.chunkSeparator === "") {
+  if (options.chunkSize !== undefined && options.chunkSize > 0 && options.chunkSeparator === "") {
     invalid(operation, "chunkSeparator must not be empty when chunkSize is enabled");
   }
 
   validatePositiveLimit(options.maxDecodedBytes, "maxDecodedBytes", operation);
+  validatePositiveLimit(options.maxEncodedChars, "maxEncodedChars", operation);
   validatePositiveLimit(options.maxDecompressedBytes, "maxDecompressedBytes", operation);
   if ("maxBufferedBytes" in options) {
     validatePositiveLimit(options.maxBufferedBytes, "maxBufferedBytes", operation);

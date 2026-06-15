@@ -11,13 +11,21 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
+import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
 import {
   HANGUL_SYLLABLE_START,
   HANGUL_SYLLABLE_END,
   HANGUL_SYLLABLE_COUNT,
   buildSyllableMap,
 } from "../obfuscation/syllableMap.js";
+
+/**
+ * charset + padding 알파벳으로 난독화 레이어를 만드는 테스트 로컬 헬퍼.
+ * (이전 공개 `createObfuscationLayer` 헬퍼가 6.0.0에서 제거되어 동작만 재현)
+ */
+function createObfuscationLayer(charSet: string[], paddingChar: string): HangulObfuscationLayer {
+  return new HangulObfuscationLayer([...new Set([...charSet, paddingChar])]);
+}
 
 // ─── Test Data ───────────────────────────────────────────────────────────────
 

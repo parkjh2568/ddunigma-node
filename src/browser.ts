@@ -60,7 +60,6 @@ export { createReadableEncodeStream, createReadableDecodeStream } from "./stream
 
 export {
   HangulObfuscationLayer,
-  createObfuscationLayer,
   createEncoderObfuscationLayer,
 } from "./obfuscation/ObfuscationLayer.js";
 
@@ -81,5 +80,4 @@ export type {
   ObfuscationLayer,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
-  DduTextEncoding,
 } from "./core/types.js";

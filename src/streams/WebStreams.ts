@@ -118,7 +118,7 @@ export function createReadableEncodeStream(
             compress: false,
             encrypt: false,
             checksum: false,
-            chunkSize: undefined,
+            chunkSize: 0,
             chunkSeparator: undefined,
             omitFooter: true,
           });
@@ -164,7 +164,7 @@ export function createReadableEncodeStream(
               compress: false,
               encrypt: false,
               checksum: false,
-              chunkSize: undefined,
+              chunkSize: 0,
               chunkSeparator: undefined,
             });
             controller.enqueue(encoded);
@@ -190,7 +190,7 @@ export function createReadableEncodeStream(
             compress: shouldCompress,
             encrypt: shouldEncrypt,
             checksum: shouldChecksum,
-            chunkSize: undefined,
+            chunkSize: 0,
             chunkSeparator: undefined,
           });
           if (encoded.length > 0) {

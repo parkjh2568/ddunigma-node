@@ -21,6 +21,7 @@ export interface PayloadCodecContext {
   canUseNativeBase64: boolean;
   dduCharCodes: Uint16Array;
   dduCharCodeLookup: Int32Array;
+  dduCharCodeLookupOffset: number;
   paddingChar: string;
   useRepeatPadding: boolean;
   bitsPerPadChar: number;
@@ -76,7 +77,9 @@ export function decodePayload(
     ? decodeNativeBase64(
         cleanedInput,
         paddingBits,
-        (codeUnit) => lookupCharIndex(context.dduCharCodeLookup, codeUnit) >= 0,
+        (codeUnit) =>
+          lookupCharIndex(context.dduCharCodeLookup, codeUnit, context.dduCharCodeLookupOffset) >=
+          0,
       )
     : null;
   if (nativeDecoded) return nativeDecoded;
@@ -87,9 +90,11 @@ export function decodePayload(
 
   const lookup = context.dduCharCodeLookup;
   const lookupLen = lookup.length;
+  const lookupOffset = context.dduCharCodeLookupOffset;
   for (let i = 0; i < inputLen; i++) {
     const code = cleanedInput.charCodeAt(i);
-    const val = code < lookupLen ? lookup[code] : -1;
+    const idx = code - lookupOffset;
+    const val = idx >= 0 && idx < lookupLen ? lookup[idx] : -1;
     if (val < 0) {
       throw new Error(`[Ddu64 decode] Invalid character "${cleanedInput[i]}" at ${i}`);
     }

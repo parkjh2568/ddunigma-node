@@ -29,12 +29,14 @@ export interface DecodePreludeContext {
   defaultChecksum: boolean;
   defaultChunkSeparator: string;
   defaultMaxDecodedBytes: number;
+  defaultMaxEncodedChars: number;
   urlSafe: boolean;
   paddingChar: string;
   bitLength: number;
   bitsPerPadChar: number;
   usePowerOfTwo: boolean;
   dduCharCodeLookup: Int32Array;
+  dduCharCodeLookupOffset: number;
   charSetSize: number;
   encryptionKey: string | undefined;
   defaultRequireEncryption: boolean;
@@ -68,6 +70,21 @@ export function runDecodePrelude(
   const allowInternalDecrypt = options?.encrypt !== false;
   let workingInput = input;
   context.reportDecodeStart(input.length);
+
+  // 전처리(청크/개행 제거, URL-safe 역변환, 문자열 복사) 이전에 입력 길이를 선검사합니다.
+  // 개행만 가득한 거대한 입력이 출력 한도(maxDecodedBytes)를 우회하면서 대량 문자열
+  // 복사/스캔을 유발하는 것을 차단합니다.
+  const maxEncodedChars = normalizeLimit(
+    options?.maxEncodedChars,
+    context.defaultMaxEncodedChars,
+    true,
+    "maxEncodedChars",
+  );
+  if (input.length > maxEncodedChars) {
+    throw new Error(
+      `[Ddu64 decode] Encoded input exceeds limit. Length: ${input.length}, Limit: ${maxEncodedChars} characters`,
+    );
+  }
 
   const chunkSeparator = options?.chunkSeparator ?? context.defaultChunkSeparator;
   workingInput = removeChunks(workingInput, chunkSeparator);
@@ -118,6 +135,7 @@ export function runDecodePrelude(
     context.usePowerOfTwo,
     context.dduCharCodeLookup,
     context.charSetSize,
+    context.dduCharCodeLookupOffset,
   );
   assertDecodedBitLength(cleanedInput, paddingBits, context.bitLength, context.usePowerOfTwo);
 

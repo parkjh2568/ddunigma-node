@@ -238,7 +238,7 @@ console.log("[ 6. 바이너리 데이터 (decodeToBuffer) ]");
 console.log("═══════════════════════════════════════════════════════════════════════════════\n");
 
 {
-  const encoder = new Ddu64(BASE64_CHARS, "=", { encoding: "latin1" });
+  const encoder = new Ddu64(BASE64_CHARS, "=");
 
   try {
     const buffer = Buffer.alloc(50, 0xff);
@@ -371,7 +371,7 @@ console.log("══════════════════════�
 
   // 바이너리 데이터 압축
   try {
-    const binaryEncoder = new Ddu64(BASE64_CHARS, "=", { encoding: "latin1" });
+    const binaryEncoder = new Ddu64(BASE64_CHARS, "=");
     const buffer = Buffer.alloc(500, 0xab);
     const compressEncoded = binaryEncoder.encode(buffer, { compress: true });
     const decodedBuffer = binaryEncoder.decodeToBuffer(compressEncoded);

@@ -38,4 +38,41 @@ describe("review fixes", () => {
       expect(ddu.decode(ddu.encode("AB"))).toBe("AB");
     });
   });
+
+  describe("maxEncodedChars precheck", () => {
+    it("rejects oversized encoded input before preprocessing", () => {
+      const ddu = new Ddu64Node({ maxEncodedChars: 100 });
+      const huge = "\n".repeat(1000);
+      expect(() => ddu.decode(huge)).toThrow(/exceeds limit/i);
+    });
+
+    it("allows input within the limit", () => {
+      const ddu = new Ddu64Node({ maxEncodedChars: 1000 });
+      const enc = ddu.encode("hello");
+      expect(ddu.decode(enc)).toBe("hello");
+    });
+  });
+
+  describe("chunkSize: 0 disables a constructor default", () => {
+    it("call-level chunkSize 0 overrides constructor chunkSize", () => {
+      const ddu = new Ddu64Node(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        "=",
+        { chunkSize: 4, chunkSeparator: "\n" },
+      );
+      const chunked = ddu.encode("hello world payload");
+      expect(chunked).toContain("\n");
+      const flat = ddu.encode("hello world payload", { chunkSize: 0 });
+      expect(flat).not.toContain("\n");
+      expect(ddu.decode(flat)).toBe("hello world payload");
+    });
+  });
+
+  describe("sparse/high-codepoint charset lookup (offset table)", () => {
+    it("round-trips a charset with a high BMP code unit", () => {
+      const ddu = new Ddu64Node(["가", "나", "다", "힣"], "뭐");
+      const input = new Uint8Array([0, 1, 200, 255, 42]);
+      expect(ddu.decodeToUint8Array(ddu.encode(input))).toEqual(input);
+    });
+  });
 });

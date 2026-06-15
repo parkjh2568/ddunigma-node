@@ -223,7 +223,6 @@ function runTypeSmoke(packageDir) {
         dduSetSymbol: DduSetSymbol.DDU,
         checksum: true,
         checksumScope: "output",
-        encoding: "latin1",
         requireEncryption: true,
       };
       const callOptions: DduOptions = { checksum: true, compress: false };

@@ -76,6 +76,8 @@ import { buildEncryptionAAD } from "./wireFormat.js";
 
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
+/** 디코드 입력 문자열 길이 기본 상한(문자 수). maxDecodedBytes*4와 함께 max 적용. */
+const DEFAULT_MAX_ENCODED_CHARS = 256 * 1024 * 1024;
 
 /**
  * AES-GCM 와이어 오버헤드 (IV 12바이트 + authTag 16바이트).
@@ -111,11 +113,17 @@ export class Ddu64Core {
   /** UTF-16 코드 유닛 → 인덱스 direct lookup (단일 BMP 심볼 전용) */
   private readonly dduCharCodeLookup: Int32Array;
 
+  /** 룩업 테이블 오프셋 (lookup[code - offset]) */
+  private readonly dduCharCodeLookupOffset: number;
+
   /** 기본 압축 활성화 */
   protected readonly defaultCompress: boolean;
 
   /** 기본 최대 디코딩 바이트 수 */
   private readonly defaultMaxDecodedBytes: number;
+
+  /** 기본 최대 인코딩 입력 문자 수 (디코드 전처리 전 선검사) */
+  private readonly defaultMaxEncodedChars: number;
 
   /** 기본 최대 압축해제 바이트 수 */
   private readonly defaultMaxDecompressedBytes: number;
@@ -249,6 +257,18 @@ export class Ddu64Core {
       shouldThrow,
       "maxDecompressedBytes",
     );
+    // 디코드 입력(인코딩 문자열) 자체의 상한. 청크/개행 제거 등 전처리 이전에 선검사하여
+    // 거대한 입력(예: 개행만 가득한 문자열)이 한도 우회 + 대량 문자열 복사를 유발하지 못하게 합니다.
+    // 기본값은 maxDecodedBytes에 비례해 정상 인코딩(비-2의 제곱수는 바이트당 최대 ~2.67문자 +
+    // 청크 구분자)을 깨지 않도록 충분히 크게 잡습니다.
+    this.defaultMaxEncodedChars = normalizeLimit(
+      dduOptions?.maxEncodedChars,
+      this.defaultMaxDecodedBytes === Number.POSITIVE_INFINITY
+        ? Number.POSITIVE_INFINITY
+        : Math.max(DEFAULT_MAX_ENCODED_CHARS, this.defaultMaxDecodedBytes * 4),
+      shouldThrow,
+      "maxEncodedChars",
+    );
 
     // 비트 길이 계산
     const dduLength = this.dduChar.length;
@@ -270,6 +290,7 @@ export class Ddu64Core {
 
     const lookupTables = buildCharsetLookupTables(this.dduChar, isPredefinedCharSet);
     this.dduCharCodeLookup = lookupTables.charCodeLookup;
+    this.dduCharCodeLookupOffset = lookupTables.lookupOffset;
     this.dduCharCodes = lookupTables.charCodes;
 
     this.urlSafe = validateFinalCharsetConfiguration(
@@ -330,6 +351,7 @@ export class Ddu64Core {
       canUseNativeBase64: this.canUseNativeBase64,
       dduCharCodes: this.dduCharCodes,
       dduCharCodeLookup: this.dduCharCodeLookup,
+      dduCharCodeLookupOffset: this.dduCharCodeLookupOffset,
       paddingChar: this.paddingChar,
       useRepeatPadding: this.useRepeatPadding,
       bitsPerPadChar: this.bitsPerPadChar,
@@ -749,12 +771,14 @@ export class Ddu64Core {
       defaultChecksum: this.defaultChecksum,
       defaultChunkSeparator: this.defaultChunkSeparator,
       defaultMaxDecodedBytes: this.defaultMaxDecodedBytes,
+      defaultMaxEncodedChars: this.defaultMaxEncodedChars,
       urlSafe: this.urlSafe,
       paddingChar: this.paddingChar,
       bitLength: this.bitLength,
       bitsPerPadChar: this.bitsPerPadChar,
       usePowerOfTwo: this.usePowerOfTwo,
       dduCharCodeLookup: this.dduCharCodeLookup,
+      dduCharCodeLookupOffset: this.dduCharCodeLookupOffset,
       charSetSize: this.dduChar.length,
       encryptionKey: this.encryptionKey,
       defaultRequireEncryption: this.defaultRequireEncryption,
