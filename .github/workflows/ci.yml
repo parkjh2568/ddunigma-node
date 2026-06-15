@@ -14,13 +14,13 @@ concurrency:
 
 jobs:
   # 전체 게이트: 로컬 `pnpm verify`와 동일한 단일 명령으로 실행(정의 중복 제거).
-  # 지원 정책은 활성 LTS/Current 기준(Node 22 LTS, 24 LTS, 26 Current).
+  # 활성 LTS 기준(22=engines 하한, 24=LTS). Current(26 등)는 러너에서 가용 확인 후 추가.
   verify:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24, 26]
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
 
