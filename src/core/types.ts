@@ -251,6 +251,14 @@ export interface DduConstructorOptions extends DduOptions {
   encryptionKey?: string;
   /** 암호화 키 파생 옵션 */
   keyDerivation?: KeyDerivationOptions;
+  /**
+   * 암호화 wire envelope 버전. 기본 `4`(IV│tag│ciphertext).
+   * `5`는 KDF 메타데이터(알고리즘·salt·iterations·hash)를 payload에 자기기술로 싣고
+   * AES-GCM AAD로 인증합니다. salt는 인스턴스 단위 랜덤(미지정 시 자동 생성)이며
+   * 디코더는 wire의 KDF 파라미터로 키를 도출합니다(별도 설정 불필요). V4 payload는
+   * 계속 디코딩됩니다(역호환).
+   */
+  encryptionVersion?: 4 | 5;
   /** 패딩 문자 반복 방식 사용 여부 */
   useRepeatPadding?: boolean;
 

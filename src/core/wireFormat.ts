@@ -58,6 +58,9 @@ export const PIPELINE_V3_MARKER = "V3";
 /** AES-GCM AAD로 와이어 메타데이터를 인증하는 v4 마커 */
 export const PIPELINE_V4_MARKER = "V4";
 
+/** 자기기술 KDF 메타데이터를 payload에 싣는 v5 마커 */
+export const PIPELINE_V5_FOOTER_MARKER = "V5";
+
 /** 체크섬 마커 접두사 (뒤에 8자리 16진수 CRC32가 따름) */
 export const CHECKSUM_MARKER = "CHK";
 
@@ -67,7 +70,7 @@ export const CHECKSUM_MARKER_V5 = "CK";
 /** 체크섬 계산 범위 */
 export type ChecksumScope = "plaintext" | "output";
 
-export type PipelineVersion = 2 | 3 | 4;
+export type PipelineVersion = 2 | 3 | 4 | 5;
 
 const aadEncoder = /* @__PURE__ */ new TextEncoder();
 
@@ -163,7 +166,13 @@ export function parseFooter(
     let compressionAlgorithm: "deflate" | "brotli" | undefined;
     let pipelineVersion: PipelineVersion = 2;
 
-    if (pos >= PIPELINE_V4_MARKER.length && endsWithAt(input, PIPELINE_V4_MARKER, pos)) {
+    if (
+      pos >= PIPELINE_V5_FOOTER_MARKER.length &&
+      endsWithAt(input, PIPELINE_V5_FOOTER_MARKER, pos)
+    ) {
+      pipelineVersion = 5;
+      pos -= PIPELINE_V5_FOOTER_MARKER.length;
+    } else if (pos >= PIPELINE_V4_MARKER.length && endsWithAt(input, PIPELINE_V4_MARKER, pos)) {
       pipelineVersion = 4;
       pos -= PIPELINE_V4_MARKER.length;
     } else if (pos >= PIPELINE_V3_MARKER.length && endsWithAt(input, PIPELINE_V3_MARKER, pos)) {
@@ -477,7 +486,13 @@ export function buildFooter(options: FooterOptions): string {
     paddingChar +
     compressionMarker +
     (isEncrypted ? ENCRYPT_MARKER : "") +
-    (pipelineVersion === 4 ? PIPELINE_V4_MARKER : pipelineVersion === 3 ? PIPELINE_V3_MARKER : "") +
+    (pipelineVersion === 5
+      ? PIPELINE_V5_FOOTER_MARKER
+      : pipelineVersion === 4
+        ? PIPELINE_V4_MARKER
+        : pipelineVersion === 3
+          ? PIPELINE_V3_MARKER
+          : "") +
     paddingBits.toString()
   );
 }

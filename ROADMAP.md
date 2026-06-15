@@ -6,7 +6,10 @@
 
 ---
 
-## ④ 암호화 KDF envelope v5 (self-describing KDF)
+## ④ 암호화 KDF envelope v5 (self-describing KDF) — ✅ 구현됨 (opt-in)
+
+> 상태: `encryptionVersion: 5` opt-in으로 구현 완료(기본 V4 유지). 아래는 확정 설계.
+> 보안 리뷰는 별도 권장. 미적용: Argon2id(WASM/네이티브 의존 → zero-dep 방향과 충돌로 제외).
 
 ### 문제
 
@@ -23,7 +26,9 @@
   KDF_META(가변) │ IV(12) │ authTag(16) │ ciphertext(N)
   KDF_META = algId(1) │ saltLen(1) │ salt(≥16, 랜덤) │ iterations(4, BE) │ hashId(1)
   ```
-- **salt는 인스턴스 고정이 아니라 메시지마다 랜덤**(≥16바이트), 암호문에 동봉.
+- salt는 인스턴스 고정이 아니라 메시지마다 랜덤(≥16바이트), 암호문에 동봉.
+  **(구현 정정: salt는 인스턴스 단위 랜덤으로 1회 생성·동봉. 메시지마다 재도출하면
+  PBKDF2/Argon2id 비용이 매번 발생하므로 키 해시를 캐시. 메시지 유일성은 GCM IV가 담당.)**
 - KDF_META 전체를 AES-GCM **AAD에 포함**해 인증(변조 시 복호화 실패). 현 `buildEncryptionAAD`
   확장: `ddunigma:wire:v5;enc=1;compress=...;kdf=<algId,iter,hash,saltHash>`.
 - algId: `0=sha256(레거시)`, `1=pbkdf2`, `2=argon2id(선택)`. Argon2id는 무종속/브라우저
