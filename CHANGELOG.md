@@ -41,27 +41,6 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 - 같은 인스턴스로 레거시 평문을 디코딩해야 하면 호출에 `requireEncryption: false`
   (또는 `encrypt: false`)를 명시하세요.
 
-### KDF envelope v5 (자기기술 키 파생, opt-in)
-
-- 신규 옵션 `encryptionVersion?: 4 | 5`(기본 `4`). `5`는 KDF 메타데이터(알고리즘·salt·
-  iterations·hash)를 암호화 payload에 자기기술로 싣고 AES-GCM AAD로 인증합니다:
-  `KDF_META │ IV │ authTag │ ciphertext`.
-- salt는 인스턴스 단위 랜덤(미지정 시 자동 생성)이며 envelope에 동봉됩니다. 디코더는
-  **별도 설정 없이 wire의 KDF 파라미터로 키를 도출**합니다(마이그레이션 footgun 제거).
-  메시지 유일성은 매 메시지 랜덤 GCM IV가 담당하고, 키 해시는 캐시되어 PBKDF2 비용이
-  반복되지 않습니다.
-- V5 미지정 시 PBKDF2 기본 반복은 600,000회(자기기술이라 디코드가 wire 값을 따름).
-- V4/V3 payload는 계속 디코딩됩니다(역호환). Argon2id는 zero-dep/WASM 미사용 방향과
-  충돌하여 도입하지 않았습니다(PBKDF2/sha256만 지원).
-
-```typescript
-const enc = new Ddu64({ encryptionKey: "secret", encryptionVersion: 5 });
-const encoded = enc.encode("data");
-// 디코더는 키만 알면 됨 — salt/iter/alg는 wire에서 자기기술
-const dec = new Ddu64({ encryptionKey: "secret" });
-dec.decode(encoded);
-```
-
 ### deprecated API 제거 (Breaking)
 
 - 생성자 옵션 `encoding` 및 타입 `DduTextEncoding` 제거. 런타임 문자열 처리는 항상

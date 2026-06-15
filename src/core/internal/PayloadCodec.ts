@@ -25,8 +25,8 @@ export interface PayloadCodecContext {
   paddingChar: string;
   useRepeatPadding: boolean;
   bitsPerPadChar: number;
-  /** 암호화 페이로드 파이프라인 버전. V4(기본) 또는 V5(자기기술 KDF). */
-  encryptedPipelineVersion: 4 | 5;
+  /** 암호화 페이로드 파이프라인 버전. 인코더는 항상 V4를 생성합니다(V3 읽기는 parseFooter의 레거시 호환). */
+  encryptedPipelineVersion: 4;
 }
 
 export function encodePayload(

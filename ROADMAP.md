@@ -1,59 +1,23 @@
-# Roadmap: 암호화 envelope v5 / 진짜 스트리밍
+# Roadmap: 진짜 스트리밍
 
-외부 리뷰에서 제기된 두 대형 항목의 설계. 둘 다 **와이어 포맷 변경**이라 전용 작업
-(설계 확정 → 테스트 벡터 생성 → 구현 → 리뷰)으로 진행한다. 기존 V4 포맷과 하위호환을
+외부 리뷰에서 제기된 대형 항목의 설계. **와이어 포맷 변경**이라 전용 작업
+(설계 확정 → 테스트 벡터 생성 → 구현 → 리뷰)으로 진행한다. 기존 포맷과 하위호환을
 반드시 유지한다(기존 데이터 디코딩 보장).
 
 ---
 
-## ④ 암호화 KDF envelope v5 (self-describing KDF) — ✅ 구현됨 (opt-in)
+## ④ 암호화 KDF envelope v5 (self-describing KDF) — ❌ 제외 (범위 밖)
 
-> 상태: `encryptionVersion: 5` opt-in으로 구현 완료(기본 V4 유지). 아래는 확정 설계.
-> 보안 리뷰는 별도 권장. 미적용: Argon2id(WASM/네이티브 의존 → zero-dep 방향과 충돌로 제외).
-
-### 문제
-
-- 현재 PBKDF2 기본 210,000회 + 고정 salt. OWASP 현 권고는 PBKDF2-HMAC-SHA256 600k,
-  Argon2id 우선.
-- 암호문에 KDF 알고리즘/salt/iterations가 **자기기술되지 않음** → 4.x↔현재 마이그레이션
-  시 사용자가 파라미터를 직접 맞춰야 하고, 기본값 변경이 곧 호환성 파괴.
-
-### 설계 (신규 파이프라인 마커 `V5`)
-
-- 암호화 footer 파이프라인 버전에 `V5` 추가(현 `V4` 유지·읽기 호환).
-- V5 암호문 레이아웃:
-  ```
-  KDF_META(가변) │ IV(12) │ authTag(16) │ ciphertext(N)
-  KDF_META = algId(1) │ saltLen(1) │ salt(≥16, 랜덤) │ iterations(4, BE) │ hashId(1)
-  ```
-- salt는 인스턴스 고정이 아니라 메시지마다 랜덤(≥16바이트), 암호문에 동봉.
-  **(구현 정정: salt는 인스턴스 단위 랜덤으로 1회 생성·동봉. 메시지마다 재도출하면
-  PBKDF2/Argon2id 비용이 매번 발생하므로 키 해시를 캐시. 메시지 유일성은 GCM IV가 담당.)**
-- KDF_META 전체를 AES-GCM **AAD에 포함**해 인증(변조 시 복호화 실패). 현 `buildEncryptionAAD`
-  확장: `ddunigma:wire:v5;enc=1;compress=...;kdf=<algId,iter,hash,saltHash>`.
-- algId: `0=sha256(레거시)`, `1=pbkdf2`, `2=argon2id(선택)`. Argon2id는 무종속/브라우저
-  공통 경로에 순수 JS 구현이 없으므로 **선택적 어댑터 capability**로 두고, 미지원 시
-  pbkdf2로 폴백(또는 throw, 정책 결정 필요).
-- 기본 iterations를 v5에서 600,000으로 상향(자기기술되므로 디코드는 메타를 따름 → 호환 OK).
-
-### 디코드
-
-- footer가 `V5`면 KDF_META를 파싱해 그 파라미터로 키 파생 → 복호화. `V4`/`V3`는 기존 경로.
-
-### 작업 항목
-
-1. wireFormat: `PIPELINE_V5_MARKER`, KDF_META 직렬화/파싱, AAD v5.
-2. adapters: `deriveKey`가 salt/iter/hash/alg를 받도록(이미 KeyDerivationOptions 존재) +
-   메시지별 랜덤 salt 생성(adapter.randomBytes).
-3. EncodePipeline/DecodePrelude: V5 분기.
-4. 새 옵션: `encryptionVersion?: 4 | 5`(기본 5? 또는 opt-in) — 기본값 결정 필요.
-5. **테스트 벡터**: V5 인코딩 고정 벡터 + V4 역호환 디코딩 벡터.
-6. 보안 리뷰: salt 인증 여부, nonce(IV) 유일성, 다운그레이드(공격자가 V5→V4 강등) 방어.
-
-### 리스크
-
-- 크립토 포맷 결함은 테스트로 못 잡을 수 있음 → 설계 리뷰 필수.
-- 기본값 정책(v5 기본 여부, Argon2id 미지원 런타임 처리)은 제품 결정.
+> 결정: **구현하지 않음.** opt-in(`encryptionVersion: 5`)으로 한 차례 구현했다가 되돌렸다.
+> 이유: 자기기술 KDF envelope는 **인코딩 유틸리티의 정체성과 미스매치**다. 새로운 영구
+> 암호화 wire 포맷을 추가하면 장기 보안 책임(salt 인증, nonce 유일성, 다운그레이드 방어,
+> KDF 알고리즘 노후화 대응)을 라이브러리가 떠안게 되는데, 이는 본 라이브러리의 핵심 가치
+> (zero-dependency 커스텀 charset 인코딩)와 맞지 않는다. 강한 키 파생이 필요한 사용처는
+> 애플리케이션 레벨에서 전용 KDF/암호화 라이브러리를 쓰는 것이 옳다.
+>
+> 현행 암호화(AES-256-GCM + PBKDF2/sha256, 호출자 지정 `salt`/`iterations`)는 유지한다.
+> 저엔트로피 키 사용 시 가이드는 README의 키 파생 섹션 참고(앱 고유 `salt` + 높은
+> `iterations` 권장). 포맷 변경 없는 문서 수준 권고다.
 
 ---
 

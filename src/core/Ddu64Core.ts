@@ -30,7 +30,6 @@ import {
   isDdu64Error,
   toErrorMessage,
   wrapDdu64Error,
-  type Ddu64Error,
 } from "./errors.js";
 import { canUseNativeBase64FastPath } from "./internal/NativeBase64FastPath.js";
 import {
@@ -38,7 +37,6 @@ import {
   decompressSyncWithAdapter,
   decryptSyncWithAdapter,
   encryptSyncWithAdapter,
-  requireSyncAdapter,
   type SyncAdapterGatewayContext,
 } from "./internal/SyncAdapterGateway.js";
 import {
@@ -71,14 +69,6 @@ import {
   type EncodePipelineBaseContext,
 } from "./pipeline/EncodePipeline.js";
 import { buildEncryptionAAD } from "./wireFormat.js";
-import {
-  decryptV5Async,
-  decryptV5Sync,
-  encryptV5Async,
-  encryptV5Sync,
-  resolveV5EncodeMaterial,
-  type V5CryptoState,
-} from "./internal/EnvelopeCryptoV5.js";
 
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
@@ -142,15 +132,6 @@ export class Ddu64Core {
 
   /** 암호화 키 파생 옵션 */
   private readonly keyDerivation: KeyDerivationOptions | undefined;
-
-  /** 암호화 wire envelope 버전 (4=기본, 5=자기기술 KDF) */
-  private readonly encryptionVersion: 4 | 5;
-
-  /** V5 암호 상태(인코드 material + 디코드 키 캐시). 키가 있을 때만 생성. */
-  private readonly v5State: V5CryptoState | undefined;
-
-  /** V5 KDF_META 바이트 길이(getStats 길이 산출용; 비-V5는 0). */
-  private readonly v5KdfMetaLength: number;
 
   /** 캐시된 암호화 키 해시 */
   private encryptionKeyHash: Uint8Array | undefined;
@@ -321,23 +302,6 @@ export class Ddu64Core {
     this.encryptionKey = dduOptions?.encryptionKey;
     this.keyDerivation = dduOptions?.keyDerivation;
 
-    // 암호화 envelope 버전 + V5 상태. 키가 있는 모든 인스턴스는 V5 payload를 디코드할 수
-    // 있어야 하므로 v5State를 둡니다. 인코드용 material(KDF_META)은 V5 + 키 + 어댑터가
-    // 있을 때만 즉시 해석합니다(getStats 길이 산출에 kdfMeta 길이 필요).
-    this.encryptionVersion = dduOptions?.encryptionVersion ?? 4;
-    this.v5State = this.encryptionKey
-      ? {
-          adapter: this.adapter,
-          encryptionKey: this.encryptionKey,
-          keyDerivation: this.keyDerivation,
-        }
-      : undefined;
-    let v5KdfMetaLength = 0;
-    if (this.encryptionVersion === 5 && this.v5State && this.adapter) {
-      v5KdfMetaLength = resolveV5EncodeMaterial(this.v5State, this.adapter).kdfMeta.length;
-    }
-    this.v5KdfMetaLength = v5KdfMetaLength;
-
     // 옵션
     this.defaultChecksum = dduOptions?.checksum ?? false;
     // 5.0: 기본 체크섬 범위를 "output"으로 전환 (암호화 시 평문 CRC 미노출).
@@ -385,7 +349,7 @@ export class Ddu64Core {
       paddingChar: this.paddingChar,
       useRepeatPadding: this.useRepeatPadding,
       bitsPerPadChar: this.bitsPerPadChar,
-      encryptedPipelineVersion: this.encryptionVersion,
+      encryptedPipelineVersion: 4,
     };
   }
 
@@ -451,8 +415,7 @@ export class Ddu64Core {
     const prep = this.decodePrelude(input, options);
     return runSyncDecodePipeline(prep, options, {
       ...this.buildDecodeBaseContext(options),
-      decrypt: (data, aad, pipelineVersion, compressionAlgorithm) =>
-        this.decryptForDecodeSync(data, aad, pipelineVersion, compressionAlgorithm),
+      decrypt: (data, aad) => this.decryptSync(data, aad),
       decompress: (data, algorithm, maxBytes) => this.decompressSync(data, algorithm, maxBytes),
     });
   }
@@ -480,8 +443,7 @@ export class Ddu64Core {
       ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) =>
         compressAsyncWithAdapter(this.adapter, data, algorithm, level),
-      encrypt: (data, compressionAlgorithm) =>
-        this.encryptForEncodeAsync(data, compressionAlgorithm),
+      encrypt: (data, aad) => encryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
     });
     return result.encoded;
   }
@@ -524,8 +486,7 @@ export class Ddu64Core {
     const prep = this.decodePrelude(input, options);
     return runAsyncDecodePipeline(prep, options, {
       ...this.buildDecodeBaseContext(options),
-      decrypt: (data, aad, pipelineVersion, compressionAlgorithm) =>
-        this.decryptForDecodeAsync(data, aad, pipelineVersion, compressionAlgorithm),
+      decrypt: (data, aad) => decryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
       decompress: (data, algorithm, maxBytes) =>
         decompressAsyncWithAdapter(this.adapter, data, algorithm, maxBytes),
     });
@@ -638,8 +599,7 @@ export class Ddu64Core {
     return runSyncEncodePipeline(input, options, {
       ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) => this.compressSync(data, algorithm, level),
-      encrypt: (data, compressionAlgorithm) =>
-        this.encryptForEncodeSync(data, compressionAlgorithm),
+      encrypt: (data, aad) => this.encryptSync(data, aad),
     });
   }
 
@@ -660,7 +620,7 @@ export class Ddu64Core {
     return runSyncEncodePipeline(input, options, {
       ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) => this.compressSync(data, algorithm, level),
-      encrypt: (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES + this.v5KdfMetaLength),
+      encrypt: (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
     });
   }
 
@@ -672,8 +632,7 @@ export class Ddu64Core {
       ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) =>
         compressAsyncWithAdapter(this.adapter, data, algorithm, level),
-      encrypt: async (data) =>
-        new Uint8Array(data.length + AEAD_OVERHEAD_BYTES + this.v5KdfMetaLength),
+      encrypt: async (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
     });
   }
 
@@ -692,6 +651,8 @@ export class Ddu64Core {
       defaultCompressionAlgorithm: this.defaultCompressionAlgorithm,
       hasEncryptionKey: !!this.encryptionKey,
       reportProgress: (info) => this.reportProgress(options, info),
+      getEncryptionAAD: (compressionAlgorithm) =>
+        buildEncryptionAAD({ compressionAlgorithm, pipelineVersion: 4 }),
       finalize: (
         workingData,
         compressionAlgorithm,
@@ -847,92 +808,6 @@ export class Ddu64Core {
   }
 
   // ─── 동기 암호화/압축 헬퍼 ───────────────────────────────────────
-
-  /** 인코드 암호화 라우팅: V5는 KDF envelope, 그 외는 V4 AAD. (동기) */
-  private encryptForEncodeSync(
-    data: Uint8Array,
-    compressionAlgorithm: "deflate" | "brotli" | undefined,
-  ): Uint8Array {
-    if (this.encryptionVersion === 5) {
-      try {
-        const adapter = requireSyncAdapter(this.adapter, "encode");
-        return encryptV5Sync(this.v5State!, data, compressionAlgorithm, adapter);
-      } catch (err) {
-        throw this.wrapEncryptError(err, "encode");
-      }
-    }
-    return this.encryptSync(data, buildEncryptionAAD({ compressionAlgorithm, pipelineVersion: 4 }));
-  }
-
-  /** 인코드 암호화 라우팅 (비동기). */
-  private async encryptForEncodeAsync(
-    data: Uint8Array,
-    compressionAlgorithm: "deflate" | "brotli" | undefined,
-  ): Promise<Uint8Array> {
-    if (this.encryptionVersion === 5) {
-      try {
-        const adapter = requireSyncAdapter(this.adapter, "encode");
-        return await encryptV5Async(this.v5State!, data, compressionAlgorithm, adapter);
-      } catch (err) {
-        throw this.wrapEncryptError(err, "encode");
-      }
-    }
-    return encryptAsyncWithAdapter(
-      this.getSyncGatewayContext(),
-      data,
-      buildEncryptionAAD({ compressionAlgorithm, pipelineVersion: 4 }),
-    );
-  }
-
-  /** 디코드 복호화 라우팅: V5는 wire KDF로 도출, 그 외는 V4/V3 경로. (동기) */
-  private decryptForDecodeSync(
-    data: Uint8Array,
-    aad: Uint8Array | undefined,
-    pipelineVersion: number,
-    compressionAlgorithm: "deflate" | "brotli" | undefined,
-  ): Uint8Array {
-    if (pipelineVersion === 5) {
-      try {
-        const adapter = requireSyncAdapter(this.adapter, "decode");
-        return decryptV5Sync(this.v5State!, data, compressionAlgorithm, adapter);
-      } catch (err) {
-        throw this.wrapDecryptError(err);
-      }
-    }
-    return this.decryptSync(data, aad);
-  }
-
-  /** 디코드 복호화 라우팅 (비동기). */
-  private async decryptForDecodeAsync(
-    data: Uint8Array,
-    aad: Uint8Array | undefined,
-    pipelineVersion: number,
-    compressionAlgorithm: "deflate" | "brotli" | undefined,
-  ): Promise<Uint8Array> {
-    if (pipelineVersion === 5) {
-      try {
-        const adapter = requireSyncAdapter(this.adapter, "decode");
-        return await decryptV5Async(this.v5State!, data, compressionAlgorithm, adapter);
-      } catch (err) {
-        throw this.wrapDecryptError(err);
-      }
-    }
-    return decryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad);
-  }
-
-  private wrapEncryptError(err: unknown, operation: "encode"): Ddu64Error {
-    if (isDdu64Error(err)) return err;
-    const message = toErrorMessage(err);
-    if (isAdapterCapabilityErrorMessage(message)) return wrapDdu64Error(err, operation);
-    return new Ddu64EncryptionError(message, err);
-  }
-
-  private wrapDecryptError(err: unknown): Ddu64Error {
-    if (isDdu64Error(err)) return err;
-    const message = toErrorMessage(err);
-    if (isAdapterCapabilityErrorMessage(message)) return wrapDdu64Error(err, "decode");
-    return new Ddu64DecryptionError(message, err);
-  }
 
   private encryptSync(data: Uint8Array, aad?: Uint8Array): Uint8Array {
     try {
