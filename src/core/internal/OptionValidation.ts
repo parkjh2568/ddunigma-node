@@ -5,9 +5,14 @@
  */
 
 import { Ddu64InvalidInputError, type Ddu64Operation } from "../errors.js";
-import type { DduConstructorOptions, DduOptions, DduStreamOptions } from "../types.js";
+import type {
+  DduConstructorOptions,
+  DduInternalOptions,
+  DduOptions,
+  DduStreamOptions,
+} from "../types.js";
 
-type PublicOptions = DduOptions | DduConstructorOptions | DduStreamOptions;
+type PublicOptions = DduOptions | DduConstructorOptions | DduStreamOptions | DduInternalOptions;
 
 export function validateRuntimeOptions(
   options: PublicOptions | undefined,
@@ -18,10 +23,11 @@ export function validateRuntimeOptions(
     throw new Ddu64InvalidInputError("[Ddu64 options] Options must be an object.", operation);
   }
 
+  const internalOptions = options as DduInternalOptions;
   validateBoolean(options.compress, "compress", operation);
-  validateBoolean(options.encrypt, "encrypt", operation);
+  validateBoolean(internalOptions.encrypt, "encrypt", operation);
   validateBoolean(options.checksum, "checksum", operation);
-  validateBoolean(options.omitFooter, "omitFooter", operation);
+  validateBoolean(internalOptions.omitFooter, "omitFooter", operation);
   validateBoolean(options.obfuscate, "obfuscate", operation);
   validateBoolean(options.requireEncryption, "requireEncryption", operation);
 

@@ -5,7 +5,7 @@
  */
 
 import { bitPackDecode, bitPackEncode, type BitPackConfig } from "../BitPack.js";
-import type { DduOptions } from "../types.js";
+import type { DduInternalOptions } from "../types.js";
 import { decodeNativeBase64, encodeNativeBase64 } from "./NativeBase64FastPath.js";
 import { indicesToString } from "./IndexStringMapper.js";
 import { buildEncodeFooter } from "./EncodeFinalize.js";
@@ -33,7 +33,7 @@ export function encodePayload(
   data: Uint8Array,
   compressionAlgorithm: CompressionAlgorithm | undefined,
   isEncrypted: boolean,
-  options: DduOptions | undefined,
+  options: DduInternalOptions | undefined,
   context: PayloadCodecContext,
 ): string {
   if (data.length === 0) return "";

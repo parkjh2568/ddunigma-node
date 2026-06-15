@@ -12,7 +12,7 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { Ddu64Node } from "../Ddu64Node.js";
-import { DduSetSymbol, type DduOptions } from "../core/types.js";
+import { DduSetSymbol, type DduInternalOptions } from "../core/types.js";
 
 const NUM_RUNS = 60;
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -60,7 +60,7 @@ const optionsArb = fc.record({
   chunkSize: fc.option(fc.integer({ min: 1, max: 16 }), { nil: undefined }),
 });
 
-function validStatsOptions(opts: DduOptions): DduOptions {
+function validStatsOptions(opts: DduInternalOptions): DduInternalOptions {
   if (opts.obfuscate && opts.encrypt === false) {
     return { ...opts, obfuscate: false };
   }

@@ -15,7 +15,7 @@ import {
   type ChecksumScope,
   type PipelineVersion,
 } from "../wireFormat.js";
-import type { DduOptions } from "../types.js";
+import type { DduInternalOptions } from "../types.js";
 import { Ddu64ChecksumError, Ddu64DecryptionError } from "../errors.js";
 import {
   assertCanonicalPadding,
@@ -40,7 +40,7 @@ export interface DecodePreludeContext {
   charSetSize: number;
   encryptionKey: string | undefined;
   defaultRequireEncryption: boolean;
-  shouldObfuscate(options?: DduOptions): boolean;
+  shouldObfuscate(options?: DduInternalOptions): boolean;
   deobfuscate(input: string): string;
   decodeChars(cleanedInput: string, paddingBits: number): Uint8Array;
   reportDecodeStart(totalBytes: number): void;
@@ -62,7 +62,7 @@ export interface DecodePreludeResult {
 
 export function runDecodePrelude(
   input: string,
-  options: DduOptions | undefined,
+  options: DduInternalOptions | undefined,
   context: DecodePreludeContext,
 ): DecodePreludeResult {
   const shouldChecksum = options?.checksum ?? context.defaultChecksum;

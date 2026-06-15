@@ -5,7 +5,7 @@
  */
 
 import { calculateCRC32, normalizeCompressionLevel, stringToBytes } from "../codecUtils.js";
-import type { DduOptions, DduProgressInfo } from "../types.js";
+import type { DduInternalOptions, DduProgressInfo } from "../types.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
 
@@ -49,7 +49,7 @@ export interface EncodePipelineResult {
 
 export function runSyncEncodePipeline(
   input: Uint8Array | string,
-  options: DduOptions | undefined,
+  options: DduInternalOptions | undefined,
   context: SyncEncodePipelineContext,
 ): EncodePipelineResult {
   const settings = resolveEncodeSettings(options, context);
@@ -103,7 +103,7 @@ export function runSyncEncodePipeline(
 
 export async function runAsyncEncodePipeline(
   input: Uint8Array | string,
-  options: DduOptions | undefined,
+  options: DduInternalOptions | undefined,
   context: AsyncEncodePipelineContext,
 ): Promise<EncodePipelineResult> {
   const settings = resolveEncodeSettings(options, context);
@@ -159,7 +159,7 @@ export async function runAsyncEncodePipeline(
 }
 
 function resolveCompressionParams(
-  options: DduOptions | undefined,
+  options: DduInternalOptions | undefined,
   context: EncodePipelineBaseContext,
 ): { algo: CompressionAlgorithm; level: number } {
   const algo = options?.compressionAlgorithm ?? context.defaultCompressionAlgorithm;
@@ -171,7 +171,7 @@ function resolveCompressionParams(
 }
 
 function resolveEncodeSettings(
-  options: DduOptions | undefined,
+  options: DduInternalOptions | undefined,
   context: EncodePipelineBaseContext,
 ): {
   shouldCompress: boolean;

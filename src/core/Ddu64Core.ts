@@ -7,15 +7,11 @@
 
 import { calculateBitLength, isPowerOfTwo, type BitPackConfig } from "./BitPack.js";
 import { normalizeCompressionLevel, stringToBytes, bytesToString } from "./codecUtils.js";
-import {
-  resolveInitialCharSet,
-  normalizeCharSet,
-  isUrlSafeCompatible,
-  validateCombinationDuplicates,
-} from "./CharsetResolver.js";
+import { resolveInitialCharSet, normalizeCharSet, isUrlSafeCompatible } from "./CharsetResolver.js";
 import type {
   PlatformAdapter,
   DduConstructorOptions,
+  DduInternalOptions,
   DduOptions,
   DduEncodeStats,
   CharSetInfo,
@@ -296,8 +292,6 @@ export class Ddu64Core {
     this.urlSafe = validateFinalCharsetConfiguration(
       this.dduChar,
       this.paddingChar,
-      dduLength,
-      isPredefinedCharSet,
       dduOptions?.urlSafe ?? false,
       shouldThrow,
     );
@@ -915,7 +909,7 @@ export class Ddu64Core {
    * 호출별 옵션이 생성자 기본값을 오버라이드합니다.
    * 암호화 키 없이 난독화가 활성화되면 throw합니다.
    */
-  private shouldObfuscate(options?: DduOptions): boolean {
+  private shouldObfuscate(options?: DduInternalOptions): boolean {
     const obfuscate = options?.obfuscate ?? this.defaultObfuscate;
     if (!obfuscate) return false;
     if (!this.encryptionKey || options?.encrypt === false) {
@@ -947,15 +941,10 @@ export class Ddu64Core {
 function validateFinalCharsetConfiguration(
   charSet: string[],
   paddingChar: string,
-  requiredLength: number,
-  isPredefined: boolean,
   requestUrlSafe: boolean,
   shouldThrow: boolean,
 ): boolean {
   try {
-    if (!isPredefined) {
-      validateCombinationDuplicates(charSet, paddingChar, requiredLength);
-    }
     return requestUrlSafe ? isUrlSafeCompatible(charSet, paddingChar, shouldThrow) : false;
   } catch (error) {
     if (isDdu64Error(error)) throw error;

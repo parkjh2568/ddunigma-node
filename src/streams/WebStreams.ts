@@ -29,7 +29,7 @@ import {
   getStreamHeaderLength,
   type StreamHeaderMeta,
 } from "../core/wireFormat.js";
-import type { CharSetInfo, DduStreamOptions } from "../core/types.js";
+import type { CharSetInfo, DduInternalOptions, DduStreamOptions } from "../core/types.js";
 import { Ddu64LimitError, wrapDdu64Error } from "../core/errors.js";
 import { normalizeLimit } from "../core/internal/DecodeValidation.js";
 import { validateRuntimeOptions } from "../core/internal/OptionValidation.js";
@@ -57,7 +57,7 @@ export function createReadableEncodeStream(
   validateRuntimeOptions(options, "stream");
   const info = encoder.getCharSetInfo();
   const shouldCompress = options?.compress ?? info.defaultCompress;
-  const shouldEncrypt = (options?.encrypt ?? true) && info.hasEncryptionKey;
+  const shouldEncrypt = info.hasEncryptionKey;
   const shouldChecksum = options?.checksum ?? info.defaultChecksum;
   const compressionAlgorithm = shouldCompress
     ? (options?.compressionAlgorithm ?? info.defaultCompressionAlgorithm)
@@ -121,7 +121,7 @@ export function createReadableEncodeStream(
             chunkSize: 0,
             chunkSeparator: undefined,
             omitFooter: true,
-          });
+          } as DduInternalOptions);
           controller.enqueue(encoded);
         }
 
@@ -166,7 +166,7 @@ export function createReadableEncodeStream(
               checksum: false,
               chunkSize: 0,
               chunkSeparator: undefined,
-            });
+            } as DduInternalOptions);
             controller.enqueue(encoded);
           }
           residualBytes = null;
@@ -192,7 +192,7 @@ export function createReadableEncodeStream(
             checksum: shouldChecksum,
             chunkSize: 0,
             chunkSeparator: undefined,
-          });
+          } as DduInternalOptions);
           if (encoded.length > 0) {
             controller.enqueue(encoded);
           }
@@ -289,7 +289,6 @@ export function createReadableDecodeStream(
           ...options,
           compress: options?.compress,
           compressionAlgorithm: detectedCompression,
-          encrypt: options?.encrypt,
           checksum: shouldChecksum,
           chunkSize: undefined,
           chunkSeparator: undefined,

@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import { Ddu64Core } from "../core/Ddu64Core.js";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
 import { BrowserAdapter } from "../adapters/BrowserAdapter.js";
-import { DduSetSymbol } from "../core/types.js";
+import { DduSetSymbol, type DduInternalOptions } from "../core/types.js";
 import {
   Ddu64AdapterError,
   Ddu64ChecksumError,
@@ -681,7 +681,7 @@ describe("Ddu64Core", () => {
         obfuscate: true,
       });
 
-      expect(() => encoder.encode("test", { encrypt: false })).toThrow(
+      expect(() => encoder.encode("test", { encrypt: false } as DduInternalOptions)).toThrow(
         "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
       );
     });

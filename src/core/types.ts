@@ -159,12 +159,6 @@ export interface KeyDerivationOptions {
 export interface DduOptions {
   /** 압축 사용 여부 (zlib deflate 또는 brotli) */
   compress?: boolean;
-  /**
-   * 내부 암/복호화 사용 여부 (기본값: true, 스트림 파이프라인 내부 제어용).
-   * @internal 일반 사용자는 `encryptionKey`로 암호화를 제어하세요. 이 플래그는
-   * 스트림/내부 파이프라인 전용이며 향후 공개 옵션에서 분리될 수 있습니다.
-   */
-  encrypt?: boolean;
   /** 압축 알고리즘 (기본값: "deflate") */
   compressionAlgorithm?: "deflate" | "brotli";
   /** 압축 레벨 (deflate 기본값: 6, brotli도 기본값 6을 사용하며 전달값은 0~11 범위로 보정) */
@@ -194,11 +188,6 @@ export interface DduOptions {
   chunkSize?: number;
   /** 청크 구분자 (기본값: '\n') */
   chunkSeparator?: string;
-  /**
-   * 중간 스트림 청크처럼 푸터를 생략해야 할 때 사용.
-   * @internal 스트림 인코딩 내부 전용 플래그이며 향후 공개 옵션에서 분리될 수 있습니다.
-   */
-  omitFooter?: boolean;
   /** 진행률 콜백 */
   onProgress?: (info: DduProgressInfo) => void;
   /** 한글 난독화 활성화 (encryptionKey 필요) */
@@ -206,9 +195,25 @@ export interface DduOptions {
   /**
    * 암호화 키가 설정된 decoder에서 암호화 footer를 요구합니다.
    * 기본값은 encryptionKey가 있으면 true입니다. 레거시 평문을 같은 인스턴스로
-   * 디코딩해야 하면 false 또는 호출별 `encrypt: false`를 명시하세요.
+   * 디코딩해야 하면 false 또는 호출별 `requireEncryption: false`를 명시하세요.
    */
   requireEncryption?: boolean;
+}
+
+/**
+ * 내부 파이프라인/스트림 전용 옵션. 공개 API에는 노출되지 않습니다.
+ * @internal
+ */
+export interface DduInternalOptions extends DduOptions {
+  /**
+   * 내부 암/복호화 사용 여부 (기본값: true). 스트림/내부 파이프라인 제어용.
+   * 일반 사용자는 `encryptionKey`로 암호화를 제어합니다.
+   */
+  encrypt?: boolean;
+  /**
+   * 중간 스트림 청크처럼 푸터를 생략해야 할 때 사용. 스트림 인코딩 내부 전용.
+   */
+  omitFooter?: boolean;
 }
 
 /** Web Streams 버퍼 제한을 포함한 스트림 전용 옵션 */

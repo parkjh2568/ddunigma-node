@@ -8,7 +8,7 @@ import {
   Ddu64ErrorCode,
   Ddu64InvalidInputError,
 } from "../core/errors.js";
-import type { KeyDerivationOptions } from "../core/types.js";
+import type { DduInternalOptions, KeyDerivationOptions } from "../core/types.js";
 
 function createEncoder(options: Record<string, unknown> = {}) {
   return new Ddu64Core(undefined, undefined, {
@@ -51,7 +51,9 @@ describe("security and resource regressions", () => {
 
     expect(() => keyedDecoder.decode(encoded)).toThrow(Ddu64DecryptionError);
     expect(keyedDecoder.decode(encoded, { requireEncryption: false })).toBe("legacy plaintext");
-    expect(keyedDecoder.decode(encoded, { encrypt: false })).toBe("legacy plaintext");
+    expect(keyedDecoder.decode(encoded, { encrypt: false } as DduInternalOptions)).toBe(
+      "legacy plaintext",
+    );
   });
 
   it("rejects invalid runtime options and input with stable error code", () => {
@@ -104,9 +106,7 @@ describe("security and resource regressions", () => {
       },
     });
     const encrypted = encryptedEncoder.encode(foreignBytes);
-    expect(encryptedEncoder.decodeToUint8Array(encrypted)).toEqual(
-      new Uint8Array([1, 2, 3, 4]),
-    );
+    expect(encryptedEncoder.decodeToUint8Array(encrypted)).toEqual(new Uint8Array([1, 2, 3, 4]));
   });
 
   it("rejects malformed constructor options before charset setup", () => {

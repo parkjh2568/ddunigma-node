@@ -15,7 +15,10 @@ import { Ddu64Core } from "../core/Ddu64Core.js";
 import { Ddu64Node as Ddu64 } from "../Ddu64Node.js";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
 import { createReadableEncodeStream, createReadableDecodeStream } from "../streams/WebStreams.js";
-import { DduSetSymbol, type DduConstructorOptions } from "../core/types.js";
+import { DduSetSymbol, type DduConstructorOptions, type DduStreamOptions } from "../core/types.js";
+
+/** 테스트 헬퍼용: 스트림 옵션 + 내부 플래그(encrypt/omitFooter)를 허용 */
+type StreamTestOptions = DduStreamOptions & { encrypt?: boolean; omitFooter?: boolean };
 import {
   buildStreamHeader,
   getStreamHeaderLength,
@@ -46,7 +49,7 @@ function createEncoder(opts: DduConstructorOptions = {}) {
 async function encodeViaStream(
   encoder: Ddu64Core,
   input: Uint8Array,
-  options?: Parameters<typeof createReadableEncodeStream>[1],
+  options?: StreamTestOptions,
 ): Promise<string> {
   const stream = createReadableEncodeStream(encoder, options);
 
@@ -78,7 +81,7 @@ async function encodeViaStream(
 async function decodeViaStream(
   encoder: Ddu64Core,
   input: string,
-  options?: Parameters<typeof createReadableDecodeStream>[1],
+  options?: StreamTestOptions,
 ): Promise<Uint8Array> {
   const stream = createReadableDecodeStream(encoder, options);
 

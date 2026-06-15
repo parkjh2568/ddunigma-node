@@ -310,54 +310,6 @@ export function isUrlSafeCompatible(
   return true;
 }
 
-// ─── 조합 중복 검증 ──────────────────────────────────────────────────────────
-
-/**
- * 커스텀 charset의 문자 조합이 중복되지 않는지 검증합니다.
- */
-export function validateCombinationDuplicates(
-  charSet: string[],
-  paddingChar: string,
-  requiredLength: number,
-): void {
-  if (requiredLength > 256) return;
-
-  const limit = Math.min(charSet.length, requiredLength);
-  const targetChars = charSet.slice(0, limit);
-  const combinations = new Set<string>();
-
-  for (let i = 0; i < targetChars.length; i++) {
-    combinations.add(targetChars[i]);
-  }
-  combinations.add(paddingChar);
-
-  for (let i = 0; i < targetChars.length; i++) {
-    const c1 = targetChars[i];
-    for (let j = 0; j < targetChars.length; j++) {
-      const combo = c1 + targetChars[j];
-      if (combinations.has(combo)) {
-        throw new Error(`Combination conflict: "${c1}" + "${targetChars[j]}"`);
-      }
-      combinations.add(combo);
-    }
-    const padCombo1 = c1 + paddingChar;
-    if (combinations.has(padCombo1)) {
-      throw new Error(`Combination conflict: "${c1}" + padding`);
-    }
-    combinations.add(padCombo1);
-    const padCombo2 = paddingChar + c1;
-    if (combinations.has(padCombo2)) {
-      throw new Error(`Combination conflict: padding + "${c1}"`);
-    }
-    combinations.add(padCombo2);
-  }
-  const doublePad = paddingChar + paddingChar;
-  if (combinations.has(doublePad)) {
-    throw new Error(`Combination conflict: double padding`);
-  }
-  combinations.add(doublePad);
-}
-
 // ─── 내부 헬퍼 ───────────────────────────────────────────────────────────────
 
 /** 단일 UTF-16 코드 유닛이 짝 없는 surrogate(U+D800–U+DFFF)인지 판별합니다. */
