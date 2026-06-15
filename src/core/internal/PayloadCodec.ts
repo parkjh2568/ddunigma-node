@@ -7,7 +7,7 @@
 import { bitPackDecode, bitPackEncode, type BitPackConfig } from "../BitPack.js";
 import type { DduInternalOptions } from "../types.js";
 import { decodeNativeBase64, encodeNativeBase64 } from "./NativeBase64FastPath.js";
-import { indicesToString } from "./IndexStringMapper.js";
+import { indicesToString, packPow2ToString } from "./IndexStringMapper.js";
 import { buildEncodeFooter } from "./EncodeFinalize.js";
 import { lookupCharIndex } from "./CharsetLookup.js";
 
@@ -45,6 +45,11 @@ export function encodePayload(
   if (nativeEncoded) {
     paddingBits = nativeEncoded.paddingBits;
     payload = nativeEncoded.payload;
+  } else if (context.bitPackConfig.usePowerOfTwo) {
+    // 2의 제곱수: 비트팩 + charset 매핑을 한 패스로 융합(중간 인덱스 배열 제거)
+    const fused = packPow2ToString(data, context.bitPackConfig.bitLength, context.dduCharCodes);
+    paddingBits = fused.paddingBits;
+    payload = fused.payload;
   } else {
     const encoded = bitPackEncode(data, context.bitPackConfig);
     paddingBits = encoded.paddingBits;
