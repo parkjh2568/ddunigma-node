@@ -258,6 +258,27 @@ export interface DduConstructorOptions extends DduOptions {
 
   /** 명시적 플랫폼 어댑터 (자동 감지 대신 사용) */
   adapter?: PlatformAdapter;
+
+  /**
+   * 플랫폼 어댑터 팩토리 (지연 생성). `adapter`가 지정되지 않았을 때, 첫 압축/암호화
+   * 연산 시점에 한 번 호출되어 어댑터를 생성·캐시합니다. 순수 인코딩/디코딩만 수행하면
+   * 어댑터는 생성되지 않습니다.
+   *
+   * Ddu64Node/Ddu64Browser가 각각 NodeAdapter/BrowserAdapter 팩토리를 주입합니다.
+   * @internal
+   */
+  adapterFactory?: () => PlatformAdapter;
+
+  /**
+   * 난독화 레이어 팩토리 (지연 생성). 코어를 구체 난독화 구현과 분리하기 위한 주입점입니다.
+   * `obfuscate`가 실제로 사용될 때만 호출됩니다. 미주입 상태에서 난독화를 요청하면 throw합니다.
+   *
+   * Ddu64Node/Ddu64Browser가 HangulObfuscationLayer 팩토리를 주입하므로 일반 사용자는
+   * 신경 쓸 필요가 없습니다. `@ddunigma/node/core`로 Ddu64Core를 직접 쓰면서 난독화가
+   * 필요하면 이 팩토리를 주입하세요(미사용 시 난독화 코드가 번들에서 트리셰이킹됩니다).
+   * @internal
+   */
+  obfuscationLayerFactory?: (alphabet: string[]) => ObfuscationLayer;
 }
 
 export const dduDefaultConstructorOptions: DduConstructorOptions = {

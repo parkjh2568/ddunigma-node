@@ -11,6 +11,7 @@
 
 import { Ddu64Core } from "./core/Ddu64Core.js";
 import { NodeAdapter } from "./adapters/NodeAdapter.js";
+import { HangulObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
 import type { DduConstructorOptions, DduOptions } from "./core/types.js";
 import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
 
@@ -37,12 +38,17 @@ export class Ddu64Node extends Ddu64Core {
   ) {
     const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
 
-    // 명시적으로 제공된 어댑터가 없으면 NodeAdapter를 자동 주입
+    // 명시적으로 제공된 어댑터가 없으면 NodeAdapter를 지연 생성하도록 팩토리를 주입.
+    // 순수 인코딩/디코딩만 하면 어댑터는 생성되지 않습니다(불필요한 zlib/crypto 배선 회피).
     const options: DduConstructorOptions = {
       ...resolved.dduOptions,
       ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
       ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
-      adapter: resolved.dduOptions?.adapter ?? new NodeAdapter(),
+      adapter: resolved.dduOptions?.adapter,
+      adapterFactory: resolved.dduOptions?.adapterFactory ?? (() => new NodeAdapter()),
+      obfuscationLayerFactory:
+        resolved.dduOptions?.obfuscationLayerFactory ??
+        ((alphabet) => new HangulObfuscationLayer(alphabet)),
     };
     super(options);
   }

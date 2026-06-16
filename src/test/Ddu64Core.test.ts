@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import { Ddu64Core } from "../core/Ddu64Core.js";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
 import { BrowserAdapter } from "../adapters/BrowserAdapter.js";
+import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
 import { DduSetSymbol, type DduInternalOptions } from "../core/types.js";
 import {
   Ddu64AdapterError,
@@ -18,12 +19,15 @@ import {
   wrapDdu64Error,
 } from "../core/errors.js";
 
-// Helper: create encoder with NodeAdapter for sync operations
+// Helper: create encoder with NodeAdapter for sync operations.
+// Wires obfuscationLayerFactory so direct-core obfuscate tests work after the
+// core/obfuscation decoupling (Ddu64Node/Browser wire this automatically).
 function createEncoder(
   options?: Parameters<typeof Ddu64Core.prototype.encode>[1] & Record<string, unknown>,
 ) {
   return new Ddu64Core(undefined, undefined, {
     adapter: new NodeAdapter(),
+    obfuscationLayerFactory: (alphabet: string[]) => new HangulObfuscationLayer(alphabet),
     ...options,
   } as any);
 }

@@ -19,7 +19,6 @@ import type {
   DduProgressInfo,
   KeyDerivationOptions,
 } from "./types.js";
-import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
 import {
   Ddu64CompressionError,
   Ddu64CharsetError,
@@ -175,6 +174,12 @@ export class Ddu64Core {
   /** 플랫폼 어댑터 (동기용 지연 로드 또는 명시적 제공) */
   private adapter: PlatformAdapter | undefined;
 
+  /** 어댑터 지연 생성 팩토리 (adapter 미지정 시 첫 암/복호화·압축 시점에 1회 호출) */
+  private readonly adapterFactory: (() => PlatformAdapter) | undefined;
+
+  /** 난독화 레이어 팩토리 (코어-난독화 분리용 주입점) */
+  private readonly obfuscationLayerFactory: ((alphabet: string[]) => ObfuscationLayer) | undefined;
+
   /** 기본 난독화 활성화 */
   private readonly defaultObfuscate: boolean;
 
@@ -217,12 +222,11 @@ export class Ddu64Core {
     // 레거시 묵시적 fallback이 필요하면 throwOnError: false를 명시.
     const shouldThrow = dduOptions?.throwOnError ?? true;
 
-    // 어댑터 해석
-    if (dduOptions?.adapter) {
-      this.adapter = dduOptions.adapter;
-    } else {
-      this.adapter = undefined;
-    }
+    // 어댑터 해석: 명시적 adapter가 없으면 adapterFactory로 첫 사용 시점에 지연 생성합니다.
+    // 순수 인코딩/디코딩만 하면 어댑터는 생성되지 않습니다.
+    this.adapter = dduOptions?.adapter;
+    this.adapterFactory = dduOptions?.adapterFactory;
+    this.obfuscationLayerFactory = dduOptions?.obfuscationLayerFactory;
 
     // Charset 초기화
     let initial: ReturnType<typeof resolveInitialCharSet>;
@@ -442,7 +446,7 @@ export class Ddu64Core {
     const result = await runAsyncEncodePipeline(input, options, {
       ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) =>
-        compressAsyncWithAdapter(this.adapter, data, algorithm, level),
+        compressAsyncWithAdapter(this.getAdapter(), data, algorithm, level),
       encrypt: (data, aad) => encryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
     });
     return result.encoded;
@@ -488,7 +492,7 @@ export class Ddu64Core {
       ...this.buildDecodeBaseContext(options),
       decrypt: (data, aad) => decryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
       decompress: (data, algorithm, maxBytes) =>
-        decompressAsyncWithAdapter(this.adapter, data, algorithm, maxBytes),
+        decompressAsyncWithAdapter(this.getAdapter(), data, algorithm, maxBytes),
     });
   }
 
@@ -631,7 +635,7 @@ export class Ddu64Core {
     return runAsyncEncodePipeline(input, options, {
       ...this.buildEncodeBaseContext(options),
       compress: (data, algorithm, level) =>
-        compressAsyncWithAdapter(this.adapter, data, algorithm, level),
+        compressAsyncWithAdapter(this.getAdapter(), data, algorithm, level),
       encrypt: async (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
     });
   }
@@ -841,7 +845,7 @@ export class Ddu64Core {
     level: number,
   ): Uint8Array {
     try {
-      return compressSyncWithAdapter(this.adapter, data, algorithm, level);
+      return compressSyncWithAdapter(this.getAdapter(), data, algorithm, level);
     } catch (err) {
       if (isDdu64Error(err)) throw err;
       const message = toErrorMessage(err);
@@ -858,7 +862,7 @@ export class Ddu64Core {
     maxBytes: number,
   ): Uint8Array {
     try {
-      return decompressSyncWithAdapter(this.adapter, data, algorithm, maxBytes);
+      return decompressSyncWithAdapter(this.getAdapter(), data, algorithm, maxBytes);
     } catch (err) {
       if (isDdu64Error(err)) throw err;
       const message = toErrorMessage(err);
@@ -869,13 +873,24 @@ export class Ddu64Core {
     }
   }
 
+  /**
+   * 어댑터를 지연 해석합니다. 명시적 adapter가 없고 adapterFactory가 있으면 첫 호출 시
+   * 1회 생성·캐시합니다. 순수 인코딩/디코딩 경로에서는 호출되지 않습니다.
+   */
+  private getAdapter(): PlatformAdapter | undefined {
+    if (this.adapter === undefined && this.adapterFactory !== undefined) {
+      this.adapter = this.adapterFactory();
+    }
+    return this.adapter;
+  }
+
   private getSyncGatewayContext(): SyncAdapterGatewayContext {
     if (!this.syncGatewayContext) {
       // adapter/encryptionKey/keyDerivation은 생성 후 불변이므로 한 번만 구성합니다.
       // encryptionKeyHash는 지연 파생되며, 유일한 writer인 setEncryptionKeyHash에서
       // 인스턴스 필드와 캐시 컨텍스트를 함께 갱신해 일관성을 유지합니다.
       const ctx: SyncAdapterGatewayContext = {
-        adapter: this.adapter,
+        adapter: this.getAdapter(),
         encryptionKey: this.encryptionKey,
         keyDerivation: this.keyDerivation,
         encryptionKeyHash: this.encryptionKeyHash,
@@ -897,7 +912,13 @@ export class Ddu64Core {
    */
   private getObfuscationLayer(): ObfuscationLayer {
     if (!this.obfuscationLayer) {
-      this.obfuscationLayer = new HangulObfuscationLayer(
+      if (!this.obfuscationLayerFactory) {
+        throw new Ddu64ObfuscationError(
+          "[Ddu64 obfuscation] No obfuscation layer is wired. Use Ddu64Node/Ddu64Browser " +
+            "(batteries-included), or inject `obfuscationLayerFactory` when constructing Ddu64Core directly.",
+        );
+      }
+      this.obfuscationLayer = this.obfuscationLayerFactory(
         buildObfuscationAlphabet(this.dduChar, this.paddingChar),
       );
     }

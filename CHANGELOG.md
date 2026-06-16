@@ -68,6 +68,15 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 
 ### 내부 개선
 
+- **코어/어댑터·난독화 분리 (번들 경량화)**: `Ddu64Core`가 `NodeAdapter`/`BrowserAdapter`와
+  `HangulObfuscationLayer`를 더 이상 정적으로 참조하지 않습니다. 어댑터는 `adapterFactory`로
+  첫 압축/암호화 시점에 지연 생성하고, 난독화는 `obfuscationLayerFactory` 주입으로 분리했습니다.
+  `@ddunigma/node`·`/browser` 진입점은 두 팩토리를 자동 주입하므로 기존 사용법(`obfuscate`
+  옵션 등)은 그대로 동작합니다. `@ddunigma/node/core`로 순수 인코딩/디코딩만 사용하면 어댑터·
+  난독화 코드가 트리셰이킹되어 최소 번들이 약 5KB 줄어듭니다(측정 기준).
+  - 신규 `@internal` 생성자 옵션 `adapterFactory`, `obfuscationLayerFactory` 추가.
+  - `Ddu64Core`를 직접 생성해 `obfuscate`를 쓰려면 `obfuscationLayerFactory` 주입이 필요합니다
+    (이전엔 코어가 난독화를 내장). 배터리 포함 진입점 사용자는 영향 없습니다.
 - `NativeBase64FastPath`의 base64 디코드가 Node `Buffer` 풀 백킹 버퍼를 공유하는
   뷰 대신 독립 복사본(`new Uint8Array(buffer)`)을 반환하도록 변경. 인접 풀 메모리
   노출 가능성을 차단합니다.

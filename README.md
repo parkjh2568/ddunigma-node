@@ -238,3 +238,40 @@ const coreEncoder = new CoreDdu64();
   모듈에 의존하지 않아 미지의 번들러·런타임에서 가장 안전하기 때문입니다. Node 전용
   기능(동기 압축/암호화, `decodeToBuffer`)이 필요하면 `@ddunigma/node`를 Node 조건에서
   사용하세요.
+
+#### 번들 경량화 — 순수 인코딩만 필요하면 `/core`
+
+`@ddunigma/node`(Node)·`/browser` 진입점은 **배터리 포함(batteries-included)**입니다.
+편의를 위해 압축/암호화 어댑터와 한글 난독화 레이어를 기본 주입하므로, 이 코드가 번들에
+항상 포함됩니다(`obfuscate` 옵션이 즉시 동작).
+
+**압축·암호화·난독화 없이 커스텀/노벨티 charset 인코딩만** 필요하면 `@ddunigma/node/core`를
+사용하세요. 어댑터·난독화 구현이 정적으로 묶이지 않아 번들러가 트리셰이킹으로 제거합니다
+(측정상 최소 인코드/디코드 기준 약 5KB 절감).
+
+```typescript
+import { Ddu64Core } from "@ddunigma/node/core";
+
+// 어댑터 없이 순수 인코딩/디코딩 (압축/암호화 미사용)
+const enc = new Ddu64Core(undefined, undefined, { dduSetSymbol: "ddu" as any });
+const encoded = enc.encode("hello");
+const decoded = enc.decode(encoded);
+```
+
+`/core`에서 압축·암호화를 쓰려면 `adapter`(또는 `adapterFactory`)를 직접 주입하고,
+난독화를 쓰려면 `obfuscationLayerFactory`를 주입하세요:
+
+```typescript
+import { Ddu64Core } from "@ddunigma/node/core";
+import { NodeAdapter } from "@ddunigma/node"; // 또는 자체 어댑터
+import { HangulObfuscationLayer } from "@ddunigma/node";
+
+const enc = new Ddu64Core(undefined, undefined, {
+  encryptionKey: "secret",
+  adapterFactory: () => new NodeAdapter(),
+  obfuscationLayerFactory: (alphabet) => new HangulObfuscationLayer(alphabet),
+});
+```
+
+> 참고: `@ddunigma/node`·`/browser` 진입점은 이 두 팩토리를 자동 주입하므로
+> 일반 사용자는 신경 쓸 필요가 없습니다. 위 주입은 `/core`를 직접 쓰는 고급 사용자용입니다.
