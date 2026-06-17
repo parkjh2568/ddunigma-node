@@ -79,6 +79,18 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 
 ### 기타 변경
 
+- **DDS2 프레임드 스트리밍 추가 (opt-in, 신규 기능)**: `createFramedEncodeStream`/
+  `createFramedDecodeStream`. 입력을 고정 크기 프레임으로 잘라 **프레임마다 독립 압축/암호화**해
+  상수 메모리(`frameSize + O(1)`)로 스트리밍합니다. 기존 `createReadable*` 스트림은 압축/암호화
+  사용 시 전량 버퍼링이었습니다. 암호화는 어댑터 랜덤-IV AES-256-GCM + **프레임 인덱스 AAD
+  바인딩**(재정렬/재생 방어), 트레일러 프레임 수 + final 플래그(절단 방어). 헤더에 랜덤
+  **스트림 ID**를 두어 모든 프레임 AAD/CRC에 바인딩 → 교차 스트림 결합·헤더 변조 방어.
+  `checksum: true`면 프레임별 CRC32(인덱스+스트림 ID 바인딩)로 비암호화 스트림에서도 손상·
+  재정렬·교차 스트림 결합을 탐지합니다. 단일 페이로드
+  (DDS1/V4) 포맷과 완전히 분리된 신규 `DDS2` 포맷이라 기존 데이터 호환에 영향이 없습니다.
+  신규 export: `createFramedEncodeStream`, `createFramedDecodeStream`, 타입 `DduFramedStreamOptions`
+  (node·browser 진입점). 후속: 영구 포맷 릴리스 전 외부 보안 리뷰
+  (`.kiro/specs/dds2-true-streaming/security-review.md`).
 - `encryptionKey: ""`(빈 문자열)를 생성/옵션 검증에서 거부합니다. 이전에는 빈 키가
   평문 인코딩을 만들면서 키 보유 디코더는 이를 거부해 라운드트립이 깨졌습니다.
 - charset/패딩에 짝 없는 surrogate 코드 유닛(U+D800–U+DFFF) 사용을 거부합니다

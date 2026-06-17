@@ -122,7 +122,32 @@ Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코�
 > 조합에서만 청크 단위로 진정한 스트리밍을 합니다. 압축·암호화·체크섬을 켜거나 비-2의 제곱수
 > charset을 쓰면 footer가 최종 메타데이터이므로 **전체 입력을 메모리에 축적한 뒤 flush에서
 > 일괄 처리하는 "buffered transform"**으로 동작합니다(메모리 상한 = 전체 크기). 프레임 단위
-> 진짜 스트리밍은 `ROADMAP.md`의 DDS2 포맷에서 다룹니다.
+> 진짜 스트리밍은 `createFramedEncodeStream`/`createFramedDecodeStream`(DDS2)에서 다룹니다(아래 참고).
+
+#### 프레임드 스트리밍 (DDS2, opt-in)
+
+대용량 데이터를 **상수 메모리**로 처리하려면 `createFramedEncodeStream`/`createFramedDecodeStream`을
+사용하세요. 입력을 고정 크기 프레임으로 잘라 프레임마다 독립 압축/암호화하므로 압축·암호화를
+켜도 전량 버퍼링하지 않습니다(메모리 ≈ `frameSize`).
+
+```typescript
+import { Ddu64, createFramedEncodeStream, createFramedDecodeStream } from "@ddunigma/node";
+
+const ddu = new Ddu64({ encryptionKey: "secret", compress: true, checksum: true });
+
+const encodedStream = sourceByteStream.pipeThrough(
+  createFramedEncodeStream(ddu, { frameSize: 64 * 1024 }),
+);
+const decodedStream = encodedStream.pipeThrough(createFramedDecodeStream(ddu));
+```
+
+보안: 암호화 시 프레임마다 AES-256-GCM(랜덤 IV) + **프레임 인덱스를 AAD에 바인딩**해 재정렬/재생을
+방어하고, 트레일러의 총 프레임 수 + final 플래그로 절단을 탐지합니다. `checksum: true`면 프레임별
+CRC32(인덱스 바인딩)로 비암호화 스트림에서도 손상·재정렬을 탐지합니다. 단일 페이로드
+(`encode`/`decode`) 포맷(`DDS1`/V4)과 분리된 신규 `DDS2` 포맷이라 기존 데이터 호환에 영향이 없습니다.
+
+> 참고: DDS2는 새 영구 포맷 표면을 추가합니다. 영구 포맷으로서의 외부 보안 리뷰 항목은
+> `.kiro/specs/dds2-true-streaming/security-review.md`에 정리되어 있습니다.
 
 #### 생성자 전용 옵션
 

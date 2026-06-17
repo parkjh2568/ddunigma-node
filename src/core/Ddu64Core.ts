@@ -508,6 +508,61 @@ export class Ddu64Core {
     };
   }
 
+  // ─── DDS2 프레임 스트리밍용 @internal 헬퍼 ────────────────────────────────
+  // 프레임드 스트림(`createFramedEncodeStream`/`createFramedDecodeStream`)이 프레임 단위로
+  // 압축·암호화·charset 변환을 독립 수행하기 위한 저수준 진입점입니다. 일반 사용자는 사용하지
+  // 않습니다. 암호화는 어댑터의 랜덤-IV GCM을 그대로 쓰되, 호출자가 프레임 인덱스를 AAD로
+  // 바인딩해 재정렬/절단 공격을 방어합니다.
+
+  /** @internal 프레임 바이트를 charset 문자열로 인코딩(압축/암호화/체크섬 없이, 패딩 footer만). */
+  async encodeFrameBytesAsync(bytes: Uint8Array): Promise<string> {
+    return this.encodeAsyncInternal(bytes, {
+      compress: false,
+      encrypt: false,
+      checksum: false,
+      chunkSize: 0,
+      obfuscate: false,
+    } as DduInternalOptions);
+  }
+
+  /** @internal charset 문자열을 프레임 바이트로 디코딩(crypto/체크섬 없이). */
+  async decodeFrameBytesAsync(str: string): Promise<Uint8Array> {
+    return this.decodeToUint8ArrayAsyncInternal(str, {
+      compress: false,
+      checksum: false,
+      chunkSize: undefined,
+      requireEncryption: false,
+    } as DduInternalOptions);
+  }
+
+  /** @internal 프레임 페이로드 압축. */
+  async compressFrameAsync(
+    bytes: Uint8Array,
+    algorithm: "deflate" | "brotli",
+    level: number,
+  ): Promise<Uint8Array> {
+    return compressAsyncWithAdapter(this.getAdapter(), bytes, algorithm, level);
+  }
+
+  /** @internal 프레임 페이로드 압축 해제. */
+  async decompressFrameAsync(
+    bytes: Uint8Array,
+    algorithm: "deflate" | "brotli",
+    maxBytes: number,
+  ): Promise<Uint8Array> {
+    return decompressAsyncWithAdapter(this.getAdapter(), bytes, algorithm, maxBytes);
+  }
+
+  /** @internal 프레임 페이로드 AES-256-GCM 암호화. aad로 프레임 인덱스를 인증. */
+  async encryptFrameAsync(bytes: Uint8Array, aad: Uint8Array): Promise<Uint8Array> {
+    return encryptAsyncWithAdapter(this.getSyncGatewayContext(), bytes, aad);
+  }
+
+  /** @internal 프레임 페이로드 AES-256-GCM 복호화. aad로 프레임 인덱스를 검증. */
+  async decryptFrameAsync(bytes: Uint8Array, aad: Uint8Array): Promise<Uint8Array> {
+    return decryptAsyncWithAdapter(this.getSyncGatewayContext(), bytes, aad);
+  }
+
   /**
    * charset 정보를 가져옵니다.
    *

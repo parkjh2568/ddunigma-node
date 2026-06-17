@@ -55,6 +55,8 @@ export async function getAdapter(): Promise<BrowserAdapter> {
 // ─── Web Streams ─────────────────────────────────────────────────────────────
 
 export { createReadableEncodeStream, createReadableDecodeStream } from "./streams/WebStreams.js";
+export { createFramedEncodeStream, createFramedDecodeStream } from "./streams/FramedStreams.js";
+export type { DduFramedStreamOptions } from "./streams/FramedStreams.js";
 
 // ─── 난독화 ──────────────────────────────────────────────────────────────────
 

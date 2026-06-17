@@ -55,6 +55,8 @@ export type { Ddu64Operation, Ddu64ErrorOptions } from "./core/errors.js";
 // ─── Web Streams ─────────────────────────────────────────────────────────────
 
 export { createReadableEncodeStream, createReadableDecodeStream } from "./streams/WebStreams.js";
+export { createFramedEncodeStream, createFramedDecodeStream } from "./streams/FramedStreams.js";
+export type { DduFramedStreamOptions } from "./streams/FramedStreams.js";
 
 // ─── 플랫폼 어댑터 ──────────────────────────────────────────────────────────
 

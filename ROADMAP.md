@@ -23,9 +23,12 @@
 
 ## ⑤ 진짜 스트리밍 (프레임드 와이어 포맷)
 
-> **설계 락 완료:** 구현 가능한 상세 설계는 [`.kiro/specs/dds2-true-streaming/design.md`](.kiro/specs/dds2-true-streaming/design.md)
-> 참고(와이어 포맷·nonce 전략·truncation 방어·테스트 벡터 계획 확정). 구현은 보안 리뷰 게이트
-> 통과 후 opt-in으로 진행한다.
+> **opt-in 구현 완료(1차):** `createFramedEncodeStream`/`createFramedDecodeStream`
+> (`src/streams/FramedStreams.ts`). 개행 구분 세그먼트 + 프레임별 압축/암호화로 상수 메모리
+> 스트리밍. 암호화는 어댑터 랜덤-IV GCM + 프레임 인덱스 AAD 바인딩(재정렬/재생 방어), 트레일러
+> 프레임 수 + final 플래그(절단 방어). DDS1/V4 단일 페이로드 포맷은 불변. 상세·검증은
+> [`.kiro/specs/dds2-true-streaming/design.md`](.kiro/specs/dds2-true-streaming/design.md) 참고.
+> 후속: 비암호화 프레임 무결성(CRC), 영구 포맷 릴리스 전 외부 보안 리뷰.
 >
 > 용어 주의: 위 ④의 폐기된 "v5 KDF envelope"와, 코드에 현역인 "스코프 자기기술 체크섬
 > 마커(`CK`, 과거 'v5 체크섬'으로 불림)"는 **별개**다. 후자는 폐기 대상이 아니며 정상 동작한다.
