@@ -8,6 +8,11 @@
 글자에 담습니다. 압축·AES-256-GCM 암호화·CRC32 체크섬·URL-Safe·청크 분할·한글 난독화·Web
 Streams와 Node/브라우저/Workers 멀티 진입점을 제공합니다.
 
+> **포지셔닝:** 이 라이브러리는 **무종속·멀티런타임 노벨티(한글 표면) 인코더 + 경량 난독화**가
+> 핵심 가치입니다. 표준 Base64보다 출력이 크고(한글 1글자 = UTF-8 3바이트) 약 3배 느리므로,
+> **저장 효율·속도·상호운용성**이 목표라면 표준/네이티브 Base64를 쓰는 편이 낫습니다. 내장
+> AES-256-GCM은 부가 기능이며 **단독 보안 솔루션이 아닙니다**(아래 키 파생 주의 참고).
+
 ### Credits
 
 - Origin implementation by:
@@ -103,6 +108,7 @@ charset 문자와 `paddingChar`는 각각 단일 UTF-16 코드 유닛이어야 �
 | `chunkSize`            | `number`                          | 미사용            | 출력 문자열 분할 크기                   |
 | `chunkSeparator`       | `string`                          | `"\n"`            | 청크 구분자                             |
 | `maxDecodedBytes`      | `number`                          | `67108864`        | 최대 디코딩 바이트 수                   |
+| `maxEncodedChars`      | `number`                          | 비례 자동 산정    | 최대 디코딩 입력(인코딩 문자열) 길이    |
 | `maxDecompressedBytes` | `number`                          | `67108864`        | 최대 압축 해제 바이트 수                |
 | `obfuscate`            | `boolean`                         | `false`           | 암호화된 출력을 한글 음절로 난독화      |
 | `requireEncryption`    | `boolean`                         | 키 사용 시 `true` | 키가 있는 decoder에서 평문 payload 거부 |
@@ -111,6 +117,12 @@ charset 문자와 `paddingChar`는 각각 단일 UTF-16 코드 유닛이어야 �
 Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코딩, 기본 64 MiB)와
 `maxBufferedChars`(디코딩, 기본 64 Mi 문자)를 추가로 지원합니다. `maxDecodedBytes`는
 디코딩 결과 크기만 제한합니다.
+
+> **스트림 동작 주의:** 현재 Web Streams는 **2의 제곱수 charset + 압축/암호화/체크섬 미사용**
+> 조합에서만 청크 단위로 진정한 스트리밍을 합니다. 압축·암호화·체크섬을 켜거나 비-2의 제곱수
+> charset을 쓰면 footer가 최종 메타데이터이므로 **전체 입력을 메모리에 축적한 뒤 flush에서
+> 일괄 처리하는 "buffered transform"**으로 동작합니다(메모리 상한 = 전체 크기). 프레임 단위
+> 진짜 스트리밍은 `ROADMAP.md`의 DDS2 포맷에서 다룹니다.
 
 #### 생성자 전용 옵션
 
@@ -129,8 +141,10 @@ Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코�
 | `keyDerivation`    | `KeyDerivationOptions` | `pbkdf2`    | 암호화 키 파생 방식                 |
 | `adapter`          | `PlatformAdapter`      | 진입점 설정 | 플랫폼 어댑터 직접 주입             |
 
-`encoding`은 레거시 타입 호환을 위해서만 남아 있으며 런타임 문자열 처리는 항상 UTF-8입니다.
-`encrypt`와 `omitFooter`는 스트림 및 내부 파이프라인 제어용이므로 일반 사용에서는 지정하지 않습니다.
+`encoding` 옵션은 6.0.0에서 제거되었습니다. 런타임 문자열 처리는 항상 UTF-8이며,
+`CharSetInfo.encoding`은 리터럴 `"utf-8"` 타입으로 고정됩니다.
+`encrypt`와 `omitFooter`는 스트림 및 내부 파이프라인 제어용 `@internal` 옵션이므로 공개 타입에
+노출되지 않으며 일반 사용에서는 지정하지 않습니다.
 
 ### 압축, 암호화, 체크섬
 
@@ -158,6 +172,14 @@ const decoded = ddu.decode(encoded);
 암호화 키가 설정된 인스턴스는 기본적으로 암호화 footer가 없는 payload를 거부합니다. 같은 인스턴스로
 레거시 평문을 읽어야 하면 해당 decode 호출에 `requireEncryption: false`를 명시합니다.
 체크섬을 호출별 옵션으로 사용한 경우 디코딩에도 `checksum: true`를 지정합니다.
+
+> **키 파생 주의 (보안):** 기본 키 파생은 PBKDF2-HMAC-SHA256, 210,000회 반복입니다. 이는
+> OWASP 권고치(PBKDF2-HMAC-SHA256 ≥ 600,000회)보다 낮고, `salt`를 생략하면 **고정 기본
+> salt**가 쓰입니다. 또한 키 파생 파라미터(알고리즘/iterations/salt)는 **와이어에 자기기술되지
+> 않으므로** 인코딩·디코딩 양쪽에서 동일하게 지정해야 합니다. 비밀번호성(저엔트로피) 키를
+> 쓴다면 반드시 **애플리케이션 고유 `salt`** 와 충분히 높은 `iterations`를 직접 지정하세요.
+> 강력한 키 파생/키 관리가 핵심 요구사항이라면 애플리케이션 레벨에서 전용 KDF/암호화
+> 라이브러리(예: Argon2id)를 사용하는 것을 권장합니다(자세한 배경은 `ROADMAP.md` 참고).
 
 ```typescript
 const encoded = ddu.encode("data", { checksum: true });
@@ -207,7 +229,9 @@ const bytes = await ddu.decodeToUint8ArrayAsync(encoded);
 ```
 
 브라우저 압축은 실행 환경의 `CompressionStream`과 `DecompressionStream` 지원 여부에 따라 사용할 수
-있습니다.
+있습니다. 브라우저(Web Compression API)는 압축 레벨 지정을 지원하지 않으므로 `compressionLevel`
+옵션은 **브라우저에서 무시**됩니다. 따라서 동일 입력이라도 Node(zlib, 레벨 적용)와 브라우저의
+압축 출력 바이트·크기가 다를 수 있습니다(라운드트립 호환성은 유지됩니다).
 
 ### 인코딩 통계
 

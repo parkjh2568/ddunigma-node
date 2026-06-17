@@ -38,7 +38,7 @@ export function runSyncDecodePipeline(
   context: SyncDecodePipelineContext,
 ): Uint8Array {
   let decoded = prep.decoded;
-  // V5 CK 마커는 scope 자기기술 → 권위. 레거시 CHK(scope=null)는 4.x 기본인 "plaintext"로 폴백.
+  // 스코프 CK 마커는 scope 자기기술 → 권위. 레거시 CHK(scope=null)는 4.x 기본인 "plaintext"로 폴백.
   // (인코드 기본값 전환과 무관하게 레거시 데이터의 의미를 보존)
   const checksumScope = prep.extractedChecksumScope ?? options?.checksumScope ?? "plaintext";
 

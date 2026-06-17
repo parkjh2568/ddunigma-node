@@ -1,14 +1,15 @@
 /**
- * V5 와이어 포맷(checksum 자기기술) 결정론적 테스트 벡터 생성기.
+ * 스코프 자기기술 체크섬(CK) 결정론적 테스트 벡터 생성기.
+ * (과거 'v5 체크섬'으로 불렸으나 폐기된 'v5 KDF envelope'와는 무관.)
  *
- * V5는 체크섬 접미사만 `CHK[8hex]` → `CK[P|O][8hex]`로 바꾸고 payload+footer는 4.x와 동일합니다.
+ * 체크섬 접미사만 `CHK[8hex]` → `CK[P|O][8hex]`로 바꾸고 payload+footer는 4.x와 동일합니다.
  * 따라서 기존 4.x 코덱으로 payload+footer를 생성하고(체크섬 off), scope에 따른 CRC를 계산해
- * V5 기대 출력을 조립합니다. V5 구현 이전에 회귀 기준이 될 벡터를 고정하기 위한 스크립트입니다.
+ * 기대 출력을 조립합니다. 회귀 기준이 될 벡터를 고정하기 위한 스크립트입니다.
  *
- * 실행: npx tsx scripts/gen-v5-vectors.ts
- * 출력: src/test/fixtures/v5-vectors.json
+ * 실행: npx tsx scripts/gen-scoped-checksum-vectors.ts
+ * 출력: src/test/fixtures/scoped-checksum-vectors.json
  *
- * @module scripts/gen-v5-vectors
+ * @module scripts/gen-scoped-checksum-vectors
  */
 
 import { writeFileSync } from "node:fs";
@@ -131,7 +132,7 @@ const out = {
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outPath = join(here, "..", "src", "test", "fixtures", "v5-vectors.json");
+const outPath = join(here, "..", "src", "test", "fixtures", "scoped-checksum-vectors.json");
 writeFileSync(outPath, JSON.stringify(out, null, 2) + "\n", "utf-8");
 
 const deterministic = vectors.filter((v) => v.tags.includes("deterministic")).length;

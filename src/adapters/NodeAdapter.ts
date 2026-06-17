@@ -92,9 +92,6 @@ function toOwnedUint8Array(data: Uint8Array): Uint8Array {
  * 동기 및 비동기 암호화/압축 연산을 제공합니다.
  */
 export class NodeAdapter implements PlatformAdapter {
-  readonly supportsSyncCrypto = true;
-  readonly supportsSyncCompression = true;
-  readonly supportsBrotli = true;
   readonly runtime = "node" as const;
 
   // ─── Crypto ──────────────────────────────────────────────────────────────

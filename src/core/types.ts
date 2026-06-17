@@ -317,7 +317,7 @@ export interface PlatformAdapter {
   /** 동기적으로 데이터를 복호화 (Node.js 전용) */
   decryptSync?(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Uint8Array;
 
-  /** 암호학적으로 안전한 랜덤 바이트를 생성 */
+  /** 암호학적으로 안전한 랜덤 바이트를 생성 (코어는 호출하지 않는 편의 메서드) */
   randomBytes(length: number): Uint8Array;
 
   // ─── Compression ─────────────────────────────────────────────────────────
@@ -342,14 +342,8 @@ export interface PlatformAdapter {
   /** 동기적으로 brotli 데이터를 압축 해제 (Node.js 전용) */
   brotliDecompressSync?(data: Uint8Array, maxBytes?: number): Uint8Array;
 
-  // ─── Capability Flags ────────────────────────────────────────────────────
+  // ─── Runtime ─────────────────────────────────────────────────────────────
 
-  /** 이 어댑터가 동기 암호화 연산을 지원하는지 여부 */
-  readonly supportsSyncCrypto: boolean;
-  /** 이 어댑터가 동기 압축 연산을 지원하는지 여부 */
-  readonly supportsSyncCompression: boolean;
-  /** 이 어댑터가 brotli 압축을 지원하는지 여부 */
-  readonly supportsBrotli: boolean;
   /** 감지된 런타임 환경 */
   readonly runtime: "node" | "browser" | "edge" | "deno" | "bun" | "unknown";
 }

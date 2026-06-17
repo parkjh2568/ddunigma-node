@@ -75,16 +75,10 @@ function requireCompressionFormat(
  * - 런타임이 지원하는 경우 Brotli 압축
  */
 export class BrowserAdapter implements PlatformAdapter {
-  readonly supportsSyncCrypto = false;
-  readonly supportsSyncCompression = false;
   readonly runtime: "browser" | "edge" | "deno" | "bun";
 
   constructor(runtime: "browser" | "edge" | "deno" | "bun" = "browser") {
     this.runtime = runtime;
-  }
-
-  get supportsBrotli(): boolean {
-    return supportsCompressionFormat("brotli");
   }
 
   // ─── Crypto ──────────────────────────────────────────────────────────────

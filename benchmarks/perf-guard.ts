@@ -1,6 +1,6 @@
 import { performance } from "node:perf_hooks";
 import { bitPackEncode } from "../src/core/BitPack.js";
-import { indicesToString } from "../src/core/internal/IndexStringMapper.js";
+import { indicesToString, unpackPow2FromString } from "../src/core/internal/IndexStringMapper.js";
 
 type GuardCase = {
   name: string;
@@ -68,6 +68,17 @@ function main(): void {
   const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const charCodes = new Uint16Array([...base64Chars].map((char) => char.charCodeAt(0)));
 
+  // unpackPow2FromString용 룩업 테이블(코드 유닛 → 인덱스)과 인코딩 페이로드 문자열.
+  let minCode = 0xffff;
+  let maxCode = 0;
+  for (const code of charCodes) {
+    if (code > maxCode) maxCode = code;
+    if (code < minCode) minCode = code;
+  }
+  const lookup = new Int32Array(maxCode - minCode + 1).fill(-1);
+  for (let i = 0; i < charCodes.length; i++) lookup[charCodes[i] - minCode] = i;
+  const payload16k = indicesToString(makeIndices(16 * 1024), charCodes);
+
   const cases: GuardCase[] = [
     {
       name: "bitPackEncode 6bit 16KB",
@@ -89,6 +100,13 @@ function main(): void {
       bytes: indices16k.byteLength,
       minMbps: 320,
       fn: () => indicesToString(indices16k, charCodes),
+    },
+    {
+      name: "unpackPow2FromString 16KB",
+      iterations: 2_000,
+      bytes: payload16k.length,
+      minMbps: 150,
+      fn: () => unpackPow2FromString(payload16k, 0, 6, lookup, minCode),
     },
   ];
 

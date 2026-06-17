@@ -32,18 +32,6 @@ describe("BrowserAdapter", () => {
   const adapter: PlatformAdapter = browserAdapter;
 
   describe("capability flags", () => {
-    it("reports supportsSyncCrypto as false", () => {
-      expect(adapter.supportsSyncCrypto).toBe(false);
-    });
-
-    it("reports supportsSyncCompression as false", () => {
-      expect(adapter.supportsSyncCompression).toBe(false);
-    });
-
-    it("reports supportsBrotli from CompressionStream feature detection", () => {
-      expect(adapter.supportsBrotli).toBe(supportsCompressionFormat("brotli"));
-    });
-
     it('reports runtime as "browser"', () => {
       expect(adapter.runtime).toBe("browser");
     });
@@ -316,7 +304,7 @@ describe("BrowserAdapter", () => {
     it("round-trips when runtime supports browser Brotli", async () => {
       const original = new TextEncoder().encode("Hello Brotli ".repeat(100));
 
-      if (!adapter.supportsBrotli) {
+      if (!supportsCompressionFormat("brotli")) {
         await expect(browserAdapter.brotliCompress(original)).rejects.toThrow(
           "Brotli compression is unsupported",
         );

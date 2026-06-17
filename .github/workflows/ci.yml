@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   # 전체 게이트: 로컬 `pnpm verify`와 동일한 단일 명령으로 실행(정의 중복 제거).
-  # 활성 LTS 기준(22=engines 하한, 24=LTS). Current(26 등)는 러너에서 가용 확인 후 추가.
+  # 활성 LTS 기준(22=engines 하한, 24=LTS). Current(26 등)는 러너 가용 확인 후 추가.
   verify:
     runs-on: ubuntu-latest
     strategy:

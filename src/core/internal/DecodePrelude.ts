@@ -10,7 +10,7 @@
 import { fromUrlSafe, removeChunks } from "../codecUtils.js";
 import {
   buildEncryptionAAD,
-  extractChecksumV5,
+  extractScopedChecksum,
   parseFooter,
   type ChecksumScope,
   type PipelineVersion,
@@ -50,7 +50,7 @@ export interface DecodePreludeContext {
 export interface DecodePreludeResult {
   decoded: Uint8Array;
   extractedChecksum: string | null;
-  /** V5 마커에서 자동 감지된 체크섬 scope (레거시/없음이면 null → 옵션/기본값으로 결정) */
+  /** 스코프 마커에서 자동 감지된 체크섬 scope (레거시/없음이면 null → 옵션/기본값으로 결정) */
   extractedChecksumScope: ChecksumScope | null;
   compressionAlgorithm?: "deflate" | "brotli";
   isEncrypted: boolean;
@@ -96,7 +96,7 @@ export function runDecodePrelude(
   let extractedChecksum: string | null = null;
   let extractedChecksumScope: ChecksumScope | null = null;
   if (shouldChecksum) {
-    const result = extractChecksumV5(workingInput);
+    const result = extractScopedChecksum(workingInput);
     extractedChecksum = result.checksum;
     extractedChecksumScope = result.scope;
     workingInput = result.data;

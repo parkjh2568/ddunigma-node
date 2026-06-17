@@ -50,6 +50,26 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
   대체로 `createEncoderObfuscationLayer`(footer 마커·숫자 포함) 또는 `Ddu64`의
   `obfuscate` 옵션을 사용하세요.
 
+### PlatformAdapter 슬림화 (Breaking)
+
+- `PlatformAdapter`에서 introspection 전용 capability 플래그 `supportsSyncCrypto`,
+  `supportsSyncCompression`, `supportsBrotli`를 **제거**했습니다. 코어 파이프라인은 이
+  플래그가 아니라 실제 메서드 존재 여부(`encryptSync`/`deriveKeySync`/`brotliCompressSync`
+  등)로 가용성을 판단하므로 동작에 영향이 없습니다.
+- `randomBytes`는 인터페이스에 유지하되, 코어 파이프라인이 호출하지 않는 편의 메서드임을
+  명시했습니다(각 어댑터가 암호화 IV를 내부에서 직접 생성). `NodeAdapter`/`BrowserAdapter`
+  구현 유지.
+- 마이그레이션: 커스텀 어댑터에서 위 capability 플래그를 더 이상 구현할 필요가 없습니다.
+  이 플래그들을 **읽던** 코드만 영향받습니다.
+
+### 키 파생(KDF) 포지셔닝 (정책 명시, 포맷 변경 없음)
+
+- 본 라이브러리의 AES-256-GCM 암호화는 **부가 기능**이며 단독 보안 솔루션이 아님을
+  README에 명시했습니다. 기본 PBKDF2 210k + 고정 기본 salt는 저엔트로피 키에 충분치
+  않으므로(OWASP는 PBKDF2-HMAC-SHA256 ≥600k 권고) 애플리케이션 고유 `salt`와 높은
+  `iterations` 지정을 권장합니다. 자기기술 KDF envelope는 ROADMAP에서 범위 밖으로
+  결정(현행 암호화·포맷 불변).
+
 ### 입력 크기 한도 추가 (보안 강화)
 
 - 디코드 입력(인코딩 문자열) 길이 상한 `maxEncodedChars` 옵션 추가. 청크/개행 제거 등
@@ -83,13 +103,32 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 - charset 룩업 테이블을 `[최소, 최대]` 코드 유닛 범위 + 오프셋 방식으로 축소
   (이전엔 `maxCode+1` 크기). 클러스터된/고코드포인트 charset에서 메모리 사용이 크게
   줄어듭니다.
+- **디코드 hot path 융합**: 2의 제곱수 charset 디코드가 (charCodeAt→인덱스 배열) +
+  `bitPackDecode` 2단계 대신 `unpackPow2FromString`로 한 패스에 바이트를 언팩합니다.
+  중간 인덱스 배열(Uint16Array/number[]) 할당을 제거해 대형 입력의 할당/GC를 줄입니다.
+  출력은 바이트 단위로 동일하며, `bench:guard`에 회귀 가드를 추가했습니다.
+- **인코드 hot path 융합 (비-2의 제곱수)**: 인덱스 쌍 charset(V1·커스텀 non-pow2) 인코드도
+  `packNonPow2ToString`로 비트팩+charset 매핑을 한 패스로 융합. 출력 바이트 동일.
+- **인코드 hot path 융합 (비-2의 제곱수)**: 인덱스 쌍 charset(V1·커스텀 non-pow2) 인코드도
+  `packNonPow2ToString`로 비트팩+charset 매핑을 한 패스로 융합. 출력 바이트 동일.
+- **디코드 hot path 융합 (비-2의 제곱수)**: 인덱스 쌍 charset 디코드도
+  `unpackNonPow2FromString`로 (charCodeAt→인덱스 배열)+`bitPackDecode` 2단계를 한 패스로
+  융합(값 범위·쌍 완결성 검증 동치 유지). 코어 디코드 경로는 더 이상 인덱스 배열을 만들지
+  않습니다(pow2/non-pow2 모두). 출력 바이트 동일.
+- **네이밍 정리**: 스코프 자기기술 체크섬 식별자를 `CHECKSUM_MARKER_SCOPED`/
+  `extractScopedChecksum`/`ScopedChecksumExtractResult`로 변경(과거 'v5' 명칭 → 폐기된
+  'v5 KDF envelope'와 혼동 방지). **와이어 마커 값 `CK`는 불변**이라 출력/호환 영향 없음.
+  테스트 인프라(`gen:scoped-checksum-vectors` 스크립트, `scoped-checksum-vectors.json`
+  픽스처/테스트)도 동일 명칭으로 통일.
+- **PlatformAdapter 문서화**: `randomBytes`와 `supports*` 플래그가 코어 파이프라인에서
+  사용되지 않는 introspection/편의 멤버임을 `@remarks`로 명시(차기 메이저 슬림화 후보).
 - 공개 API 경계의 옵션 런타임 검증 및 Web Streams 버퍼 상한을 강화.
 
 ### 지원 Node 버전
 
 - `engines.node` `>=22.0.0`. 활성 LTS/Current(Node 22·24 LTS, 26 Current)만 지원합니다.
   Node 18·20은 EOL이므로 지원 대상에서 제외합니다.
-- CI는 Node 22/24/26에서 `pnpm verify` 전체 게이트를 실행합니다.
+- CI는 Node 22/24에서 `pnpm verify` 전체 게이트를 실행합니다(26 Current는 러너 가용 확인 후 추가 예정).
 - 네이티브 Base64 가속(`Uint8Array.toBase64`/`fromBase64`, TC39 Stage-4 API)은 이를
   지원하는 런타임에서만 쓰이고 미지원 환경(현재 Node 24.13 포함 대부분)에서는 `Buffer`
   경로로 폴백하므로 동작에 영향이 없습니다.
@@ -101,3 +140,6 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 - pnpm 11 호환: `pnpm-workspace.yaml`에 `verifyDepsBeforeRun: false`를 설정하여 스크립트
   실행 전 암묵적 install이 hang하는 문제를 회피.
 - `pack:check`가 깨진 esbuild CLI shim 대신 esbuild Node API를 사용하도록 변경.
+- `esbuild`를 `>=0.28.1`로 올리고 `pnpm.overrides`로 전이 의존성(tsx 경유 포함)까지
+  고정. GHSA-gv7w-rqvm-qjhr(high)·GHSA-g7r4-m6w7-qqqr(low) 해소(`pnpm audit` 클린).
+  esbuild는 devDependency라 published 패키지에는 포함되지 않습니다(빌드/CI 위생 차원).

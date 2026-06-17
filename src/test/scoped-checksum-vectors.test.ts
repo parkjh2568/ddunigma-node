@@ -1,20 +1,18 @@
 /**
- * V5 와이어 포맷 테스트 벡터 "락(lock)" 테스트.
+ * 스코프 자기기술 체크섬(CK) 와이어 포맷 테스트 벡터 "락(lock)" 테스트.
  *
- * V5 구현 이전 단계의 회귀 기준을 고정합니다. 검증 내용:
+ * (과거 'v5 체크섬'으로 불렸으나 폐기된 'v5 KDF envelope'와는 무관.)
+ * 회귀 기준을 고정합니다. 검증 내용:
  * 1. 결정론적 벡터의 expected.encoded가 `...CK[P|O][8 hex]` 접미사로 끝난다.
  * 2. 접미사의 scope/hex가 벡터 필드와 일치한다.
  * 3. checksumHex가 문서화된 소스 바이트의 CRC32와 일치한다(독립 CRC32 구현으로 교차검증).
  * 4. 접미사를 제거한 payload+footer가 **현재 4.x 디코더**로 원본을 복원한다
  *    → CK 접미사가 순수 가산(additive)이며 payload는 4.x와 동일함을 증명.
- *
- * 이 테스트는 V5 코덱이 없어도 통과해야 한다(스펙 고정용). V5 구현 후에는
- * 실제 V5 encode/decode 동치 테스트가 추가된다.
  */
 
 import { describe, it, expect } from "vitest";
 import { Ddu64Node } from "../Ddu64Node.js";
-import v5data from "./fixtures/v5-vectors.json";
+import scopedData from "./fixtures/scoped-checksum-vectors.json";
 
 // 독립 CRC32 (bit-by-bit) — codecUtils의 테이블 구현과 다른 방식으로 교차검증
 function crc32Hex(data: Uint8Array): string {
@@ -35,7 +33,7 @@ function fromHex(hex: string): Uint8Array {
   return out;
 }
 
-interface V5Vector {
+interface ScopedVector {
   id: string;
   input: { raw: string; encoding: string };
   options: { compress?: boolean; encryptionKey?: string; checksumScope: "plaintext" | "output" };
@@ -49,15 +47,15 @@ interface V5Vector {
   tags: string[];
 }
 
-const file = v5data as {
+const file = scopedData as {
   version: string;
   markerSpec: { suffixPattern: string };
-  vectors: V5Vector[];
+  vectors: ScopedVector[];
 };
 const vectors = file.vectors;
 const suffixRe = new RegExp(file.markerSpec.suffixPattern);
 
-describe("V5 wire-format vectors (spec lock, pre-implementation)", () => {
+describe("scoped checksum wire-format vectors (spec lock)", () => {
   it("fixture has both deterministic and round-trip-only vectors", () => {
     expect(vectors.some((v) => v.tags.includes("deterministic"))).toBe(true);
     expect(vectors.some((v) => v.tags.includes("round-trip-only"))).toBe(true);
@@ -107,7 +105,7 @@ describe("V5 wire-format vectors (spec lock, pre-implementation)", () => {
   });
 });
 
-describe("V5 decode self-description (Step 2)", () => {
+describe("scoped checksum decode self-description (Step 2)", () => {
   const deterministic = vectors.filter((v) => v.tags.includes("deterministic"));
 
   for (const v of deterministic) {
@@ -132,14 +130,14 @@ describe("V5 decode self-description (Step 2)", () => {
     expect(decoded).toEqual(fromHex(outputVec.input.raw));
   });
 
-  it("decoding V5 data without checksum:true fails (CK suffix not in DDU charset)", () => {
+  it("decoding scoped-checksum data without checksum:true fails (CK suffix not in DDU charset)", () => {
     const vec = deterministic[0];
     const dec = new Ddu64Node();
     expect(() => dec.decodeToUint8Array(vec.expected.encoded!)).toThrow();
   });
 });
 
-describe("V5 encoder golden output (Step 3)", () => {
+describe("scoped checksum encoder golden output (Step 3)", () => {
   const deterministic = vectors.filter((v) => v.tags.includes("deterministic"));
   for (const v of deterministic) {
     it(`${v.id}: real 5.0 encoder produces the locked vector`, () => {

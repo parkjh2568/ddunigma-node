@@ -61,8 +61,11 @@ export const PIPELINE_V4_MARKER = "V4";
 /** 체크섬 마커 접두사 (뒤에 8자리 16진수 CRC32가 따름) */
 export const CHECKSUM_MARKER = "CHK";
 
-/** V5 체크섬 마커 (뒤에 scope 문자 `P|O`와 8자리 16진수 CRC32가 따름) */
-export const CHECKSUM_MARKER_V5 = "CK";
+/**
+ * 스코프 자기기술 체크섬 마커. 뒤에 scope 문자 `P|O`와 8자리 16진수 CRC32가 따릅니다.
+ * (역사적으로 "v5 체크섬"으로 불렸으나, ROADMAP에서 폐기된 "v5 KDF envelope"와는 무관합니다.)
+ */
+export const CHECKSUM_MARKER_SCOPED = "CK";
 
 /** 체크섬 계산 범위 */
 export type ChecksumScope = "plaintext" | "output";
@@ -260,32 +263,32 @@ export function extractChecksum(input: string): ChecksumExtractResult {
   };
 }
 
-/** V5 체크섬 추출 결과 (scope 자기기술 포함) */
-export interface ChecksumExtractResultV5 {
+/** 스코프 자기기술 체크섬 추출 결과 (scope 자기기술 포함) */
+export interface ScopedChecksumExtractResult {
   /** 체크섬이 제거된 데이터 부분 */
   data: string;
   /** 추출된 8자리 16진수 체크섬, 또는 찾지 못한 경우 null */
   checksum: string | null;
-  /** V5 마커에서 감지된 scope. 레거시(`CHK`) 또는 마커 없음이면 null */
+  /** 스코프 마커에서 감지된 scope. 레거시(`CHK`) 또는 마커 없음이면 null */
   scope: ChecksumScope | null;
 }
 
 const HEX8_RE = /^[0-9a-f]{8}$/i;
 
 /**
- * 인코딩된 문자열 끝에서 체크섬을 추출합니다(V5 우선, 레거시 fallback).
+ * 인코딩된 문자열 끝에서 체크섬을 추출합니다(스코프 마커 우선, 레거시 fallback).
  *
- * - V5: `CK[P|O][8 hex]` (문자열 끝 고정 11자) → scope 자기기술.
+ * - 스코프 마커: `CK[P|O][8 hex]` (문자열 끝 고정 11자) → scope 자기기술.
  * - 레거시: `CHK[8 hex]` → scope는 null(호출자가 옵션/기본값으로 결정).
  *
- * V5 형태를 먼저 검사하고, 아니면 레거시 `extractChecksum`으로 위임합니다.
+ * 스코프 형태를 먼저 검사하고, 아니면 레거시 `extractChecksum`으로 위임합니다.
  *
  * @param input - 체크섬 접미사를 포함할 수 있는 인코딩된 문자열
  * @returns 데이터·체크섬·scope
  */
-export function extractChecksumV5(input: string): ChecksumExtractResultV5 {
+export function extractScopedChecksum(input: string): ScopedChecksumExtractResult {
   const len = input.length;
-  // V5: "CK" + scope(P|O) + 8 hex = 11자, 문자열 끝 고정 길이 검증
+  // 스코프 마커: "CK" + scope(P|O) + 8 hex = 11자, 문자열 끝 고정 길이 검증
   if (len >= 11) {
     const c0 = input.charCodeAt(len - 11); // 'C' = 67
     const c1 = input.charCodeAt(len - 10); // 'K' = 75

@@ -4,17 +4,19 @@
  * @module core/internal/PayloadCodec
  */
 
-import { bitPackDecode, bitPackEncode, type BitPackConfig } from "../BitPack.js";
+import type { BitPackConfig } from "../BitPack.js";
 import type { DduInternalOptions } from "../types.js";
 import { decodeNativeBase64, encodeNativeBase64 } from "./NativeBase64FastPath.js";
-import { indicesToString, packPow2ToString } from "./IndexStringMapper.js";
+import {
+  packPow2ToString,
+  packNonPow2ToString,
+  unpackPow2FromString,
+  unpackNonPow2FromString,
+} from "./IndexStringMapper.js";
 import { buildEncodeFooter } from "./EncodeFinalize.js";
 import { lookupCharIndex } from "./CharsetLookup.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
-
-/** 대형 입력에서 typed index 배열(Uint16Array)로 전환하는 임계값(문자 수). */
-const TYPED_INDEX_THRESHOLD = 16384;
 
 export interface PayloadCodecContext {
   bitPackConfig: BitPackConfig;
@@ -51,9 +53,15 @@ export function encodePayload(
     paddingBits = fused.paddingBits;
     payload = fused.payload;
   } else {
-    const encoded = bitPackEncode(data, context.bitPackConfig);
-    paddingBits = encoded.paddingBits;
-    payload = indicesToString(encoded.indices, context.dduCharCodes);
+    // 비-2의 제곱수: 인덱스 쌍 비트팩 + charset 매핑을 한 패스로 융합
+    const fused = packNonPow2ToString(
+      data,
+      context.bitPackConfig.bitLength,
+      context.bitPackConfig.charsetSize,
+      context.dduCharCodes,
+    );
+    paddingBits = fused.paddingBits;
+    payload = fused.payload;
   }
 
   const footer = buildEncodeFooter({
@@ -89,22 +97,24 @@ export function decodePayload(
     : null;
   if (nativeDecoded) return nativeDecoded;
 
-  // 대형 payload는 typed indices(Uint16Array)로 메모리 형태를 통일합니다.
-  const shouldUseTypedIndices = inputLen >= TYPED_INDEX_THRESHOLD;
-  const indices = shouldUseTypedIndices ? new Uint16Array(inputLen) : new Array<number>(inputLen);
-
-  const lookup = context.dduCharCodeLookup;
-  const lookupLen = lookup.length;
-  const lookupOffset = context.dduCharCodeLookupOffset;
-  for (let i = 0; i < inputLen; i++) {
-    const code = cleanedInput.charCodeAt(i);
-    const idx = code - lookupOffset;
-    const val = idx >= 0 && idx < lookupLen ? lookup[idx] : -1;
-    if (val < 0) {
-      throw new Error(`[Ddu64 decode] Invalid character "${cleanedInput[i]}" at ${i}`);
-    }
-    indices[i] = val;
+  // 2의 제곱수: charCodeAt→인덱스 룩업과 비트 언팩을 한 패스로 융합(중간 인덱스 배열 제거)
+  if (context.bitPackConfig.usePowerOfTwo) {
+    return unpackPow2FromString(
+      cleanedInput,
+      paddingBits,
+      context.bitPackConfig.bitLength,
+      context.dduCharCodeLookup,
+      context.dduCharCodeLookupOffset,
+    );
   }
 
-  return bitPackDecode(indices, paddingBits, context.bitPackConfig);
+  // 비-2의 제곱수: 인덱스 쌍 비트 언팩을 한 패스로 융합(중간 인덱스 배열 제거)
+  return unpackNonPow2FromString(
+    cleanedInput,
+    paddingBits,
+    context.bitPackConfig.bitLength,
+    context.bitPackConfig.charsetSize,
+    context.dduCharCodeLookup,
+    context.dduCharCodeLookupOffset,
+  );
 }

@@ -10,10 +10,7 @@ describe("NodeAdapter", () => {
   const adapter = new NodeAdapter();
 
   describe("capability flags", () => {
-    it("reports correct capabilities", () => {
-      expect(adapter.supportsSyncCrypto).toBe(true);
-      expect(adapter.supportsSyncCompression).toBe(true);
-      expect(adapter.supportsBrotli).toBe(true);
+    it("reports correct runtime", () => {
       expect(adapter.runtime).toBe("node");
     });
   });
