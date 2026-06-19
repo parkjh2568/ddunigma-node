@@ -1,6 +1,6 @@
 import { performance } from "node:perf_hooks";
 import { bitPackEncode } from "../src/core/BitPack.js";
-import { indicesToString, unpackPow2FromString } from "../src/core/internal/IndexStringMapper.js";
+import { packPow2ToString, unpackPow2FromString } from "../src/core/internal/IndexStringMapper.js";
 
 type GuardCase = {
   name: string;
@@ -32,14 +32,6 @@ function makeBytes(length: number): Uint8Array {
   return bytes;
 }
 
-function makeIndices(length: number): Uint16Array {
-  const indices = new Uint16Array(length);
-  for (let i = 0; i < length; i++) {
-    indices[i] = i & 63;
-  }
-  return indices;
-}
-
 function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boolean } {
   const gc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
   consume(testCase.fn());
@@ -64,7 +56,6 @@ function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boo
 function main(): void {
   const bytes16k = makeBytes(16 * 1024);
   const bytes256k = makeBytes(256 * 1024);
-  const indices16k = makeIndices(16 * 1024);
   const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const charCodes = new Uint16Array([...base64Chars].map((char) => char.charCodeAt(0)));
 
@@ -77,7 +68,7 @@ function main(): void {
   }
   const lookup = new Int32Array(maxCode - minCode + 1).fill(-1);
   for (let i = 0; i < charCodes.length; i++) lookup[charCodes[i] - minCode] = i;
-  const payload16k = indicesToString(makeIndices(16 * 1024), charCodes);
+  const { payload: payload16k, paddingBits: pad16k } = packPow2ToString(bytes16k, 6, charCodes);
 
   const cases: GuardCase[] = [
     {
@@ -95,18 +86,22 @@ function main(): void {
       fn: () => bitPackEncode(bytes256k, { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 }),
     },
     {
-      name: "indicesToString 16KB",
+      name: "packPow2ToString 16KB",
       iterations: 2_000,
-      bytes: indices16k.byteLength,
-      minMbps: 320,
-      fn: () => indicesToString(indices16k, charCodes),
+      bytes: bytes16k.byteLength,
+      // L2 6/8비트 언롤 융합으로 ~40→~183 MB/s 개선. 측정 기반 보수적 하한
+      // (로컬 median ~183, ~40% 마진). 환경 따라 변동하는 상대 하한이며 절대 단정 아님.
+      minMbps: 110,
+      fn: () => packPow2ToString(bytes16k, 6, charCodes),
     },
     {
       name: "unpackPow2FromString 16KB",
       iterations: 2_000,
       bytes: payload16k.length,
-      minMbps: 150,
-      fn: () => unpackPow2FromString(payload16k, 0, 6, lookup, minCode),
+      // L2 대칭 언롤로 영향받는 디코드 경로. 측정 기반 보수적 하한
+      // (로컬 median ~420, 노이즈 최저 ~283 대비에도 여유). 환경 따라 변동하는 상대 하한이며 절대 단정 아님.
+      minMbps: 220,
+      fn: () => unpackPow2FromString(payload16k, pad16k, 6, lookup, minCode),
     },
   ];
 

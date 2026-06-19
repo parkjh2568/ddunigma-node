@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { Ddu64Node } from "../Ddu64Node.js";
+import { Ddu64Secure } from "../Ddu64Secure.js";
 import { Ddu64Core } from "../core/Ddu64Core.js";
 import { NodeAdapter } from "../adapters/NodeAdapter.js";
 import { BrowserAdapter } from "../adapters/BrowserAdapter.js";
@@ -15,6 +16,16 @@ import { DduSetSymbol } from "../core/types.js";
 import { createReadableEncodeStream, createReadableDecodeStream } from "../streams/WebStreams.js";
 import { HangulObfuscationLayer } from "../obfuscation/ObfuscationLayer.js";
 import { parseFooter } from "../core/wireFormat.js";
+import { bitPackEncode, bitPackDecode, type BitPackConfig } from "../core/BitPack.js";
+import {
+  packPow2ToString,
+  unpackPow2FromString,
+  packNonPow2ToString,
+  unpackNonPow2FromString,
+} from "../core/internal/IndexStringMapper.js";
+import { buildCharsetLookupTables } from "../core/internal/CharsetLookup.js";
+import compatVectorsData from "./fixtures/compat-vectors.json";
+import scopedChecksumData from "./fixtures/scoped-checksum-vectors.json";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -231,7 +242,7 @@ describe("Property-Based Tests", () => {
     });
 
     it("압축 옵션과 함께 라운드트립 검증", () => {
-      const encoder = new Ddu64Node(undefined, undefined, { compress: true });
+      const encoder = new Ddu64Secure(undefined, undefined, { compress: true });
 
       fc.assert(
         fc.property(fc.uint8Array({ minLength: 1, maxLength: 2000 }), (data) => {
@@ -244,7 +255,7 @@ describe("Property-Based Tests", () => {
     });
 
     it("암호화 옵션과 함께 라운드트립 검증", () => {
-      const encoder = new Ddu64Node(undefined, undefined, {
+      const encoder = new Ddu64Secure(undefined, undefined, {
         encryptionKey: "test-property-key",
       });
 
@@ -259,7 +270,7 @@ describe("Property-Based Tests", () => {
     });
 
     it("체크섬 옵션과 함께 라운드트립 검증", () => {
-      const encoder = new Ddu64Node(undefined, undefined, { checksum: true });
+      const encoder = new Ddu64Secure(undefined, undefined, { checksum: true });
 
       fc.assert(
         fc.property(fc.uint8Array({ minLength: 1, maxLength: 1000 }), (data) => {
@@ -452,7 +463,7 @@ describe("Property-Based Tests", () => {
     });
 
     it("압축 인코딩 시 ELYSIA 마커가 포함됨", () => {
-      const encoder = new Ddu64Node(undefined, undefined, { compress: true });
+      const encoder = new Ddu64Secure(undefined, undefined, { compress: true });
 
       fc.assert(
         fc.property(
@@ -473,7 +484,7 @@ describe("Property-Based Tests", () => {
     });
 
     it("암호화 인코딩 시 ENC 마커가 포함됨", () => {
-      const encoder = new Ddu64Node(undefined, undefined, {
+      const encoder = new Ddu64Secure(undefined, undefined, {
         encryptionKey: "footer-test-key",
       });
 
@@ -490,7 +501,7 @@ describe("Property-Based Tests", () => {
   // ─── Property 11: 난독화 출력 유효성 ──────────────────────────────────────
   describe("Property 11: 난독화 출력 유효성", () => {
     it("난독화된 출력의 모든 문자가 U+AC00–U+D7A3 범위이고 빈도가 3× 이내", () => {
-      const encoder = new Ddu64Node(undefined, undefined, {
+      const encoder = new Ddu64Secure(undefined, undefined, {
         encryptionKey: "obfuscation-test-key",
         obfuscate: true,
       });
@@ -560,7 +571,7 @@ describe("Property-Based Tests", () => {
     });
 
     it("Ddu64Node 난독화 인코딩 전체 라운드트립", () => {
-      const encoder = new Ddu64Node(undefined, undefined, {
+      const encoder = new Ddu64Secure(undefined, undefined, {
         encryptionKey: "roundtrip-obfuscation-key",
         obfuscate: true,
       });
@@ -720,5 +731,335 @@ describe("Property-Based Tests", () => {
         { numRuns: NUM_RUNS },
       );
     });
+  });
+
+  // ─── Property 2 (novelty-first-restructure): 키 없는 난독화 라운드트립 ──────
+  // Feature: novelty-first-restructure, Property 2: 키 없는 난독화 라운드트립
+  // Validates: Requirements 5.2, 5.3, 5.4, 1.5, 2.6
+  describe("Property 2: 키 없는 난독화 라운드트립 (디코드 키 무관)", () => {
+    it("암호화 키 없이 obfuscate한 결과를 디코더 키 보유/미보유와 무관하게 원본 복원", () => {
+      // 인코더: 암호화 키 없음 + obfuscate (기본 진입점, lean)
+      const encoderNoKey = new Ddu64Node(undefined, undefined, { obfuscate: true });
+      // 디코더 키 미보유 (기본 진입점, lean)
+      const decoderNoKey = new Ddu64Node(undefined, undefined, { obfuscate: true });
+      // 디코더 키 보유 — 역난독은 키 비의존이므로 동일하게 복원해야 함.
+      // (키 보유 디코더는 secure 표면이므로 Ddu64Core로 구성; requireEncryption:false로 평문 footer 허용)
+      const decoderWithKey = new Ddu64Core(undefined, undefined, {
+        obfuscate: true,
+        encryptionKey: "decoder-side-key",
+        requireEncryption: false,
+        adapter: new NodeAdapter(),
+        obfuscationLayerFactory: (alphabet) => new HangulObfuscationLayer(alphabet),
+      });
+
+      fc.assert(
+        fc.property(fc.uint8Array({ minLength: 0, maxLength: 256 }), (data) => {
+          const encoded = encoderNoKey.encode(data);
+          const viaNoKey = decoderNoKey.decodeToUint8Array(encoded, { obfuscate: true });
+          const viaWithKey = decoderWithKey.decodeToUint8Array(encoded, { obfuscate: true });
+          expect(viaNoKey).toEqual(data);
+          expect(viaWithKey).toEqual(data);
+        }),
+        { numRuns: NUM_RUNS },
+      );
+    });
+  });
+
+  // ─── Property 3 (novelty-first-restructure): 키 없는 난독화 출력 형식 ───────
+  // Feature: novelty-first-restructure, Property 3: 키 없는 난독화 출력 형식
+  // Validates: Requirements 5.1
+  describe("Property 3: 키 없는 난독화 출력 형식", () => {
+    it("암호화 키 없이 obfuscate한 인코딩이 오류 없이 완료되고 모든 문자가 U+AC00–U+D7A3", () => {
+      const encoder = new Ddu64Node(undefined, undefined, { obfuscate: true });
+
+      fc.assert(
+        fc.property(fc.uint8Array({ minLength: 0, maxLength: 256 }), (data) => {
+          const encoded = encoder.encode(data);
+          for (const ch of encoded) {
+            const code = ch.codePointAt(0)!;
+            expect(code).toBeGreaterThanOrEqual(0xac00);
+            expect(code).toBeLessThanOrEqual(0xd7a3);
+          }
+        }),
+        { numRuns: NUM_RUNS },
+      );
+    });
+  });
+
+  // ─── Property 1 (novelty-first-restructure): 기본 진입점 라운드트립 ──────────
+  // Feature: novelty-first-restructure, Property 1: 기본 진입점 라운드트립
+  // Validates: Requirements 7.1
+  describe("Property 1 (novelty-first): 기본 진입점 라운드트립", () => {
+    it("기본 진입점(Ddu64Node)의 decode(encode(x))가 옵션 없이 원본과 동치", () => {
+      const encoder = new Ddu64Node();
+
+      fc.assert(
+        fc.property(fc.uint8Array({ minLength: 0, maxLength: 2000 }), (data) => {
+          const encoded = encoder.encode(data);
+          const decoded = encoder.decodeToUint8Array(encoded);
+          expect(decoded).toEqual(data);
+        }),
+        { numRuns: NUM_RUNS },
+      );
+    });
+  });
+
+  // ─── Property 4 (novelty-first-restructure): Secure 라운드트립 ───────────────
+  // Feature: novelty-first-restructure, Property 4: Secure 라운드트립
+  // Validates: Requirements 2.2, 2.5, 5.5
+  describe("Property 4 (novelty-first): Secure 압축/암호/체크섬 라운드트립", () => {
+    it("압축·암호화·체크섬·난독화의 임의 조합에서 동일 키/옵션 라운드트립이 원본 복원", () => {
+      fc.assert(
+        fc.property(
+          fc.uint8Array({ minLength: 0, maxLength: 1000 }),
+          fc.record({
+            compress: fc.boolean(),
+            compressionAlgorithm: fc.constantFrom("deflate" as const, "brotli" as const),
+            encryptionKey: fc.option(fc.string({ minLength: 1, maxLength: 64 }), {
+              nil: undefined,
+            }),
+            checksum: fc.boolean(),
+            obfuscate: fc.boolean(),
+          }),
+          (data, opts) => {
+            // 난독화는 인코딩/디코딩에 동일 인스턴스를 사용하므로 키 보유 여부와 무관하게 가역적.
+            const encoder = new Ddu64Secure(undefined, undefined, {
+              compress: opts.compress,
+              compressionAlgorithm: opts.compressionAlgorithm,
+              encryptionKey: opts.encryptionKey,
+              checksum: opts.checksum,
+              obfuscate: opts.obfuscate,
+            });
+            const encoded = encoder.encode(data);
+            const decoded = encoder.decodeToUint8Array(encoded);
+            expect(decoded).toEqual(data);
+          },
+        ),
+        { numRuns: NUM_RUNS },
+      );
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// encoding-perf-optimization Property Tests
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Feature: encoding-perf-optimization, Property 1: 융합 경로 바이트 동치
+// Validates: Requirements 1.1, 1.4, 3.2, 3.4, 3.5, 7.1, 7.3
+//
+// 융합 인코드(packPow2/NonPow2ToString)의 {payload, paddingBits}가 기준 경로
+// (bitPackEncode → 인덱스 → charCode 매핑)와 바이트 단위로 동일하고, 융합
+// 디코드(unpackPow2/NonPow2FromString)의 출력 바이트가 기준 bitPackDecode와
+// 동일함을 charset 매트릭스(64=6bit/256=8bit/16=4bit pow2, 50/100=non-pow2)
+// 전반에서 고정한다. 최적화 전 기준선 안전망.
+describe("Property 1 (encoding-perf-optimization): 융합 경로 바이트 동치", () => {
+  /** 요청 크기의 단일 BMP 코드 유닛 charset을 U+AC00부터 생성 */
+  function makeCharset(size: number): string[] {
+    const set = new Array<string>(size);
+    for (let i = 0; i < size; i++) {
+      set[i] = String.fromCharCode(0xac00 + i);
+    }
+    return set;
+  }
+
+  /** 기준: BitPack 인덱스를 charCodes로 매핑해 문자열로 변환 */
+  function indicesToReferenceString(indices: ArrayLike<number>, charCodes: Uint16Array): string {
+    let out = "";
+    for (let i = 0; i < indices.length; i++) {
+      out += String.fromCharCode(charCodes[indices[i]]);
+    }
+    return out;
+  }
+
+  interface MatrixEntry {
+    label: string;
+    config: BitPackConfig;
+    charCodes: Uint16Array;
+    lookup: Int32Array;
+    lookupOffset: number;
+  }
+
+  function makeEntry(label: string, config: BitPackConfig): MatrixEntry {
+    const charset = makeCharset(config.charsetSize);
+    const { charCodes, charCodeLookup, lookupOffset } = buildCharsetLookupTables(charset);
+    return { label, config, charCodes, lookup: charCodeLookup, lookupOffset };
+  }
+
+  // charset 매트릭스: pow2(6/8/4 bit) + non-pow2(50/100).
+  const matrix: MatrixEntry[] = [
+    makeEntry("pow2 64 (6bit)", { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 }),
+    makeEntry("pow2 256 (8bit)", { bitLength: 8, usePowerOfTwo: true, charsetSize: 256 }),
+    makeEntry("pow2 16 (4bit)", { bitLength: 4, usePowerOfTwo: true, charsetSize: 16 }),
+    makeEntry("non-pow2 50 (6bit)", { bitLength: 6, usePowerOfTwo: false, charsetSize: 50 }),
+    makeEntry("non-pow2 100 (7bit)", { bitLength: 7, usePowerOfTwo: false, charsetSize: 100 }),
+  ];
+
+  it("융합 인코드/디코드가 raw 비트팩 기준과 바이트 동치 (pow2 6/8/4 + non-pow2 50/100)", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...matrix),
+        fc.uint8Array({ minLength: 0, maxLength: 4096 }),
+        (entry, data) => {
+          const { config, charCodes, lookup, lookupOffset } = entry;
+
+          // ── 인코드 동치: 융합 {payload, paddingBits} vs 기준 매핑 ──
+          const ref = bitPackEncode(data, config);
+          const fused = config.usePowerOfTwo
+            ? packPow2ToString(data, config.bitLength, charCodes)
+            : packNonPow2ToString(data, config.bitLength, config.charsetSize, charCodes);
+
+          expect(fused.paddingBits).toBe(ref.paddingBits);
+          expect(fused.payload).toBe(indicesToReferenceString(ref.indices, charCodes));
+
+          // ── 디코드 동치: 융합 출력 바이트 vs 기준 bitPackDecode ──
+          const indices = new Array<number>(fused.payload.length);
+          for (let i = 0; i < fused.payload.length; i++) {
+            indices[i] = lookup[fused.payload.charCodeAt(i) - lookupOffset];
+          }
+          const refBytes = bitPackDecode(indices, fused.paddingBits, config);
+          const fusedBytes = config.usePowerOfTwo
+            ? unpackPow2FromString(
+                fused.payload,
+                fused.paddingBits,
+                config.bitLength,
+                lookup,
+                lookupOffset,
+              )
+            : unpackNonPow2FromString(
+                fused.payload,
+                fused.paddingBits,
+                config.bitLength,
+                config.charsetSize,
+                lookup,
+                lookupOffset,
+              );
+
+          expect(Array.from(fusedBytes)).toEqual(Array.from(refBytes));
+          // 라운드트립 원본 일치까지 함께 고정
+          expect(Array.from(fusedBytes)).toEqual(Array.from(data));
+        },
+      ),
+      { numRuns: NUM_RUNS },
+    );
+  });
+});
+
+// Feature: encoding-perf-optimization, Property 2: 라운드트립
+// Validates: Requirements 4.2, 5.1, 5.2, 5.3, 5.4, 2.4
+//
+// 임의 바이트열 x(빈 입력 및 패딩 비정렬 길이 포함)와 모든 charset 프리셋
+// (DDU/V1/ONECHARSET/커스텀 pow2/커스텀 non-pow2)에 대해, 융합 경로(공개
+// encode/decode 진입점)로 인코딩한 뒤 디코딩하면 x와 동치인 바이트열을
+// 복원한다. fc.uint8Array의 길이 다양성으로 빈 입력(5.3)과 패딩 비정렬
+// 길이(5.4)를 자동 포섭한다. 최적화 전 기준선 안전망.
+describe("Property 2 (encoding-perf-optimization): 라운드트립", () => {
+  interface PresetEntry {
+    label: string;
+    encoder: Ddu64Node;
+  }
+
+  // 커스텀 Pow2_Charset: 표준 base64 64자(2^6).
+  const CUSTOM_POW2_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  // 커스텀 NonPow2_Charset: 2의 제곱수가 아닌 50자(A-Z + a-x).
+  const CUSTOM_NON_POW2_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx";
+
+  // charset 프리셋 매트릭스: DDU(기본) / V1 / ONECHARSET / 커스텀 pow2 / 커스텀 non-pow2.
+  const presets: PresetEntry[] = [
+    { label: "DDU (기본 64-charset 6bit pow2)", encoder: new Ddu64Node() },
+    {
+      label: "V1 (DDU_V1 non-pow2)",
+      encoder: new Ddu64Node(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU_V1 }),
+    },
+    {
+      label: "ONECHARSET (64-charset 6bit pow2)",
+      encoder: new Ddu64Node(undefined, undefined, { dduSetSymbol: DduSetSymbol.ONECHARSET }),
+    },
+    {
+      label: "커스텀 pow2 (base64 64자)",
+      encoder: new Ddu64Node(CUSTOM_POW2_CHARSET, "="),
+    },
+    {
+      label: "커스텀 non-pow2 (50자)",
+      encoder: new Ddu64Node(CUSTOM_NON_POW2_CHARSET, "="),
+    },
+  ];
+
+  it("모든 프리셋에서 decode(encode(x)) === x (빈 입력·패딩 비정렬 포함)", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...presets),
+        fc.uint8Array({ minLength: 0, maxLength: 2048 }),
+        (preset, data) => {
+          const encoded = preset.encoder.encode(data);
+          const decoded = preset.encoder.decodeToUint8Array(encoded);
+          expect(decoded).toEqual(data);
+        },
+      ),
+      { numRuns: NUM_RUNS },
+    );
+  });
+});
+
+// Feature: encoding-perf-optimization, Property 3: 과거 데이터 하위호환
+// Validates: Requirements 2.1, 2.2, 2.3, 7.2
+//
+// 생성 불가한 과거 데이터(고정 벡터)를 전수 순회하여 융합 디코드 경로가 각
+// 벡터의 기대 평문을 바이트 단위로 복원함을 고정한다. compat-vectors.json은
+// V2(DDU)/V1(DDU_V1) 인코딩 문자열을, scoped-checksum-vectors.json은 CK 체크섬
+// 와이어 포맷(체크섬 검증 포함)을 다룬다. 고정 벡터는 생성 불가한 과거
+// 데이터이므로 fast-check 생성 대신 전수 순회로 단언한다. 최적화 전 기준선 안전망.
+describe("Property 3 (encoding-perf-optimization): 과거 데이터 하위호환", () => {
+  // ── compat-vectors: V2(DDU) / V1(DDU_V1) 고정 인코딩 문자열 ──
+  interface CompatVector {
+    name: string;
+    input: string;
+    v2: string;
+    v1: string;
+  }
+  const compatVectors = compatVectorsData as CompatVector[];
+
+  const v2Encoder = new Ddu64Node();
+  const v1Encoder = new Ddu64Node(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU_V1 });
+
+  it("compat-vectors 전수: V2(DDU)/V1(DDU_V1) 디코드가 기대 평문 복원", () => {
+    expect(compatVectors.length).toBeGreaterThan(0);
+    for (const vec of compatVectors) {
+      expect(v2Encoder.decode(vec.v2)).toBe(vec.input);
+      expect(v1Encoder.decode(vec.v1)).toBe(vec.input);
+    }
+  });
+
+  // ── scoped-checksum-vectors: CK 자기기술 체크섬 와이어 포맷 ──
+  interface ScopedVector {
+    id: string;
+    input: { raw: string; encoding: string };
+    options: { compress?: boolean; encryptionKey?: string; checksumScope: string };
+    expected: { encoded: string | null };
+    tags: string[];
+  }
+  const scopedFile = scopedChecksumData as { vectors: ScopedVector[] };
+  // 결정론적(비암호화) 벡터만 고정 인코딩이 존재한다(암호화는 랜덤 IV).
+  const scopedVectors = scopedFile.vectors.filter(
+    (v) => v.tags.includes("deterministic") && v.expected.encoded !== null,
+  );
+
+  function fromHex(hex: string): Uint8Array {
+    if (hex === "") return new Uint8Array(0);
+    const out = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    return out;
+  }
+
+  // 체크섬/압축 기능은 secure 진입점에서 검증한다(scoped-checksum-vectors.test.ts와 동일).
+  const checksumDecoder = new Ddu64Secure();
+
+  it("scoped-checksum-vectors 전수: 체크섬 검증 포함 디코드가 기대 평문 복원", () => {
+    expect(scopedVectors.length).toBeGreaterThan(0);
+    for (const vec of scopedVectors) {
+      // CK 마커에서 scope 자동 감지 + 체크섬 검증을 포함해 디코드한다.
+      const decoded = checksumDecoder.decodeToUint8Array(vec.expected.encoded!, { checksum: true });
+      expect(Array.from(decoded)).toEqual(Array.from(fromHex(vec.input.raw)));
+    }
   });
 });

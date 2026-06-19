@@ -11,7 +11,8 @@
 
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { Ddu64Node } from "../Ddu64Node.js";
+// 6.0: 배터리(암호화/압축/체크섬) 테스트는 secure 진입점의 Ddu64Secure로 검증.
+import { Ddu64Secure as Ddu64Node } from "../Ddu64Secure.js";
 import { DduSetSymbol, type DduInternalOptions } from "../core/types.js";
 
 const NUM_RUNS = 60;

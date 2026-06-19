@@ -46,8 +46,13 @@ const DEFAULT_MAX_BUFFERED_CHARS = 64 * 1024 * 1024;
  * 압축/암호화/체크섬이 비활성화되고 charset이 2의 제곱수일 때 각 청크를 즉시 인코딩합니다.
  * 그 외에는 전체 데이터를 축적한 후 flush에서 처리합니다.
  *
+ * 암호화 정책: 스트림 암호화 여부는 **인코더가 키를 보유했는지로만** 결정됩니다
+ * (`encryptionKey` 설정 시 항상 암호화). 스트림 옵션 타입(`DduStreamOptions`)에는 `encrypt`가
+ * 노출되지 않으며, 내부 옵션으로 `encrypt: false`를 주더라도 키가 있으면 무시되고 암호화됩니다.
+ * 평문 스트림이 필요하면 키 없는 인코더 인스턴스를 사용하세요.
+ *
  * @param encoder - 인코딩에 사용할 Ddu64Core 인스턴스
- * @param options - 인코딩 옵션 (compress, encrypt, compressionAlgorithm 등)
+ * @param options - 인코딩 옵션 (compress, compressionAlgorithm 등)
  * @returns TransformStream<Uint8Array, string>
  */
 export function createReadableEncodeStream(

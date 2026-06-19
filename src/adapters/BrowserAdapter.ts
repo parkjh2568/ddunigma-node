@@ -10,6 +10,7 @@
  */
 
 import type { KeyDerivationOptions, PlatformAdapter } from "../core/types.js";
+import { Ddu64AdapterError } from "../core/errors.js";
 import {
   normalizePbkdf2HashForWebCrypto,
   normalizePbkdf2Iterations,
@@ -58,9 +59,10 @@ function requireCompressionFormat(
 ): CompressionFormat {
   if (!supportsCompressionFormat(format)) {
     const label = format === "brotli" ? "Brotli" : "Deflate raw";
-    throw new Error(
+    throw new Ddu64AdapterError(
       `[Ddu64 ${operation}] ${label} ${operation}ion is unsupported in the current runtime. ` +
         `CompressionStream/DecompressionStream does not support "${format}".`,
+      operation,
     );
   }
 
@@ -219,9 +221,10 @@ export class BrowserAdapter implements PlatformAdapter {
    */
   async deflate(data: Uint8Array, _level?: number): Promise<Uint8Array> {
     if (typeof CompressionStream === "undefined") {
-      throw new Error(
+      throw new Ddu64AdapterError(
         "[Ddu64 compress] Deflate compression is unsupported in the current runtime. " +
           "CompressionStream API is not available.",
+        "compress",
       );
     }
 
@@ -237,9 +240,10 @@ export class BrowserAdapter implements PlatformAdapter {
    */
   async inflate(data: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
     if (typeof DecompressionStream === "undefined") {
-      throw new Error(
+      throw new Ddu64AdapterError(
         "[Ddu64 decompress] Deflate decompression is unsupported in the current runtime. " +
           "DecompressionStream API is not available.",
+        "decompress",
       );
     }
 

@@ -55,4 +55,5 @@ export type {
   ObfuscationLayer,
   KeyDerivationOptions,
   KeyDerivationAlgorithm,
+  DduSetSymbolInput,
 } from "./core/types.js";

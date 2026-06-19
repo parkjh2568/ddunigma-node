@@ -11,7 +11,7 @@ import { DduSetSymbol, type DduInternalOptions } from "../core/types.js";
 import {
   Ddu64AdapterError,
   Ddu64ChecksumError,
-  Ddu64CharsetError,
+  Ddu64DecodeError,
   Ddu64DecryptionError,
   Ddu64EncodeError,
   Ddu64ErrorCode,
@@ -99,7 +99,7 @@ describe("Ddu64Core", () => {
       );
 
       for (const truncated of ["A", "AA", "AAA"]) {
-        expect(() => encoder.decodeToUint8Array(truncated)).toThrow(Ddu64CharsetError);
+        expect(() => encoder.decodeToUint8Array(truncated)).toThrow(Ddu64DecodeError);
         expect(() => encoder.decodeToUint8Array(truncated)).toThrow("Invalid encoded bit length");
       }
     });
@@ -317,17 +317,17 @@ describe("Ddu64Core", () => {
       expect(err.code).toBe(Ddu64ErrorCode.EncodeFailed);
     });
 
-    it("wraps invalid decode input as a typed charset error", () => {
+    it("wraps invalid decode input as a typed decode error", () => {
       const encoder = createEncoder();
 
-      expect(() => encoder.decodeToUint8Array("!!!")).toThrow(Ddu64CharsetError);
+      expect(() => encoder.decodeToUint8Array("!!!")).toThrow(Ddu64DecodeError);
 
       try {
         encoder.decodeToUint8Array("!!!");
       } catch (err) {
         expect(isDdu64Error(err)).toBe(true);
-        expect((err as Ddu64CharsetError).code).toBe(Ddu64ErrorCode.InvalidCharset);
-        expect(err).toBeInstanceOf(Ddu64CharsetError);
+        expect((err as Ddu64DecodeError).code).toBe(Ddu64ErrorCode.DecodeFailed);
+        expect(err).toBeInstanceOf(Ddu64DecodeError);
       }
     });
 
@@ -338,7 +338,7 @@ describe("Ddu64Core", () => {
       // keeps the payload bit-length aligned so decoding reaches char lookup.
       const encoder = createEncoder({ dduSetSymbol: DduSetSymbol.ONECHARSET });
 
-      expect(() => encoder.decodeToUint8Array("가가가가")).toThrow(Ddu64CharsetError);
+      expect(() => encoder.decodeToUint8Array("가가가가")).toThrow(Ddu64DecodeError);
       expect(() => encoder.decodeToUint8Array("가가가가")).toThrow(/Invalid character/);
     });
 
@@ -648,46 +648,46 @@ describe("Ddu64Core", () => {
       expect(decoded).toBe(input);
     });
 
-    it("should throw when obfuscation enabled without encryption key (constructor)", () => {
-      expect(() => createEncoder({ obfuscate: true })).toThrow(
-        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
-      );
+    it("allows obfuscation without encryption key (constructor)", () => {
+      const encoder = createEncoder({ obfuscate: true });
+      const input = "Key-less obfuscation 키 없는 난독화";
+      const encoded = encoder.encode(input);
+      const decoded = encoder.decode(encoded);
+      expect(decoded).toBe(input);
     });
 
-    it("should throw when per-call obfuscate: true without encryption key", () => {
+    it("allows per-call obfuscate: true without encryption key", () => {
       const encoder = createEncoder(); // no encryption key
-      expect(() => encoder.encode("test", { obfuscate: true })).toThrow(
-        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
-      );
+      const input = "Per-call key-less obfuscation";
+      const encoded = encoder.encode(input, { obfuscate: true });
+      const decoded = encoder.decode(encoded, { obfuscate: true });
+      expect(decoded).toBe(input);
     });
 
-    it("should throw when obfuscation is requested with per-call encrypt: false", async () => {
+    it("allows obfuscation with per-call encrypt: false (key present)", async () => {
       const encoder = createEncoder({ encryptionKey: "obfuscation-contract-key" });
       const options = { encrypt: false, obfuscate: true };
+      const input = "Obfuscate without encrypt 난독만";
 
-      expect(() => encoder.encode("test", options)).toThrow(
-        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
-      );
-      await expect(encoder.encodeAsync("test", options)).rejects.toThrow(
-        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
-      );
-      expect(() => encoder.getStats("test", options)).toThrow(
-        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
-      );
-      await expect(encoder.getStatsAsync("test", options)).rejects.toThrow(
-        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
-      );
+      const encoded = encoder.encode(input, options);
+      expect(encoder.decode(encoded, options)).toBe(input);
+
+      const encodedAsync = await encoder.encodeAsync(input, options);
+      expect(await encoder.decodeAsync(encodedAsync, options)).toBe(input);
+
+      expect(() => encoder.getStats(input, options)).not.toThrow();
+      await expect(encoder.getStatsAsync(input, options)).resolves.toBeDefined();
     });
 
-    it("should throw when default obfuscation is active and per-call encrypt is disabled", () => {
+    it("allows default obfuscation with per-call encrypt disabled", () => {
       const encoder = createEncoder({
         encryptionKey: "default-obfuscation-contract-key",
         obfuscate: true,
       });
-
-      expect(() => encoder.encode("test", { encrypt: false } as DduInternalOptions)).toThrow(
-        "[Ddu64 obfuscation] Obfuscation requires encryption to be enabled.",
-      );
+      const input = "Default obfuscate, encrypt off";
+      const encoded = encoder.encode(input, { encrypt: false } as DduInternalOptions);
+      const decoded = encoder.decode(encoded, { encrypt: false } as DduInternalOptions);
+      expect(decoded).toBe(input);
     });
 
     it("per-call obfuscate option overrides constructor default (enable)", () => {

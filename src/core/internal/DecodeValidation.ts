@@ -9,8 +9,26 @@
  */
 
 import { lookupCharIndex } from "./CharsetLookup.js";
+import { Ddu64DecodeError, Ddu64InvalidInputError } from "../errors.js";
 
 const BYTE_BITS = 8;
+
+/**
+ * 디코드 비트 수(`numChunks * bitLength - paddingBits`)를 계산합니다.
+ * estimate/assert 양쪽이 동일 공식을 공유하도록 단일 정의로 추출했습니다.
+ * 파이프라인에서 입력은 항상 정렬(`assertEncodedInputAligned`)되므로 `Math.ceil`은
+ * pow2(chunkSize=1)·정렬된 non-pow2(짝수 길이) 모두에서 정확합니다.
+ */
+function decodedBitCount(
+  cleanedInputLen: number,
+  paddingBits: number,
+  bitLength: number,
+  usePowerOfTwo: boolean,
+): number {
+  const chunkSize = usePowerOfTwo ? 1 : 2;
+  const numChunks = Math.ceil(cleanedInputLen / chunkSize);
+  return numChunks * bitLength - paddingBits;
+}
 
 export function normalizeLimit(
   value: number | undefined,
@@ -22,7 +40,7 @@ export function normalizeLimit(
   if (value === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY;
   if (!Number.isFinite(value) || value <= 0) {
     if (shouldThrow) {
-      throw new Error(
+      throw new Ddu64InvalidInputError(
         `[Ddu64 options] Invalid ${name}. Must be a positive finite number or Infinity.`,
       );
     }
@@ -39,12 +57,10 @@ export function estimateDecodedBytes(
 ): number {
   if (cleanedInputLen === 0) return 0;
   if (paddingBits < 0 || paddingBits >= bitLength) {
-    throw new Error(`[Ddu64 decode] Invalid padding bits: ${paddingBits}`);
+    throw new Ddu64DecodeError(`[Ddu64 decode] Invalid padding bits: ${paddingBits}`);
   }
-  const chunkSize = usePowerOfTwo ? 1 : 2;
-  const numChunks = Math.ceil(cleanedInputLen / chunkSize);
-  const bits = numChunks * bitLength - paddingBits;
-  if (bits < 0) throw new Error(`[Ddu64 decode] Invalid decoded bit length`);
+  const bits = decodedBitCount(cleanedInputLen, paddingBits, bitLength, usePowerOfTwo);
+  if (bits < 0) throw new Ddu64DecodeError(`[Ddu64 decode] Invalid decoded bit length`);
   return Math.ceil(bits / BYTE_BITS);
 }
 
@@ -52,7 +68,7 @@ export function assertEncodedInputAligned(cleanedInput: string, usePowerOfTwo: b
   if (!usePowerOfTwo) {
     const chunkSize = 2;
     if (cleanedInput.length % chunkSize !== 0) {
-      throw new Error(
+      throw new Ddu64DecodeError(
         `[Ddu64 decode] Invalid encoded length for variable charset. Expected multiple of ${chunkSize}, got ${cleanedInput.length}`,
       );
     }
@@ -67,12 +83,10 @@ export function assertDecodedBitLength(
 ): void {
   if (cleanedInput.length === 0) return;
 
-  const chunkSize = usePowerOfTwo ? 1 : 2;
-  const numChunks = cleanedInput.length / chunkSize;
-  const bitCount = numChunks * bitLength - paddingBits;
+  const bitCount = decodedBitCount(cleanedInput.length, paddingBits, bitLength, usePowerOfTwo);
 
   if (bitCount < 0 || bitCount % BYTE_BITS !== 0) {
-    throw new Error(
+    throw new Ddu64DecodeError(
       `[Ddu64 decode] Invalid encoded bit length. Expected a whole number of bytes, got ${bitCount} bits.`,
     );
   }
@@ -88,7 +102,7 @@ export function assertCanonicalPadding(
 ): void {
   if (paddingBits === 0) return;
   if (cleanedInput.length === 0) {
-    throw new Error("[Ddu64 decode] Invalid padding bits without payload");
+    throw new Ddu64DecodeError("[Ddu64 decode] Invalid padding bits without payload");
   }
 
   const paddingMask = (1 << paddingBits) - 1;
@@ -98,7 +112,7 @@ export function assertCanonicalPadding(
     const lastChar = cleanedInput[cleanedInput.length - 1];
     const value = lookupCharIndex(dduCharCodeLookup, lastChar.charCodeAt(0), lookupOffset);
     if (value < 0) {
-      throw new Error(
+      throw new Ddu64DecodeError(
         `[Ddu64 decode] Invalid character "${lastChar}" at ${cleanedInput.length - 1}`,
       );
     }
@@ -109,12 +123,12 @@ export function assertCanonicalPadding(
     const firstValue = lookupCharIndex(dduCharCodeLookup, first.charCodeAt(0), lookupOffset);
     const secondValue = lookupCharIndex(dduCharCodeLookup, second.charCodeAt(0), lookupOffset);
     if (firstValue < 0 || secondValue < 0) {
-      throw new Error("[Ddu64 decode] Invalid character in final encoded chunk");
+      throw new Ddu64DecodeError("[Ddu64 decode] Invalid character in final encoded chunk");
     }
     lastValue = firstValue * charSetSize + secondValue;
   }
 
   if ((lastValue & paddingMask) !== 0) {
-    throw new Error("[Ddu64 decode] Invalid non-zero padding bits in final symbol");
+    throw new Ddu64DecodeError("[Ddu64 decode] Invalid non-zero padding bits in final symbol");
   }
 }

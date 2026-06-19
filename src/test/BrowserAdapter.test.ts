@@ -115,20 +115,20 @@ describe("BrowserAdapter", () => {
 
   describe("randomBytes", () => {
     it("produces output of the requested length", () => {
-      expect(adapter.randomBytes(16).length).toBe(16);
-      expect(adapter.randomBytes(32).length).toBe(32);
-      expect(adapter.randomBytes(1).length).toBe(1);
-      expect(adapter.randomBytes(0).length).toBe(0);
+      expect(browserAdapter.randomBytes(16).length).toBe(16);
+      expect(browserAdapter.randomBytes(32).length).toBe(32);
+      expect(browserAdapter.randomBytes(1).length).toBe(1);
+      expect(browserAdapter.randomBytes(0).length).toBe(0);
     });
 
     it("returns a Uint8Array", () => {
-      const result = adapter.randomBytes(12);
+      const result = browserAdapter.randomBytes(12);
       expect(result).toBeInstanceOf(Uint8Array);
     });
 
     it("produces different output on successive calls (probabilistic)", () => {
-      const a = adapter.randomBytes(32);
-      const b = adapter.randomBytes(32);
+      const a = browserAdapter.randomBytes(32);
+      const b = browserAdapter.randomBytes(32);
       // Extremely unlikely to be equal for 32 random bytes
       expect(a).not.toEqual(b);
     });

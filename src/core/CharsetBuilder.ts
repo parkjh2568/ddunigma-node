@@ -3,6 +3,13 @@
  *
  * @module core/CharsetBuilder
  *
+ * @remarks
+ * non-BMP 주의: `fromUnicodeRange`/`addUnicodeRange`는 `String.fromCodePoint`로 U+FFFF를
+ * 넘는 문자(서로게이트 쌍, `.length === 2`)도 만들 수 있습니다. 그러나 `Ddu64` 생성자에
+ * 넘길 charset은 **BMP 단일 UTF-16 코드 유닛** 심볼만 허용하므로, non-BMP를 포함한 `build()`
+ * 결과를 charset으로 넘기면 코어가 "Multi-character symbols are not supported"로 거부합니다.
+ * 코어 charset 용도라면 BMP(≤ U+FFFF) 범위만 사용하세요.
+ *
  * @example
  * const chars = CharsetBuilder
  *   .fromUnicodeRange(0x4E00, 0x4E3F)

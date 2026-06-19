@@ -9,6 +9,7 @@
  */
 
 import type { PlatformAdapter } from "../core/types.js";
+import { Ddu64AdapterError } from "../core/errors.js";
 export { detectRuntime, type RuntimeId } from "./runtime.js";
 import { detectRuntime } from "./runtime.js";
 
@@ -37,9 +38,10 @@ export async function getAdapter(): Promise<PlatformAdapter> {
       return new BrowserAdapter(runtime);
     }
     default:
-      throw new Error(
+      throw new Ddu64AdapterError(
         "[ddunigma] No suitable crypto provider found. " +
           "Detected runtime lacks both Node.js crypto module and Web Crypto API (SubtleCrypto).",
+        "adapter",
       );
   }
 }

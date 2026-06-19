@@ -3,7 +3,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { Ddu64Node } from "../Ddu64Node.js";
+// 6.0: 압축/암호화/체크섬(배터리)은 secure 진입점의 Ddu64Secure로 이전됨.
+// 기본 래퍼(Ddu64Node)는 lean이므로 배터리 동작은 Ddu64Secure로 검증한다.
+import { Ddu64Secure as Ddu64Node } from "../Ddu64Secure.js";
 import { DduSetSymbol } from "../core/types.js";
 
 describe("Ddu64Node", () => {

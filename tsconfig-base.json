@@ -11,6 +11,8 @@
       "listFiles": false,
       "moduleResolution": "bundler",
       "noFallthroughCasesInSwitch": true,
+      "noUnusedLocals": true,
+      "noUnusedParameters": true,
       "pretty": true,
       "resolveJsonModule": true,
       "rootDir": "src",

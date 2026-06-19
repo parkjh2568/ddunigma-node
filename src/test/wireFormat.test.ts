@@ -7,6 +7,7 @@ import {
   PIPELINE_V3_MARKER,
   PIPELINE_V4_MARKER,
   CHECKSUM_MARKER,
+  CHECKSUM_MARKER_SCOPED,
   parseFooter,
   extractChecksum,
   buildStreamHeader,
@@ -24,6 +25,7 @@ describe("wireFormat constants", () => {
     expect(PIPELINE_V3_MARKER).toBe("V3");
     expect(PIPELINE_V4_MARKER).toBe("V4");
     expect(CHECKSUM_MARKER).toBe("CHK");
+    expect(CHECKSUM_MARKER_SCOPED).toBe("CK");
     expect(WIRE_FORMAT_VERSION).toBe("DDS1");
   });
 });

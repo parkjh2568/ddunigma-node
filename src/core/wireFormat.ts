@@ -11,7 +11,7 @@
  * [encoded_chars] [pad] [ELYSIA|GRISEO|∅] [ENC|∅] [V3|V4|∅] [0-7]
  *                  ↑패딩 ↑압축 마커         ↑암호화 ↑파이프 ↑비트
  *
- * 선택: CHK[8 hex chars]  (복원된 원본 데이터의 CRC32)
+ * 선택: CK[P|O][8 hex] (스코프 자기기술 CRC32; 레거시 CHK[8 hex]도 디코드 호환)
  * ```
  *
  * ### 스트림 헤더
@@ -244,6 +244,12 @@ export interface ChecksumExtractResult {
  *
  * 체크섬 형식: `CHK` 뒤에 정확히 8자리 소문자 16진수 문자.
  * 체크섬은 인코딩 파이프라인에 들어가기 전의 원본 바이트에 대해 계산됩니다.
+ *
+ * ⚠️ 모호성 주의(레거시 `CHK` 한정): `lastIndexOf("CHK")` 기반이라, charset에 `C`/`H`/`K`가
+ * 포함되고(예: `ONECHARSET`) 페이로드가 우연히 `…CHK########`(8 hex) 형태로 끝나면 오검출이
+ * 가능합니다. 이 함수는 체크섬이 기대될 때만(`extractScopedChecksum`의 fallback) 호출되어 노출이
+ * 제한적이고, 손상은 후속 디코드/패딩 검증에서 드러납니다. 신규 스코프 마커(`CK[P|O]########`,
+ * 문자열 끝 고정 11자 검증)는 이 모호성이 없으므로 신규 인코딩은 `CHECKSUM_MARKER_SCOPED`를 씁니다.
  *
  * @param input - 체크섬 접미사를 포함할 수 있는 인코딩된 문자열
  * @returns 체크섬 없는 데이터와 추출된 체크섬 (또는 null)
@@ -491,100 +497,5 @@ export function buildEncryptionAAD(options: {
 }): Uint8Array {
   return aadEncoder.encode(
     `ddunigma:wire:v4;enc=1;compress=${options.compressionAlgorithm ?? "none"}`,
-  );
-}
-
-// ─── DDS2 프레임드 스트림 포맷 ────────────────────────────────────────────────
-//
-// 진짜(프레임 단위) 스트리밍 전용 포맷. 단일 페이로드(DDS1/V4)와 완전히 분리되며 opt-in입니다.
-// 문자열 레이아웃은 개행(\n)으로 구분된 세그먼트입니다(charset은 개행을 포함하지 않음):
-//   header "\n" frame0 "\n" frame1 ... "\n" trailer
-// - header  : `DDS2` + comp('D'|'B'|'N') + enc('1'|'0')           (ASCII 리터럴)
-// - frame   : [flags(1)] [framePayload] 바이트를 charset 인코딩한 문자열
-//             flags bit0=compressed(이 프레임 실제 압축), bit1=final-frame
-//             enc=1이면 framePayload = 어댑터 GCM 출력(IV12+tag16+ct), AAD가 프레임 인덱스 인증
-// - trailer : `DDE2` + frameCount(10진수)                          (ASCII 리터럴, 절단 방어)
-
-export const DDS2_STREAM_MAGIC = "DDS2";
-export const DDS2_TRAILER_MAGIC = "DDE2";
-
-/** DDS2 프레임 플래그 비트. */
-export const DDS2_FRAME_COMPRESSED = 0x01;
-export const DDS2_FRAME_FINAL = 0x02;
-export const DDS2_FRAME_CHECKSUM = 0x04;
-
-export interface Dds2HeaderMeta {
-  compressionAlgorithm?: "deflate" | "brotli";
-  encrypted: boolean;
-  /** 스트림 고유 식별자(16 hex). 프레임 AAD/CRC에 바인딩되어 교차 스트림 재생을 차단. */
-  streamId: string;
-}
-
-const DDS2_STREAM_ID_LEN = 16; // hex chars (8 random bytes)
-const DDS2_HEADER_LEN = 6 + DDS2_STREAM_ID_LEN;
-const HEX16_RE = /^[0-9a-f]{16}$/;
-
-/** DDS2 헤더 세그먼트 문자열을 생성합니다. */
-export function buildDds2Header(meta: Dds2HeaderMeta): string {
-  const comp =
-    meta.compressionAlgorithm === "brotli"
-      ? "B"
-      : meta.compressionAlgorithm === "deflate"
-        ? "D"
-        : "N";
-  return `${DDS2_STREAM_MAGIC}${comp}${meta.encrypted ? "1" : "0"}${meta.streamId}`;
-}
-
-/** DDS2 헤더 세그먼트를 파싱합니다. 유효하지 않으면 throw. */
-export function parseDds2Header(segment: string): Dds2HeaderMeta {
-  if (segment.length !== DDS2_HEADER_LEN || segment.slice(0, 4) !== DDS2_STREAM_MAGIC) {
-    throw new Error("[wireFormat] Invalid DDS2 stream header");
-  }
-  const comp = segment[4];
-  const enc = segment[5];
-  const streamId = segment.slice(6);
-  const compressionAlgorithm =
-    comp === "B" ? "brotli" : comp === "D" ? "deflate" : comp === "N" ? undefined : null;
-  if (compressionAlgorithm === null) {
-    throw new Error("[wireFormat] Invalid DDS2 header compression flag");
-  }
-  if (enc !== "0" && enc !== "1") {
-    throw new Error("[wireFormat] Invalid DDS2 header encryption flag");
-  }
-  if (!HEX16_RE.test(streamId)) {
-    throw new Error("[wireFormat] Invalid DDS2 header stream id");
-  }
-  return { compressionAlgorithm, encrypted: enc === "1", streamId };
-}
-
-/** DDS2 트레일러 세그먼트 문자열을 생성합니다(총 프레임 수). */
-export function buildDds2Trailer(frameCount: number): string {
-  return `${DDS2_TRAILER_MAGIC}${frameCount}`;
-}
-
-/** DDS2 트레일러 세그먼트를 파싱합니다. 유효하지 않으면 throw. */
-export function parseDds2Trailer(segment: string): { frameCount: number } {
-  if (segment.length < 5 || segment.slice(0, 4) !== DDS2_TRAILER_MAGIC) {
-    throw new Error("[wireFormat] Invalid DDS2 stream trailer");
-  }
-  const digits = segment.slice(4);
-  if (!/^\d+$/.test(digits)) {
-    throw new Error("[wireFormat] Invalid DDS2 trailer frame count");
-  }
-  return { frameCount: Number(digits) };
-}
-
-/**
- * 프레임 GCM AAD. 프레임 인덱스와 압축 알고리즘을 인증해 재정렬/재생/절단 변형을 방어합니다.
- * 디코더는 자신이 세는 프레임 인덱스로 AAD를 재구성하므로, 프레임 순서가 바뀌면 GCM 인증이
- * 실패합니다.
- */
-export function buildDds2FrameAAD(
-  streamId: string,
-  frameIndex: number,
-  compressionAlgorithm?: "deflate" | "brotli",
-): Uint8Array {
-  return aadEncoder.encode(
-    `ddunigma:dds2;s=${streamId};f=${frameIndex};comp=${compressionAlgorithm ?? "none"}`,
   );
 }

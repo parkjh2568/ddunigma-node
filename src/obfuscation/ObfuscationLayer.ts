@@ -13,6 +13,7 @@
  */
 
 import type { ObfuscationLayer } from "../core/types.js";
+import { Ddu64ObfuscationError } from "../core/errors.js";
 import {
   buildSyllableMap,
   charToSyllable,
@@ -65,7 +66,7 @@ export class HangulObfuscationLayer implements ObfuscationLayer {
       const charIndex = this.config.charToIndex.get(char);
 
       if (charIndex === undefined) {
-        throw new Error(
+        throw new Ddu64ObfuscationError(
           `[Ddu64 obfuscation] Character "${char}" (U+${char.charCodeAt(0).toString(16).padStart(4, "0").toUpperCase()}) not found in obfuscation alphabet.`,
         );
       }
@@ -98,7 +99,7 @@ export class HangulObfuscationLayer implements ObfuscationLayer {
       const charIndex = syllableToCharIndex(codePoint, this.config);
 
       if (charIndex === -1) {
-        throw new Error(
+        throw new Ddu64ObfuscationError(
           `[Ddu64 obfuscation] Invalid syllable at position ${i}: U+${codePoint.toString(16).padStart(4, "0").toUpperCase()} is not in the mapped range.`,
         );
       }

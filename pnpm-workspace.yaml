@@ -5,3 +5,7 @@
 verifyDepsBeforeRun: false
 allowBuilds:
   esbuild: true
+# 전이 의존성(tsx 경유 포함)까지 esbuild를 GHSA 패치 버전으로 고정.
+# pnpm 11+는 overrides를 package.json이 아닌 이 파일에서 읽습니다.
+overrides:
+  esbuild: ">=0.28.1"

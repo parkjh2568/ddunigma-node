@@ -13,24 +13,15 @@ import {
   isDdu64Error,
   toErrorMessage,
 } from "../errors.js";
-import type { KeyDerivationOptions, PlatformAdapter } from "../types.js";
-import { isAdapterCapabilityErrorMessage } from "./AdapterCapability.js";
+import type { PlatformAdapter } from "../types.js";
+import type { AdapterGatewayContext } from "./AdapterGatewayContext.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
 type GatewayOperation = "encode" | "decode";
 type AsyncFailureKind = "compress" | "decompress" | "encrypt" | "decrypt";
 
-export interface AsyncAdapterGatewayContext {
-  adapter: PlatformAdapter | undefined;
-  encryptionKey: string | undefined;
-  keyDerivation: KeyDerivationOptions | undefined;
-  encryptionKeyHash: Uint8Array | undefined;
-  encryptionKeyHashPromise?: Promise<Uint8Array>;
-  setEncryptionKeyHash(hash: Uint8Array): void;
-}
-
 export async function encryptAsyncWithAdapter(
-  context: AsyncAdapterGatewayContext,
+  context: AdapterGatewayContext,
   data: Uint8Array,
   aad?: Uint8Array,
 ): Promise<Uint8Array> {
@@ -44,7 +35,7 @@ export async function encryptAsyncWithAdapter(
 }
 
 export async function decryptAsyncWithAdapter(
-  context: AsyncAdapterGatewayContext,
+  context: AdapterGatewayContext,
   data: Uint8Array,
   aad?: Uint8Array,
 ): Promise<Uint8Array> {
@@ -119,7 +110,7 @@ function requireAsyncAdapter(
 }
 
 async function getAsyncKeyHash(
-  context: AsyncAdapterGatewayContext,
+  context: AdapterGatewayContext,
   adapter: PlatformAdapter,
 ): Promise<Uint8Array> {
   if (context.encryptionKeyHash) return context.encryptionKeyHash;
@@ -140,15 +131,12 @@ async function getAsyncKeyHash(
 
 function toAsyncGatewayError(
   error: unknown,
-  fallbackOperation: GatewayOperation,
+  _fallbackOperation: GatewayOperation,
   failureKind: AsyncFailureKind,
 ): Error {
   if (isDdu64Error(error)) return error;
 
   const message = toErrorMessage(error);
-  if (isAdapterCapabilityErrorMessage(message)) {
-    return new Ddu64AdapterError(message, fallbackOperation, error);
-  }
 
   switch (failureKind) {
     case "compress":

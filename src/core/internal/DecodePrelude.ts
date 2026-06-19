@@ -16,7 +16,7 @@ import {
   type PipelineVersion,
 } from "../wireFormat.js";
 import type { DduInternalOptions } from "../types.js";
-import { Ddu64ChecksumError, Ddu64DecryptionError } from "../errors.js";
+import { Ddu64ChecksumError, Ddu64DecryptionError, Ddu64LimitError } from "../errors.js";
 import {
   assertCanonicalPadding,
   assertDecodedBitLength,
@@ -81,8 +81,9 @@ export function runDecodePrelude(
     "maxEncodedChars",
   );
   if (input.length > maxEncodedChars) {
-    throw new Error(
+    throw new Ddu64LimitError(
       `[Ddu64 decode] Encoded input exceeds limit. Length: ${input.length}, Limit: ${maxEncodedChars} characters`,
+      "decode",
     );
   }
 
@@ -121,7 +122,7 @@ export function runDecodePrelude(
     );
   }
   if (isEncrypted && allowInternalDecrypt && !context.encryptionKey) {
-    throw new Error("[Ddu64 decode] Encrypted payload requires an encryptionKey");
+    throw new Ddu64DecryptionError("[Ddu64 decode] Encrypted payload requires an encryptionKey");
   }
   const encryptionAAD =
     isEncrypted && pipelineVersion === 4
@@ -152,8 +153,9 @@ export function runDecodePrelude(
     context.usePowerOfTwo,
   );
   if (estimatedDecodedBytes > maxDecodedBytes) {
-    throw new Error(
+    throw new Ddu64LimitError(
       `[Ddu64 decode] Decoded output exceeds limit. Estimated: ${estimatedDecodedBytes} bytes, Limit: ${maxDecodedBytes} bytes`,
+      "decode",
     );
   }
 

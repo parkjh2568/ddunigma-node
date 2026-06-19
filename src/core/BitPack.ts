@@ -1,10 +1,27 @@
 /**
  * 바이트를 charset 인덱스로 변환하고 역변환하는 독립형 비트 패킹 엔진.
  *
+ * ⚠️ 역할 주의(오라클): 프로덕션 인코드/디코드 hot path는 이 모듈이 아니라
+ * `core/internal/IndexStringMapper`의 융합 함수(`packPow2ToString`/`unpackPow2FromString`/
+ * `packNonPow2ToString`/`unpackNonPow2FromString`)가 담당합니다(중간 인덱스 배열 없이 한 패스).
+ * `bitPackEncode`/`bitPackDecode`(및 `bitPackEncode6`/`bitPackEncode8`)는 단순·독립 구현으로서
+ * **동치 검증 기준(reference oracle)**으로 유지됩니다. 융합 경로가 이 기준과 바이트 동치임을
+ * `test/bitpack-fusion-equivalence.test.ts`가 고정합니다. `bitPackEncode6`의 3바이트→4심볼
+ * (및 8비트 1:1) 언롤 비트 분해식은 `IndexStringMapper`의 `bitLength 6/8` 언롤 분기에 동일하게
+ * 미러링되어 있으므로, 비트 레이아웃을 바꿀 경우 두 곳을 함께 갱신해야 합니다.
+ *
+ * 비트폭 불변식: charset 크기는 최대 65536(`MAX_CHARSET_SIZE`)으로 제한되므로
+ * `bitLength`는 항상 1..16 범위입니다. 누산기는 플러시 후 잔여 비트(<8) + 한 심볼(≤16비트)
+ * 만 담으므로 최대 ~24비트로, JS 32비트 비트 연산(`<<`/`>>`/`&`) 범위 안에서 안전합니다.
+ * 비-2의 제곱수 분기의 `bitLength < 31` 가드와 `Math.pow` 폴백은 방어적 코드이며 이 범위에서는
+ * 도달하지 않습니다.
+ *
  * @module core/BitPack
  */
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+
+import { Ddu64DecodeError } from "./errors.js";
 
 /** 바이트당 비트 수 */
 const BYTE_BITS = 8;
@@ -209,7 +226,7 @@ export function bitPackDecode(
       const val = indices[i];
 
       if (val < 0 || val >= charsetSize) {
-        throw new Error(`[BitPack decode] Invalid index ${val} at position ${i}`);
+        throw new Ddu64DecodeError(`[BitPack decode] Invalid index ${val} at position ${i}`);
       }
 
       accumulator = (accumulator << bitLength) | val;
@@ -228,21 +245,23 @@ export function bitPackDecode(
       }
     }
   } else {
-    const maxBinaryValue = bitLength < 31 ? 1 << bitLength : Math.pow(2, bitLength);
+    const maxBinaryValue = maxValueForBitLength(bitLength);
     for (let i = 0; i < inputLen; i += chunkSize) {
       const v1 = indices[i];
       const v2 = indices[i + 1];
 
       if (v1 < 0 || v1 >= charsetSize) {
-        throw new Error(`[BitPack decode] Invalid index ${v1} at position ${i}`);
+        throw new Ddu64DecodeError(`[BitPack decode] Invalid index ${v1} at position ${i}`);
       }
       if (v2 === undefined || v2 < 0 || v2 >= charsetSize) {
-        throw new Error(`[BitPack decode] Invalid index ${v2} at position ${i + 1}`);
+        throw new Ddu64DecodeError(`[BitPack decode] Invalid index ${v2} at position ${i + 1}`);
       }
 
       const value = v1 * charsetSize + v2;
       if (value >= maxBinaryValue) {
-        throw new Error(`[BitPack decode] Value ${value} exceeds range at position ${i}`);
+        throw new Ddu64DecodeError(
+          `[BitPack decode] Value ${value} exceeds range at position ${i}`,
+        );
       }
 
       accumulator = (accumulator << bitLength) | value;
@@ -293,4 +312,17 @@ export function calculateBitLength(charsetSize: number, usePowerOfTwo: boolean):
  */
 export function isPowerOfTwo(charsetSize: number): boolean {
   return charsetSize > 0 && (charsetSize & (charsetSize - 1)) === 0;
+}
+
+/**
+ * 비-2의 제곱수 디코딩에서 한 심볼이 표현할 수 있는 값의 상한(`2^bitLength`)을 반환합니다.
+ * charset 크기 ≤ 65536 불변식상 bitLength ≤ 16이므로 `1 << bitLength`로 충분하지만,
+ * 방어적으로 31비트 경계를 분기합니다(도달하지 않음). BitPack/IndexStringMapper 양쪽이
+ * 동일 상한을 쓰도록 단일 정의를 공유합니다.
+ *
+ * @param bitLength 논리 심볼당 비트 수
+ * @returns 유효 값의 상한(이 값 이상은 범위 초과)
+ */
+export function maxValueForBitLength(bitLength: number): number {
+  return bitLength < 31 ? 1 << bitLength : Math.pow(2, bitLength);
 }

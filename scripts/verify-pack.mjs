@@ -71,6 +71,22 @@ function runNodeSmoke(packageDir) {
 
       const node = await import("@ddunigma/node");
 
+      // secure 진입점(배터리: 압축/암호화/체크섬) 라운드트립
+      const secure = await import("@ddunigma/node/secure");
+      const secureEncoder = new secure.Ddu64({
+        compress: true,
+        encryptionKey: "pack-smoke-secure-key",
+        checksum: true,
+      });
+      const secureInput = "secure:pack-smoke ".repeat(8);
+      const secureDecoded = secureEncoder.decode(secureEncoder.encode(secureInput));
+      if (secureDecoded !== secureInput) {
+        throw new Error("secure entry round-trip failed");
+      }
+      if (typeof secureEncoder.decodeToBuffer !== "function") {
+        throw new Error("secure (node) entry should expose decodeToBuffer");
+      }
+
       const browser = await import("@ddunigma/node/browser");
       const browserEncoder = new browser.Ddu64();
       const asyncEncoded = await browserEncoder.encodeAsync("browser:async-pack-smoke");
@@ -212,33 +228,57 @@ function runTypeSmoke(packageDir) {
         Ddu64Core,
         Ddu64Node,
         DduSetSymbol,
+        type DduBaseOptions,
+        type DduBaseConstructorOptions,
+      } from "@ddunigma/node";
+      import {
+        Ddu64 as SecureDdu64,
+        NodeAdapter,
+        BrowserAdapter,
         type DduConstructorOptions,
         type DduOptions,
         type PlatformAdapter,
-      } from "@ddunigma/node";
-      import { Ddu64 as BrowserDdu64, BrowserAdapter } from "@ddunigma/node/browser";
+      } from "@ddunigma/node/secure";
+      import { Ddu64 as BrowserDdu64 } from "@ddunigma/node/browser";
       import { Ddu64 as CoreDdu64, CharsetBuilder } from "@ddunigma/node/core";
 
-      const constructorOptions: DduConstructorOptions = {
+      // 기본(lean) 진입점: Base 옵션만 노출
+      const baseConstructorOptions: DduBaseConstructorOptions = {
+        dduSetSymbol: DduSetSymbol.DDU,
+        obfuscate: true,
+        urlSafe: false,
+      };
+      const baseCallOptions: DduBaseOptions = { obfuscate: true };
+
+      const nodeEncoder = new Ddu64(baseConstructorOptions);
+      const explicitNodeEncoder: Ddu64Node = nodeEncoder;
+      const baseEncoded = explicitNodeEncoder.encode("type smoke", baseCallOptions);
+      explicitNodeEncoder.decode(baseEncoded, baseCallOptions);
+
+      // secure 진입점: 배터리 옵션 + 어댑터 노출
+      const secureConstructorOptions: DduConstructorOptions = {
         dduSetSymbol: DduSetSymbol.DDU,
         checksum: true,
         checksumScope: "output",
         requireEncryption: true,
+        encryptionKey: "type-smoke-key",
       };
-      const callOptions: DduOptions = { checksum: true, compress: false };
+      const secureCallOptions: DduOptions = { checksum: true, compress: false };
 
-      const nodeEncoder = new Ddu64(constructorOptions);
-      const explicitNodeEncoder: Ddu64Node = nodeEncoder;
-      const encoded = explicitNodeEncoder.encode("type smoke", callOptions);
-      explicitNodeEncoder.decode(encoded, callOptions);
-      const asyncStats = await explicitNodeEncoder.getStatsAsync("type smoke", callOptions);
-      const syncStats = explicitNodeEncoder.getStats("type smoke", callOptions);
+      const secureEncoder = new SecureDdu64(secureConstructorOptions);
+      const encoded = secureEncoder.encode("secure type smoke", secureCallOptions);
+      secureEncoder.decode(encoded, secureCallOptions);
+      const asyncStats = await secureEncoder.getStatsAsync("secure type smoke", secureCallOptions);
+      const syncStats = secureEncoder.getStats("secure type smoke", secureCallOptions);
       asyncStats.encodedSize satisfies number;
       syncStats.encodedSize satisfies number;
 
-      const browserEncoder = new BrowserDdu64();
+      const nodeAdapter: PlatformAdapter = new NodeAdapter();
+      nodeAdapter.randomBytes?.(1);
       const browserAdapter: PlatformAdapter = new BrowserAdapter();
-      browserAdapter.randomBytes(1);
+      browserAdapter.randomBytes?.(1);
+
+      const browserEncoder = new BrowserDdu64();
       await browserEncoder.encodeAsync("browser type smoke");
       await browserEncoder.getStatsAsync("browser type smoke");
 
@@ -253,20 +293,35 @@ function runTypeSmoke(packageDir) {
     "__pack-types-smoke.cts",
     `
       import node = require("@ddunigma/node");
+      import secure = require("@ddunigma/node/secure");
       import browser = require("@ddunigma/node/browser");
       import core = require("@ddunigma/node/core");
 
-      const callOptions: node.DduOptions = { checksum: true, compress: false };
-      const constructorOptions: node.DduConstructorOptions = {
+      const baseCallOptions: node.DduBaseOptions = { obfuscate: true };
+      const baseConstructorOptions: node.DduBaseConstructorOptions = {
         dduSetSymbol: node.DduSetSymbol.DDU,
-        checksumScope: "output",
+        obfuscate: true,
       };
 
-      const nodeEncoder: node.Ddu64Node = new node.Ddu64(constructorOptions);
-      const encoded = nodeEncoder.encode("cjs type smoke", callOptions);
-      nodeEncoder.decode(encoded, callOptions);
-      const stats: node.DduEncodeStats = nodeEncoder.getStats("cjs type smoke");
-      const asyncStats: Promise<node.DduEncodeStats> = nodeEncoder.getStatsAsync("cjs type smoke");
+      const nodeEncoder: node.Ddu64Node = new node.Ddu64(baseConstructorOptions);
+      const baseEncoded = nodeEncoder.encode("cjs base type smoke", baseCallOptions);
+      nodeEncoder.decode(baseEncoded, baseCallOptions);
+      const baseStats: node.DduEncodeStats = nodeEncoder.getStats("cjs base type smoke");
+      baseStats.encodedSize satisfies number;
+
+      const secureCallOptions: secure.DduOptions = { checksum: true, compress: false };
+      const secureConstructorOptions: secure.DduConstructorOptions = {
+        dduSetSymbol: secure.DduSetSymbol.DDU,
+        checksumScope: "output",
+        encryptionKey: "cjs-type-smoke-key",
+      };
+
+      const secureEncoder = new secure.Ddu64(secureConstructorOptions);
+      const encoded = secureEncoder.encode("cjs secure type smoke", secureCallOptions);
+      secureEncoder.decode(encoded, secureCallOptions);
+      const stats: secure.DduEncodeStats = secureEncoder.getStats("cjs secure type smoke");
+      const asyncStats: Promise<secure.DduEncodeStats> =
+        secureEncoder.getStatsAsync("cjs secure type smoke");
       stats.encodedSize satisfies number;
       void asyncStats;
 
@@ -315,6 +370,14 @@ try {
     "dist/core.cjs",
     "dist/core.d.ts",
     "dist/core.d.cts",
+    "dist/secure.js",
+    "dist/secure.cjs",
+    "dist/secure.d.ts",
+    "dist/secure.d.cts",
+    "dist/secure.browser.js",
+    "dist/secure.browser.cjs",
+    "dist/secure.browser.d.ts",
+    "dist/secure.browser.d.cts",
   ];
 
   for (const file of requiredFiles) {

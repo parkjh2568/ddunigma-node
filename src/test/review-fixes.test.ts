@@ -3,7 +3,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { Ddu64Node } from "../Ddu64Node.js";
+// 6.0: 암호화 키 검증 테스트는 secure 진입점의 Ddu64Secure로 검증.
+import { Ddu64Secure as Ddu64Node } from "../Ddu64Secure.js";
 
 describe("review fixes", () => {
   describe("empty encryptionKey is rejected (no plaintext/decrypt mismatch)", () => {

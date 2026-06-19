@@ -14,13 +14,15 @@ concurrency:
 
 jobs:
   # 전체 게이트: 로컬 `pnpm verify`와 동일한 단일 명령으로 실행(정의 중복 제거).
-  # 활성 LTS 기준(22=engines 하한, 24=LTS). Current(26 등)는 러너 가용 확인 후 추가.
+  # 활성 LTS/Current 기준(22=engines 하한, 24=LTS, 26=Current). Node 26은 러너 가용성이
+  # 보장되지 않으므로 continue-on-error로 비차단(가용 전까지 신호만, 가용되면 자동 통과).
   verify:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        node: [22, 24, 26]
+    continue-on-error: ${{ matrix.node == 26 }}
     steps:
       - uses: actions/checkout@v4
 

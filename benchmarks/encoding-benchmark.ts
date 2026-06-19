@@ -5,7 +5,7 @@ import {
   createReadableEncodeStream,
   Ddu64,
   DduSetSymbol,
-} from "../src/index.js";
+} from "../src/secure.js";
 
 type BenchCase = {
   name: string;

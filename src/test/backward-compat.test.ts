@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { Ddu64Node } from "../Ddu64Node.js";
+// 6.0: 압축/체크섬 하위호환 벡터는 secure 진입점의 Ddu64Secure로 검증.
+import { Ddu64Secure as Ddu64Node } from "../Ddu64Secure.js";
 import { DduSetSymbol } from "../core/types.js";
 import compatVectors from "./fixtures/compat-vectors.json";
 

@@ -13,6 +13,14 @@ export enum DduSetSymbol {
   ONECHARSET = "oneCharSet",
 }
 
+/**
+ * `dduSetSymbol` 옵션이 받는 입력 타입.
+ * `DduSetSymbol` enum 멤버 또는 그 문자열 리터럴(`"ddu" | "ddu_v1" | "oneCharSet"`)을 허용해,
+ * enum을 import하지 않고도 `{ dduSetSymbol: "ddu" }`처럼 타입 안전하게 지정할 수 있습니다.
+ * 런타임 값은 enum 값과 동일하므로 동작·와이어 포맷에 영향이 없습니다.
+ */
+export type DduSetSymbolInput = DduSetSymbol | `${DduSetSymbol}`;
+
 // ─── Charset Types ───────────────────────────────────────────────────────────
 
 export interface EncodingProfile {
@@ -156,13 +164,12 @@ export interface KeyDerivationOptions {
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
-export interface DduOptions {
-  /** 압축 사용 여부 (zlib deflate 또는 brotli) */
-  compress?: boolean;
-  /** 압축 알고리즘 (기본값: "deflate") */
-  compressionAlgorithm?: "deflate" | "brotli";
-  /** 압축 레벨 (deflate 기본값: 6, brotli도 기본값 6을 사용하며 전달값은 0~11 범위로 보정) */
-  compressionLevel?: number;
+/**
+ * 기본(Base) 런타임 옵션 — 기본 진입점(`@ddunigma/node`, `@ddunigma/node/browser`)이
+ * 공개하는 옵션 표면. 인코딩 + 한글 난독화(재미 풀세트)에 필요한 옵션만 포함하며
+ * 압축/암호화/체크섬 같은 secure 부가기능은 포함하지 않습니다.
+ */
+export interface DduBaseOptions {
   /** 최대 디코딩 바이트 수 (Zip Bomb 방어) */
   maxDecodedBytes?: number;
   /**
@@ -173,6 +180,27 @@ export interface DduOptions {
   maxEncodedChars?: number;
   /** 최대 압축해제 바이트 수 (Zip Bomb 방어) */
   maxDecompressedBytes?: number;
+  /** 청크 분할 크기 (0이면 청킹 비활성화 — 생성자 기본값을 호출 단위로 끌 때 사용) */
+  chunkSize?: number;
+  /** 청크 구분자 (기본값: '\n') */
+  chunkSeparator?: string;
+  /** 진행률 콜백 */
+  onProgress?: (info: DduProgressInfo) => void;
+  /** 한글 난독화 활성화 (6.0: 암호화 키와 무관하게 동작) */
+  obfuscate?: boolean;
+}
+
+/**
+ * Secure 확장 옵션 — secure 진입점(`@ddunigma/node/secure`)이 공개하는 옵션 표면.
+ * `DduBaseOptions`를 확장하며 압축/암호화/체크섬 부가기능 옵션을 추가합니다.
+ */
+export interface DduSecureOptions extends DduBaseOptions {
+  /** 압축 사용 여부 (zlib deflate 또는 brotli) */
+  compress?: boolean;
+  /** 압축 알고리즘 (기본값: "deflate") */
+  compressionAlgorithm?: "deflate" | "brotli";
+  /** 압축 레벨 (deflate 기본값: 6, brotli도 기본값 6을 사용하며 전달값은 0~11 범위로 보정) */
+  compressionLevel?: number;
   /** 체크섬 추가 여부 (CRC32) */
   checksum?: boolean;
   /**
@@ -184,14 +212,6 @@ export interface DduOptions {
    * `checksum`과 마찬가지로 와이어에 자기기술 플래그가 없으므로 인코딩/디코딩에서 동일하게 지정해야 합니다.
    */
   checksumScope?: "plaintext" | "output";
-  /** 청크 분할 크기 (0이면 청킹 비활성화 — 생성자 기본값을 호출 단위로 끌 때 사용) */
-  chunkSize?: number;
-  /** 청크 구분자 (기본값: '\n') */
-  chunkSeparator?: string;
-  /** 진행률 콜백 */
-  onProgress?: (info: DduProgressInfo) => void;
-  /** 한글 난독화 활성화 (encryptionKey 필요) */
-  obfuscate?: boolean;
   /**
    * 암호화 키가 설정된 decoder에서 암호화 footer를 요구합니다.
    * 기본값은 encryptionKey가 있으면 true입니다. 레거시 평문을 같은 인스턴스로
@@ -201,10 +221,17 @@ export interface DduOptions {
 }
 
 /**
+ * 하위호환 별칭. 6.0 이전 코드 및 코어 내부 시그니처가 사용하던 전 기능 런타임 옵션
+ * 타입으로, secure 표면 전체(`DduSecureOptions`)와 동일합니다. 코어는 계속 전 기능
+ * 타입으로 동작하며, 진입점별 공개 표면은 `DduBaseOptions`/`DduSecureOptions`로 분리됩니다.
+ */
+export type DduOptions = DduSecureOptions;
+
+/**
  * 내부 파이프라인/스트림 전용 옵션. 공개 API에는 노출되지 않습니다.
  * @internal
  */
-export interface DduInternalOptions extends DduOptions {
+export interface DduInternalOptions extends DduSecureOptions {
   /**
    * 내부 암/복호화 사용 여부 (기본값: true). 스트림/내부 파이프라인 제어용.
    * 일반 사용자는 `encryptionKey`로 암호화를 제어합니다.
@@ -217,16 +244,20 @@ export interface DduInternalOptions extends DduOptions {
 }
 
 /** Web Streams 버퍼 제한을 포함한 스트림 전용 옵션 */
-export interface DduStreamOptions extends DduOptions {
+export interface DduStreamOptions extends DduSecureOptions {
   /** 압축/암호화/체크섬 인코딩 시 메모리에 축적할 최대 입력 바이트 수 */
   maxBufferedBytes?: number;
   /** 디코딩 시 메모리에 축적할 최대 입력 문자 수 */
   maxBufferedChars?: number;
 }
 
-export interface DduConstructorOptions extends DduOptions {
-  /** 미리 정의된 charset 심볼 */
-  dduSetSymbol?: DduSetSymbol;
+/**
+ * 기본(Base) 생성자 옵션 — charset/padding/urlSafe 계열과 Base 런타임 옵션을 포함합니다.
+ * 기본 진입점 래퍼(`Ddu64Node`/`Ddu64Browser`)의 생성자 표면입니다.
+ */
+export interface DduBaseConstructorOptions extends DduBaseOptions {
+  /** 미리 정의된 charset 심볼 (enum 멤버 또는 그 문자열 리터럴) */
+  dduSetSymbol?: DduSetSymbolInput;
   /** 커스텀 charset 문자 배열 또는 문자열 */
   dduChar?: string[] | string;
   /** 종성 문자 배열 (dduChar × codaChar 조합으로 최종 charset 동적 생성) */
@@ -247,27 +278,8 @@ export interface DduConstructorOptions extends DduOptions {
   throwOnError?: boolean;
   /** URL-Safe 모드 (특수문자를 URL 안전 문자로 변환) */
   urlSafe?: boolean;
-  /** 암호화 키 (AES-256-GCM) */
-  encryptionKey?: string;
-  /** 암호화 키 파생 옵션 */
-  keyDerivation?: KeyDerivationOptions;
   /** 패딩 문자 반복 방식 사용 여부 */
   useRepeatPadding?: boolean;
-
-  // ─── 추가 옵션 ────────────────────────────────────────────────────────
-
-  /** 명시적 플랫폼 어댑터 (자동 감지 대신 사용) */
-  adapter?: PlatformAdapter;
-
-  /**
-   * 플랫폼 어댑터 팩토리 (지연 생성). `adapter`가 지정되지 않았을 때, 첫 압축/암호화
-   * 연산 시점에 한 번 호출되어 어댑터를 생성·캐시합니다. 순수 인코딩/디코딩만 수행하면
-   * 어댑터는 생성되지 않습니다.
-   *
-   * Ddu64Node/Ddu64Browser가 각각 NodeAdapter/BrowserAdapter 팩토리를 주입합니다.
-   * @internal
-   */
-  adapterFactory?: () => PlatformAdapter;
 
   /**
    * 난독화 레이어 팩토리 (지연 생성). 코어를 구체 난독화 구현과 분리하기 위한 주입점입니다.
@@ -280,6 +292,36 @@ export interface DduConstructorOptions extends DduOptions {
    */
   obfuscationLayerFactory?: (alphabet: string[]) => ObfuscationLayer;
 }
+
+/**
+ * Secure 생성자 옵션 — Base 생성자 옵션 + Secure 런타임 옵션에 암호화 키/어댑터를 더한,
+ * 코어가 사용하는 전 기능 생성자 표면입니다. secure 진입점 래퍼(`Ddu64Secure` 계열)가 사용합니다.
+ */
+export interface DduSecureConstructorOptions extends DduBaseConstructorOptions, DduSecureOptions {
+  /** 암호화 키 (AES-256-GCM) */
+  encryptionKey?: string;
+  /** 암호화 키 파생 옵션 */
+  keyDerivation?: KeyDerivationOptions;
+
+  /** 명시적 플랫폼 어댑터 (자동 감지 대신 사용) */
+  adapter?: PlatformAdapter;
+
+  /**
+   * 플랫폼 어댑터 팩토리 (지연 생성). `adapter`가 지정되지 않았을 때, 첫 압축/암호화
+   * 연산 시점에 한 번 호출되어 어댑터를 생성·캐시합니다. 순수 인코딩/디코딩만 수행하면
+   * 어댑터는 생성되지 않습니다.
+   *
+   * Ddu64Secure/Ddu64SecureBrowser가 각각 NodeAdapter/BrowserAdapter 팩토리를 주입합니다.
+   * @internal
+   */
+  adapterFactory?: () => PlatformAdapter;
+}
+
+/**
+ * 하위호환 별칭. 6.0 이전 코드 및 코어 내부 시그니처가 사용하던 전 기능 생성자 옵션
+ * 타입으로, secure 생성자 표면 전체(`DduSecureConstructorOptions`)와 동일합니다.
+ */
+export type DduConstructorOptions = DduSecureConstructorOptions;
 
 export const dduDefaultConstructorOptions: DduConstructorOptions = {
   /** 기본 charset: DDU (한글 종성 결합 64개) */
@@ -317,8 +359,14 @@ export interface PlatformAdapter {
   /** 동기적으로 데이터를 복호화 (Node.js 전용) */
   decryptSync?(data: Uint8Array, keyHash: Uint8Array, aad?: Uint8Array): Uint8Array;
 
-  /** 암호학적으로 안전한 랜덤 바이트를 생성 (코어는 호출하지 않는 편의 메서드) */
-  randomBytes(length: number): Uint8Array;
+  /**
+   * 암호학적으로 안전한 랜덤 바이트를 생성하는 편의 메서드.
+   *
+   * @remarks 코어 인코딩/디코딩 파이프라인은 이 메서드를 호출하지 않습니다(각 어댑터가
+   * 암호화 IV를 내부에서 직접 생성). 6.0부터 **선택(optional)** 이므로 커스텀 어댑터는
+   * 구현하지 않아도 됩니다. `NodeAdapter`/`BrowserAdapter`는 편의상 계속 제공합니다.
+   */
+  randomBytes?(length: number): Uint8Array;
 
   // ─── Compression ─────────────────────────────────────────────────────────
 

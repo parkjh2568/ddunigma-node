@@ -7,8 +7,6 @@
  * @module core/errors
  */
 
-import { isAdapterCapabilityErrorMessage } from "./internal/AdapterCapability.js";
-
 export type Ddu64Operation =
   | "construct"
   | "encode"
@@ -148,52 +146,13 @@ export function wrapDdu64Error(
   error: unknown,
   fallbackOperation: "encode" | "decode" | "stream",
 ): Ddu64Error {
+  // 내부 모듈은 발생 지점에서 도메인 타입 에러(Ddu64XxxError)를 직접 throw하므로,
+  // 여기서는 이미 타입화된 에러를 그대로 통과시키고, 외부/예기치 못한 에러만 operation
+  // 기반 fallback으로 감쌉니다. (과거의 메시지 키워드 추측 분류는 제거됨 — 분류 책임은
+  // 단일 진실 소스인 발생 지점에 있습니다.)
   if (isDdu64Error(error)) return error;
 
   const message = toErrorMessage(error);
-  const lower = message.toLowerCase();
-
-  // 내부 에러([Ddu64 ...] prefix)만 키워드 기반 분류 적용.
-  // 외부/사용자 에러는 키워드 매칭 없이 fallback operation으로 분류.
-  const isInternalError = lower.startsWith("[ddu64") || lower.startsWith("[bitpack");
-
-  if (isInternalError) {
-    if (lower.includes("[ddu64 options]") || lower.includes("[ddu64 input]")) {
-      return new Ddu64InvalidInputError(message, fallbackOperation, error);
-    }
-    if (lower.includes("checksum")) return new Ddu64ChecksumError(message, error);
-    if (lower.includes("obfuscation")) return new Ddu64ObfuscationError(message, error);
-    if (isAdapterCapabilityErrorMessage(message)) {
-      return new Ddu64AdapterError(message, fallbackOperation, error);
-    }
-    if (lower.includes("encryptionkey") || lower.includes("encrypted payload requires")) {
-      return fallbackOperation === "encode"
-        ? new Ddu64EncryptionError(message, error)
-        : new Ddu64DecryptionError(message, error);
-    }
-    if (
-      lower.includes("decrypt") ||
-      lower.includes("decryption") ||
-      lower.includes("incorrect key")
-    ) {
-      return new Ddu64DecryptionError(message, error);
-    }
-    if (lower.includes("encrypt")) {
-      return new Ddu64EncryptionError(message, error);
-    }
-    if (lower.includes("decompress") || lower.includes("inflate")) {
-      return new Ddu64DecompressionError(message, error);
-    }
-    if (lower.includes("compress") || lower.includes("brotli")) {
-      return new Ddu64CompressionError(message, error);
-    }
-    if (lower.includes("limit") || lower.includes("exceeds")) {
-      return new Ddu64LimitError(message, fallbackOperation, error);
-    }
-    if (lower.includes("charset") || lower.includes("character") || lower.includes("invalid")) {
-      return new Ddu64CharsetError(message, error);
-    }
-  }
 
   if (fallbackOperation === "stream") return new Ddu64StreamError(message, error);
   return fallbackOperation === "encode"

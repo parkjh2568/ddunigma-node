@@ -1,4 +1,4 @@
-import { CharSetConfig, DduSetSymbol } from "./core/types.js";
+import { CharSetConfig, DduSetSymbol, DduSetSymbolInput } from "./core/types.js";
 
 const dduCharSet: CharSetConfig = {
   symbol: DduSetSymbol.DDU,
@@ -98,7 +98,7 @@ const oneCharSet: CharSetConfig = {
   bitLength: 6,
 };
 
-export function getCharSet(symbol: DduSetSymbol): CharSetConfig | undefined {
+export function getCharSet(symbol: DduSetSymbolInput): CharSetConfig | undefined {
   switch (symbol) {
     case DduSetSymbol.DDU:
       return dduCharSet;

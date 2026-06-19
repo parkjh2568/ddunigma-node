@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 import { bitPackEncode } from "../src/core/BitPack.js";
 import { splitIntoChunks } from "../src/core/codecUtils.js";
 import { buildFooter, parseFooter } from "../src/core/wireFormat.js";
-import { indicesToString } from "../src/core/internal/IndexStringMapper.js";
+import { packPow2ToString } from "../src/core/internal/IndexStringMapper.js";
 
 type BenchCase = {
   name: string;
@@ -36,14 +36,6 @@ function consume(value: unknown): void {
     sink ^= maybeResult.paddingBits ?? 0;
     sink ^= maybeResult.indices?.length ?? 0;
   }
-}
-
-function makeIndices(length: number): Uint16Array {
-  const indices = new Uint16Array(length);
-  for (let i = 0; i < length; i++) {
-    indices[i] = i & 63;
-  }
-  return indices;
 }
 
 function makeBytes(length: number): Uint8Array {
@@ -99,9 +91,7 @@ function main(): void {
   );
   const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const charCodes = new Uint16Array([...base64Chars].map((char) => char.charCodeAt(0)));
-  const indices16k = makeIndices(16 * 1024);
-  const indices4k = makeIndices(4 * 1024);
-  const indices256k = makeIndices(256 * 1024);
+  const bytes4k = makeBytes(4 * 1024);
   const bytes16k = makeBytes(16 * 1024);
   const bytes256k = makeBytes(256 * 1024);
   const bitPack6Config = { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 };
@@ -121,22 +111,22 @@ function main(): void {
       fn: () => parseFooter(parseLargeInput, pad, 6),
     },
     {
-      name: "indicesToString 4KB",
+      name: "packPow2ToString 4KB",
       iterations: 20_000,
-      bytes: indices4k.byteLength,
-      fn: () => indicesToString(indices4k, charCodes),
+      bytes: bytes4k.byteLength,
+      fn: () => packPow2ToString(bytes4k, 6, charCodes),
     },
     {
-      name: "indicesToString 16KB",
+      name: "packPow2ToString 16KB",
       iterations: 5_000,
-      bytes: indices16k.byteLength,
-      fn: () => indicesToString(indices16k, charCodes),
+      bytes: bytes16k.byteLength,
+      fn: () => packPow2ToString(bytes16k, 6, charCodes),
     },
     {
-      name: "indicesToString 256KB",
+      name: "packPow2ToString 256KB",
       iterations: 200,
-      bytes: indices256k.byteLength,
-      fn: () => indicesToString(indices256k, charCodes),
+      bytes: bytes256k.byteLength,
+      fn: () => packPow2ToString(bytes256k, 6, charCodes),
     },
     {
       name: "splitIntoChunks 256KB",

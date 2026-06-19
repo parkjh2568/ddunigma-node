@@ -5,7 +5,12 @@
  */
 
 import { buildCodaCharset, isKnownCodaChar, URL_SAFE_CONFLICT_CHARS } from "./codecUtils.js";
-import type { DduConstructorOptions, CharSetConfig, EncodingProfile } from "./types.js";
+import type {
+  DduConstructorOptions,
+  CharSetConfig,
+  EncodingProfile,
+  DduSetSymbolInput,
+} from "./types.js";
 import { DduSetSymbol, dduDefaultConstructorOptions } from "./types.js";
 import { getCharSet } from "../presets.js";
 
@@ -324,7 +329,7 @@ function shouldUsePowerOfTwo(length: number, preference?: boolean): boolean {
   return length > 0 && (length & (length - 1)) === 0;
 }
 
-function getCharSetOrThrow(symbol: DduSetSymbol): CharSetConfig {
+function getCharSetOrThrow(symbol: DduSetSymbolInput): CharSetConfig {
   const cs = getCharSet(symbol);
   if (!cs) throw new Error(`CharSet with symbol ${symbol} not found`);
   return cs;

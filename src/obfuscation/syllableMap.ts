@@ -10,6 +10,8 @@
  * @module obfuscation/syllableMap
  */
 
+import { Ddu64ObfuscationError } from "../core/errors.js";
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 /** 첫 번째 한글 음절 블록 (가) */
@@ -48,10 +50,10 @@ export interface SyllableMapConfig {
  */
 export function buildSyllableMap(alphabet: string[]): SyllableMapConfig {
   if (alphabet.length === 0) {
-    throw new Error("[Ddu64 obfuscation] Alphabet must not be empty.");
+    throw new Ddu64ObfuscationError("[Ddu64 obfuscation] Alphabet must not be empty.");
   }
   if (alphabet.length > HANGUL_SYLLABLE_COUNT) {
-    throw new Error(
+    throw new Ddu64ObfuscationError(
       `[Ddu64 obfuscation] Alphabet size (${alphabet.length}) exceeds available Hangul syllables (${HANGUL_SYLLABLE_COUNT}).`,
     );
   }

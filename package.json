@@ -18,14 +18,16 @@
     "gen:scoped-checksum-vectors": "node --import tsx scripts/gen-scoped-checksum-vectors.ts",
     "pack:check": "node scripts/verify-pack.mjs",
     "smoke": "node scripts/runtime-smoke.mjs",
-    "verify": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm build && pnpm pack:check",
+    "verify": "pnpm typecheck && pnpm lint && pnpm knip && pnpm build && pnpm test:coverage && pnpm size && pnpm pack:check && pnpm smoke",
     "prepublishOnly": "pnpm verify",
+    "knip": "knip",
+    "size": "size-limit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "lint": "eslint src scripts eslint.config.mjs tsup.config.ts vitest.config.ts",
-    "lint:fix": "eslint src scripts eslint.config.mjs tsup.config.ts vitest.config.ts --fix",
+    "lint": "eslint --max-warnings=0 src scripts eslint.config.mjs tsup.config.ts vitest.config.ts",
+    "lint:fix": "eslint --max-warnings=0 src scripts eslint.config.mjs tsup.config.ts vitest.config.ts --fix",
     "format": "prettier --write src/"
   },
   "exports": {
@@ -92,6 +94,37 @@
         "types": "./dist/core.d.cts",
         "default": "./dist/core.cjs"
       }
+    },
+    "./secure": {
+      "browser": {
+        "types": "./dist/secure.browser.d.ts",
+        "import": "./dist/secure.browser.js",
+        "require": "./dist/secure.browser.cjs"
+      },
+      "worker": {
+        "types": "./dist/secure.browser.d.ts",
+        "import": "./dist/secure.browser.js",
+        "require": "./dist/secure.browser.cjs"
+      },
+      "node": {
+        "import": {
+          "types": "./dist/secure.d.ts",
+          "default": "./dist/secure.js"
+        },
+        "require": {
+          "types": "./dist/secure.d.cts",
+          "default": "./dist/secure.cjs"
+        }
+      },
+      "import": {
+        "types": "./dist/secure.browser.d.ts",
+        "default": "./dist/secure.browser.js"
+      },
+      "require": {
+        "types": "./dist/secure.d.cts",
+        "default": "./dist/secure.cjs"
+      },
+      "default": "./dist/secure.browser.js"
     }
   },
   "files": [
@@ -110,13 +143,16 @@
   "description": "ddunigma",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@size-limit/preset-small-lib": "^12.1.0",
     "@types/node": "^22.19.21",
     "@vitest/coverage-v8": "^4.1.8",
     "esbuild": "^0.28.1",
     "eslint": "^10.4.1",
     "fast-check": "^4.8.0",
     "globals": "^17.6.0",
+    "knip": "^6.17.1",
     "prettier": "^3.8.4",
+    "size-limit": "^12.1.0",
     "tsup": "^8.5.1",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
@@ -134,10 +170,5 @@
     "base64_decode",
     "encode",
     "decode"
-  ],
-  "pnpm": {
-    "overrides": {
-      "esbuild": ">=0.28.1"
-    }
-  }
+  ]
 }

@@ -15,7 +15,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Ddu64Node } from "../src/Ddu64Node.js";
+import { Ddu64Secure } from "../src/Ddu64Secure.js";
 import { calculateCRC32 } from "../src/core/codecUtils.js";
 
 const CHECKSUM_MARKER_V5 = "CK";
@@ -72,7 +72,7 @@ for (const inp of inputs) {
 
     // ── 비암호화 결정론적 케이스 (plain / compress) ──
     for (const compress of [false, true]) {
-      const enc = new Ddu64Node(undefined, undefined, { compress });
+      const enc = new Ddu64Secure(undefined, undefined, { compress });
       // 체크섬 off → payload + footer (V5에서 그대로 재사용)
       const payloadFooter = enc.encode(inp.bytes, { compress, checksum: false });
 

@@ -7,19 +7,11 @@
  * @module core/internal/SyncAdapterGateway
  */
 
-import type { KeyDerivationOptions, PlatformAdapter } from "../types.js";
+import type { PlatformAdapter } from "../types.js";
 import { Ddu64AdapterError } from "../errors.js";
+import type { AdapterGatewayContext } from "./AdapterGatewayContext.js";
 
 type SyncGatewayOperation = "encode" | "decode";
-
-export interface SyncAdapterGatewayContext {
-  adapter: PlatformAdapter | undefined;
-  encryptionKey: string | undefined;
-  keyDerivation: KeyDerivationOptions | undefined;
-  encryptionKeyHash: Uint8Array | undefined;
-  encryptionKeyHashPromise?: Promise<Uint8Array>;
-  setEncryptionKeyHash(hash: Uint8Array): void;
-}
 
 export function requireSyncAdapter(
   adapter: PlatformAdapter | undefined,
@@ -37,7 +29,7 @@ export function requireSyncAdapter(
 }
 
 export function encryptSyncWithAdapter(
-  context: SyncAdapterGatewayContext,
+  context: AdapterGatewayContext,
   data: Uint8Array,
   aad?: Uint8Array,
 ): Uint8Array {
@@ -53,7 +45,7 @@ export function encryptSyncWithAdapter(
 }
 
 export function decryptSyncWithAdapter(
-  context: SyncAdapterGatewayContext,
+  context: AdapterGatewayContext,
   data: Uint8Array,
   aad?: Uint8Array,
 ): Uint8Array {
@@ -119,7 +111,7 @@ export function decompressSyncWithAdapter(
 }
 
 function getSyncKeyHash(
-  context: SyncAdapterGatewayContext,
+  context: AdapterGatewayContext,
   adapter: PlatformAdapter,
   operation: "encrypt" | "decrypt",
   gatewayOperation: SyncGatewayOperation,

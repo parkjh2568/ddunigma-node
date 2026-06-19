@@ -8,7 +8,8 @@
  * Validates: Requirements 6.4, 6.5, 12.1, 12.3
  */
 import { describe, it, expect } from "vitest";
-import { Ddu64Node } from "../Ddu64Node.js";
+// 6.0: 압축/암호화/체크섬 벡터는 secure 진입점의 Ddu64Secure로 검증.
+import { Ddu64Secure as Ddu64Node } from "../Ddu64Secure.js";
 import { DduSetSymbol } from "../core/types.js";
 import type { DduConstructorOptions } from "../core/types.js";
 import testVectorsData from "./fixtures/test-vectors.json";

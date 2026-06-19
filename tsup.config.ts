@@ -1,7 +1,13 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/index.ts", "src/browser.ts", "src/core.ts"],
+  entry: [
+    "src/index.ts",
+    "src/browser.ts",
+    "src/core.ts",
+    "src/secure.ts",
+    "src/secure.browser.ts",
+  ],
   format: ["esm", "cjs"],
   dts: true,
   splitting: true,

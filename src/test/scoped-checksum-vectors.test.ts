@@ -11,7 +11,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { Ddu64Node } from "../Ddu64Node.js";
+// 6.0: 체크섬 스코프 벡터는 secure 진입점의 Ddu64Secure로 검증.
+import { Ddu64Secure as Ddu64Node } from "../Ddu64Secure.js";
 import scopedData from "./fixtures/scoped-checksum-vectors.json";
 
 // 독립 CRC32 (bit-by-bit) — codecUtils의 테이블 구현과 다른 방식으로 교차검증
