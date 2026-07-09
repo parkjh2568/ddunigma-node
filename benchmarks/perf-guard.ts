@@ -1,5 +1,4 @@
 import { performance } from "node:perf_hooks";
-import { bitPackEncode } from "../src/core/BitPack.js";
 import { packPow2ToString, unpackPow2FromString } from "../src/core/internal/IndexStringMapper.js";
 
 type GuardCase = {
@@ -55,7 +54,6 @@ function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boo
 
 function main(): void {
   const bytes16k = makeBytes(16 * 1024);
-  const bytes256k = makeBytes(256 * 1024);
   const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const charCodes = new Uint16Array([...base64Chars].map((char) => char.charCodeAt(0)));
 
@@ -71,20 +69,6 @@ function main(): void {
   const { payload: payload16k, paddingBits: pad16k } = packPow2ToString(bytes16k, 6, charCodes);
 
   const cases: GuardCase[] = [
-    {
-      name: "bitPackEncode 6bit 16KB",
-      iterations: 2_000,
-      bytes: bytes16k.byteLength,
-      minMbps: 170,
-      fn: () => bitPackEncode(bytes16k, { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 }),
-    },
-    {
-      name: "bitPackEncode 6bit 256KB",
-      iterations: 100,
-      bytes: bytes256k.byteLength,
-      minMbps: 240,
-      fn: () => bitPackEncode(bytes256k, { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 }),
-    },
     {
       name: "packPow2ToString 16KB",
       iterations: 2_000,

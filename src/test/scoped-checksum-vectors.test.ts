@@ -1,12 +1,12 @@
 /**
  * 스코프 자기기술 체크섬(CK) 와이어 포맷 테스트 벡터 "락(lock)" 테스트.
  *
- * (과거 'v5 체크섬'으로 불렸으나 폐기된 'v5 KDF envelope'와는 무관.)
+ * (과거 초안 명칭으로 불렸으나 폐기된 KDF envelope와는 무관.)
  * 회귀 기준을 고정합니다. 검증 내용:
  * 1. 결정론적 벡터의 expected.encoded가 `...CK[P|O][8 hex]` 접미사로 끝난다.
  * 2. 접미사의 scope/hex가 벡터 필드와 일치한다.
  * 3. checksumHex가 문서화된 소스 바이트의 CRC32와 일치한다(독립 CRC32 구현으로 교차검증).
- * 4. 접미사를 제거한 payload+footer가 **현재 4.x 디코더**로 원본을 복원한다
+ * 4. 접미사를 제거한 payload+footer가 **현재 페이로드 디코더**로 원본을 복원한다
  *    → CK 접미사가 순수 가산(additive)이며 payload는 4.x와 동일함을 증명.
  */
 
@@ -89,7 +89,7 @@ describe("scoped checksum wire-format vectors (spec lock)", () => {
         expect(crc32Hex(sourceBytes)).toBe(checksumHex);
       });
 
-      it("payload+footer (CK suffix stripped) round-trips through the current 4.x decoder", () => {
+      it("payload+footer (CK suffix stripped) round-trips through the current payload decoder", () => {
         const payloadFooter = encoded.slice(0, encoded.length - suffix.length);
         const enc = new Ddu64Node(undefined, undefined, { compress });
         const decoded = enc.decodeToUint8Array(payloadFooter, { compress, checksum: false });
@@ -141,7 +141,7 @@ describe("scoped checksum decode self-description (Step 2)", () => {
 describe("scoped checksum encoder golden output (Step 3)", () => {
   const deterministic = vectors.filter((v) => v.tags.includes("deterministic"));
   for (const v of deterministic) {
-    it(`${v.id}: real 5.0 encoder produces the locked vector`, () => {
+    it(`${v.id}: real scoped checksum encoder produces the locked vector`, () => {
       const enc = new Ddu64Node(undefined, undefined, {
         compress: v.options.compress ?? false,
         checksum: true,

@@ -357,6 +357,9 @@ try {
   const requiredFiles = [
     "README.md",
     "LICENCE",
+    "CHANGELOG.md",
+    "ROADMAP.md",
+    "docs/REFERENCE.md",
     "package.json",
     "dist/index.js",
     "dist/index.cjs",

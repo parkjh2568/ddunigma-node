@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "browser": "./dist/browser.js",
   "type": "module",
+  "packageManager": "pnpm@11.5.3",
   "sideEffects": false,
   "engines": {
     "node": ">=22.0.0"
@@ -128,6 +129,9 @@
     }
   },
   "files": [
+    "CHANGELOG.md",
+    "ROADMAP.md",
+    "docs/REFERENCE.md",
     "dist",
     "!dist/**/*.map"
   ],

@@ -1,19 +1,19 @@
 {
-  "version": "v5-draft-1",
-  "description": "ddunigma 5.0 V5 wire-format (self-describing checksum) deterministic test vectors. Footer checksum suffix: CK[P|O][8 lowercase hex]. payload+footer identical to 4.x. Encrypted vectors are round-trip-only (random IV).",
+  "version": "scoped-checksum-v1",
+  "description": "ddunigma scoped checksum wire-format deterministic test vectors. Footer checksum suffix: CK[P|O][8 lowercase hex]. payload+footer identical to 4.x. Encrypted vectors are round-trip-only (random IV).",
   "markerSpec": {
-    "checksumMarkerV5": "CK",
+    "checksumMarkerScoped": "CK",
     "scopeChars": {
       "plaintext": "P",
       "output": "O"
     },
     "suffixPattern": "^CK[PO][0-9a-f]{8}$",
     "legacyMarker": "CHK",
-    "notes": "Decoder must try V5 (CK[PO][8hex]) first, then legacy CHK[8hex]. Fixed-length + scope char + 8 hex validation mitigates accidental collisions in charsets containing C/H/K and hex digits."
+    "notes": "Decoder must try scoped checksum (CK[PO][8hex]) first, then legacy CHK[8hex]. Fixed-length + scope char + 8 hex validation mitigates accidental collisions in charsets containing C/H/K and hex digits."
   },
   "vectors": [
     {
-      "id": "v5-ascii-hello-plain-scopeP",
+      "id": "scoped-ascii-hello-plain-scopeP",
       "description": "ASCII 'Hello', no-compress, checksumScope=plaintext",
       "input": {
         "raw": "48656c6c6f",
@@ -40,7 +40,7 @@
       ]
     },
     {
-      "id": "v5-ascii-hello-deflate-scopeP",
+      "id": "scoped-ascii-hello-deflate-scopeP",
       "description": "ASCII 'Hello', deflate, checksumScope=plaintext",
       "input": {
         "raw": "48656c6c6f",
@@ -68,7 +68,7 @@
       ]
     },
     {
-      "id": "v5-ascii-hello-encrypt-scopeP",
+      "id": "scoped-ascii-hello-encrypt-scopeP",
       "description": "ASCII 'Hello', AES-256-GCM, checksumScope=plaintext (round-trip only)",
       "input": {
         "raw": "48656c6c6f",
@@ -78,7 +78,7 @@
         "preset": "ddu"
       },
       "options": {
-        "encryptionKey": "v5-vector-key",
+        "encryptionKey": "scoped-vector-key",
         "checksum": true,
         "checksumScope": "plaintext"
       },
@@ -96,7 +96,7 @@
       ]
     },
     {
-      "id": "v5-ascii-hello-plain-scopeO",
+      "id": "scoped-ascii-hello-plain-scopeO",
       "description": "ASCII 'Hello', no-compress, checksumScope=output",
       "input": {
         "raw": "48656c6c6f",
@@ -123,7 +123,7 @@
       ]
     },
     {
-      "id": "v5-ascii-hello-deflate-scopeO",
+      "id": "scoped-ascii-hello-deflate-scopeO",
       "description": "ASCII 'Hello', deflate, checksumScope=output",
       "input": {
         "raw": "48656c6c6f",
@@ -151,7 +151,7 @@
       ]
     },
     {
-      "id": "v5-ascii-hello-encrypt-scopeO",
+      "id": "scoped-ascii-hello-encrypt-scopeO",
       "description": "ASCII 'Hello', AES-256-GCM, checksumScope=output (round-trip only)",
       "input": {
         "raw": "48656c6c6f",
@@ -161,7 +161,7 @@
         "preset": "ddu"
       },
       "options": {
-        "encryptionKey": "v5-vector-key",
+        "encryptionKey": "scoped-vector-key",
         "checksum": true,
         "checksumScope": "output"
       },
@@ -179,7 +179,7 @@
       ]
     },
     {
-      "id": "v5-korean-plain-scopeP",
+      "id": "scoped-korean-plain-scopeP",
       "description": "Korean UTF-8, no-compress, checksumScope=plaintext",
       "input": {
         "raw": "ec9588eb8595ed9598ec84b8ec9a94",
@@ -206,7 +206,7 @@
       ]
     },
     {
-      "id": "v5-korean-deflate-scopeP",
+      "id": "scoped-korean-deflate-scopeP",
       "description": "Korean UTF-8, deflate, checksumScope=plaintext",
       "input": {
         "raw": "ec9588eb8595ed9598ec84b8ec9a94",
@@ -234,7 +234,7 @@
       ]
     },
     {
-      "id": "v5-korean-encrypt-scopeP",
+      "id": "scoped-korean-encrypt-scopeP",
       "description": "Korean UTF-8, AES-256-GCM, checksumScope=plaintext (round-trip only)",
       "input": {
         "raw": "ec9588eb8595ed9598ec84b8ec9a94",
@@ -244,7 +244,7 @@
         "preset": "ddu"
       },
       "options": {
-        "encryptionKey": "v5-vector-key",
+        "encryptionKey": "scoped-vector-key",
         "checksum": true,
         "checksumScope": "plaintext"
       },
@@ -262,7 +262,7 @@
       ]
     },
     {
-      "id": "v5-korean-plain-scopeO",
+      "id": "scoped-korean-plain-scopeO",
       "description": "Korean UTF-8, no-compress, checksumScope=output",
       "input": {
         "raw": "ec9588eb8595ed9598ec84b8ec9a94",
@@ -289,7 +289,7 @@
       ]
     },
     {
-      "id": "v5-korean-deflate-scopeO",
+      "id": "scoped-korean-deflate-scopeO",
       "description": "Korean UTF-8, deflate, checksumScope=output",
       "input": {
         "raw": "ec9588eb8595ed9598ec84b8ec9a94",
@@ -317,7 +317,7 @@
       ]
     },
     {
-      "id": "v5-korean-encrypt-scopeO",
+      "id": "scoped-korean-encrypt-scopeO",
       "description": "Korean UTF-8, AES-256-GCM, checksumScope=output (round-trip only)",
       "input": {
         "raw": "ec9588eb8595ed9598ec84b8ec9a94",
@@ -327,7 +327,7 @@
         "preset": "ddu"
       },
       "options": {
-        "encryptionKey": "v5-vector-key",
+        "encryptionKey": "scoped-vector-key",
         "checksum": true,
         "checksumScope": "output"
       },
@@ -345,7 +345,7 @@
       ]
     },
     {
-      "id": "v5-binary-edge-plain-scopeP",
+      "id": "scoped-binary-edge-plain-scopeP",
       "description": "binary edge bytes, no-compress, checksumScope=plaintext",
       "input": {
         "raw": "00017f80ff",
@@ -372,7 +372,7 @@
       ]
     },
     {
-      "id": "v5-binary-edge-deflate-scopeP",
+      "id": "scoped-binary-edge-deflate-scopeP",
       "description": "binary edge bytes, deflate, checksumScope=plaintext",
       "input": {
         "raw": "00017f80ff",
@@ -400,7 +400,7 @@
       ]
     },
     {
-      "id": "v5-binary-edge-encrypt-scopeP",
+      "id": "scoped-binary-edge-encrypt-scopeP",
       "description": "binary edge bytes, AES-256-GCM, checksumScope=plaintext (round-trip only)",
       "input": {
         "raw": "00017f80ff",
@@ -410,7 +410,7 @@
         "preset": "ddu"
       },
       "options": {
-        "encryptionKey": "v5-vector-key",
+        "encryptionKey": "scoped-vector-key",
         "checksum": true,
         "checksumScope": "plaintext"
       },
@@ -428,7 +428,7 @@
       ]
     },
     {
-      "id": "v5-binary-edge-plain-scopeO",
+      "id": "scoped-binary-edge-plain-scopeO",
       "description": "binary edge bytes, no-compress, checksumScope=output",
       "input": {
         "raw": "00017f80ff",
@@ -455,7 +455,7 @@
       ]
     },
     {
-      "id": "v5-binary-edge-deflate-scopeO",
+      "id": "scoped-binary-edge-deflate-scopeO",
       "description": "binary edge bytes, deflate, checksumScope=output",
       "input": {
         "raw": "00017f80ff",
@@ -483,7 +483,7 @@
       ]
     },
     {
-      "id": "v5-binary-edge-encrypt-scopeO",
+      "id": "scoped-binary-edge-encrypt-scopeO",
       "description": "binary edge bytes, AES-256-GCM, checksumScope=output (round-trip only)",
       "input": {
         "raw": "00017f80ff",
@@ -493,7 +493,7 @@
         "preset": "ddu"
       },
       "options": {
-        "encryptionKey": "v5-vector-key",
+        "encryptionKey": "scoped-vector-key",
         "checksum": true,
         "checksumScope": "output"
       },
@@ -511,7 +511,7 @@
       ]
     },
     {
-      "id": "v5-compressible-plain-scopeP",
+      "id": "scoped-compressible-plain-scopeP",
       "description": "highly compressible (200x 'A'), no-compress, checksumScope=plaintext",
       "input": {
         "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
@@ -538,7 +538,7 @@
       ]
     },
     {
-      "id": "v5-compressible-deflate-scopeP",
+      "id": "scoped-compressible-deflate-scopeP",
       "description": "highly compressible (200x 'A'), deflate, checksumScope=plaintext",
       "input": {
         "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
@@ -566,7 +566,7 @@
       ]
     },
     {
-      "id": "v5-compressible-encrypt-scopeP",
+      "id": "scoped-compressible-encrypt-scopeP",
       "description": "highly compressible (200x 'A'), AES-256-GCM, checksumScope=plaintext (round-trip only)",
       "input": {
         "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
@@ -576,7 +576,7 @@
         "preset": "ddu"
       },
       "options": {
-        "encryptionKey": "v5-vector-key",
+        "encryptionKey": "scoped-vector-key",
         "checksum": true,
         "checksumScope": "plaintext"
       },
@@ -594,7 +594,7 @@
       ]
     },
     {
-      "id": "v5-compressible-plain-scopeO",
+      "id": "scoped-compressible-plain-scopeO",
       "description": "highly compressible (200x 'A'), no-compress, checksumScope=output",
       "input": {
         "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
@@ -621,7 +621,7 @@
       ]
     },
     {
-      "id": "v5-compressible-deflate-scopeO",
+      "id": "scoped-compressible-deflate-scopeO",
       "description": "highly compressible (200x 'A'), deflate, checksumScope=output",
       "input": {
         "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
@@ -649,7 +649,7 @@
       ]
     },
     {
-      "id": "v5-compressible-encrypt-scopeO",
+      "id": "scoped-compressible-encrypt-scopeO",
       "description": "highly compressible (200x 'A'), AES-256-GCM, checksumScope=output (round-trip only)",
       "input": {
         "raw": "4141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
@@ -659,7 +659,7 @@
         "preset": "ddu"
       },
       "options": {
-        "encryptionKey": "v5-vector-key",
+        "encryptionKey": "scoped-vector-key",
         "checksum": true,
         "checksumScope": "output"
       },

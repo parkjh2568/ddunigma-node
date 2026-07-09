@@ -1,6 +1,6 @@
 /**
  * 스코프 자기기술 체크섬(CK) 결정론적 테스트 벡터 생성기.
- * (과거 'v5 체크섬'으로 불렸으나 폐기된 'v5 KDF envelope'와는 무관.)
+ * (과거 초안 명칭으로 불렸으나 폐기된 KDF envelope와는 무관.)
  *
  * 체크섬 접미사만 `CHK[8hex]` → `CK[P|O][8hex]`로 바꾸고 payload+footer는 4.x와 동일합니다.
  * 따라서 기존 4.x 코덱으로 payload+footer를 생성하고(체크섬 off), scope에 따른 CRC를 계산해
@@ -18,9 +18,9 @@ import { fileURLToPath } from "node:url";
 import { Ddu64Secure } from "../src/Ddu64Secure.js";
 import { calculateCRC32 } from "../src/core/codecUtils.js";
 
-const CHECKSUM_MARKER_V5 = "CK";
+const CHECKSUM_MARKER_SCOPED = "CK";
 
-interface V5Vector {
+interface ScopedChecksumVector {
   id: string;
   description: string;
   input: { raw: string; encoding: "binary" };
@@ -64,7 +64,7 @@ const inputs: Array<{ id: string; bytes: Uint8Array; note: string }> = [
   },
 ];
 
-const vectors: V5Vector[] = [];
+const vectors: ScopedChecksumVector[] = [];
 
 for (const inp of inputs) {
   for (const scope of ["plaintext", "output"] as const) {
@@ -73,7 +73,7 @@ for (const inp of inputs) {
     // ── 비암호화 결정론적 케이스 (plain / compress) ──
     for (const compress of [false, true]) {
       const enc = new Ddu64Secure(undefined, undefined, { compress });
-      // 체크섬 off → payload + footer (V5에서 그대로 재사용)
+      // 체크섬 off → payload + footer (scoped checksum에서도 그대로 재사용)
       const payloadFooter = enc.encode(inp.bytes, { compress, checksum: false });
 
       // scope에 따른 CRC 소스 바이트
@@ -85,47 +85,47 @@ for (const inp of inputs) {
         sourceBytes = enc.decodeToUint8Array(payloadFooter, { compress: false, checksum: false });
       }
       const checksumHex = calculateCRC32(sourceBytes);
-      const encoded = payloadFooter + CHECKSUM_MARKER_V5 + scopeChar + checksumHex;
+      const encoded = payloadFooter + CHECKSUM_MARKER_SCOPED + scopeChar + checksumHex;
 
       vectors.push({
-        id: `v5-${inp.id}-${compress ? "deflate" : "plain"}-scope${scopeChar}`,
+        id: `scoped-${inp.id}-${compress ? "deflate" : "plain"}-scope${scopeChar}`,
         description: `${inp.note}, ${compress ? "deflate" : "no-compress"}, checksumScope=${scope}`,
         input: { raw: toHex(inp.bytes), encoding: "binary" },
         charset: { preset: "ddu" },
         options: { compress: compress || undefined, checksum: true, checksumScope: scope },
         checksumSource: scope,
-        expected: { encoded, checksumMarker: CHECKSUM_MARKER_V5, scopeChar, checksumHex },
+        expected: { encoded, checksumMarker: CHECKSUM_MARKER_SCOPED, scopeChar, checksumHex },
         tags: ["deterministic", compress ? "deflate" : "plain", `scope-${scope}`],
       });
     }
 
     // ── 암호화 케이스 (round-trip only: 랜덤 IV로 비결정론적) ──
     vectors.push({
-      id: `v5-${inp.id}-encrypt-scope${scopeChar}`,
+      id: `scoped-${inp.id}-encrypt-scope${scopeChar}`,
       description: `${inp.note}, AES-256-GCM, checksumScope=${scope} (round-trip only)`,
       input: { raw: toHex(inp.bytes), encoding: "binary" },
       charset: { preset: "ddu" },
-      options: { encryptionKey: "v5-vector-key", checksum: true, checksumScope: scope },
+      options: { encryptionKey: "scoped-vector-key", checksum: true, checksumScope: scope },
       checksumSource: scope,
-      expected: { encoded: null, checksumMarker: CHECKSUM_MARKER_V5, scopeChar, checksumHex: null },
+      expected: { encoded: null, checksumMarker: CHECKSUM_MARKER_SCOPED, scopeChar, checksumHex: null },
       tags: ["round-trip-only", "encrypt", `scope-${scope}`],
     });
   }
 }
 
 const out = {
-  version: "v5-draft-1",
+  version: "scoped-checksum-v1",
   description:
-    "ddunigma 5.0 V5 wire-format (self-describing checksum) deterministic test vectors. " +
+    "ddunigma scoped checksum wire-format deterministic test vectors. " +
     "Footer checksum suffix: CK[P|O][8 lowercase hex]. payload+footer identical to 4.x. " +
     "Encrypted vectors are round-trip-only (random IV).",
   markerSpec: {
-    checksumMarkerV5: CHECKSUM_MARKER_V5,
+    checksumMarkerScoped: CHECKSUM_MARKER_SCOPED,
     scopeChars: { plaintext: "P", output: "O" },
     suffixPattern: "^CK[PO][0-9a-f]{8}$",
     legacyMarker: "CHK",
     notes:
-      "Decoder must try V5 (CK[PO][8hex]) first, then legacy CHK[8hex]. Fixed-length + scope char + " +
+      "Decoder must try scoped checksum (CK[PO][8hex]) first, then legacy CHK[8hex]. Fixed-length + scope char + " +
       "8 hex validation mitigates accidental collisions in charsets containing C/H/K and hex digits.",
   },
   vectors,
