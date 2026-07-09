@@ -25,7 +25,7 @@ export default [
     limit: "15 KB",
   },
   {
-    name: "node entry — Ddu64 (lean: encode + obfuscate)",
+    name: "node entry — Ddu64 (lean: encode + obfuscate + async lazy secure)",
     path: "dist/index.js",
     import: "{ Ddu64 }",
     ignore,
@@ -33,12 +33,12 @@ export default [
     limit: "14.5 KB",
   },
   {
-    name: "browser entry — Ddu64 (lean: encode + obfuscate)",
+    name: "browser entry — Ddu64 (lean: encode + obfuscate + async lazy secure)",
     path: "dist/browser.js",
     import: "{ Ddu64 }",
     ignore,
     modifyEsbuildConfig,
-    limit: "14.5 KB",
+    limit: "14.6 KB",
   },
   {
     name: "secure entry — Ddu64 (batteries: compress/crypto/checksum)",

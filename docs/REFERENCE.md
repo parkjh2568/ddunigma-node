@@ -66,9 +66,10 @@ charset 문자와 `paddingChar`는 각각 단일 UTF-16 코드 유닛이어야 �
 | `requireEncryption`    | `boolean`                         | 키 사용 시 `true` | 키가 있는 decoder에서 평문 payload 거부 |
 | `onProgress`           | `(info: DduProgressInfo) => void` | 미사용            | 처리 진행률 콜백                        |
 
-`compress`/`compressionAlgorithm`/`compressionLevel`/`checksum`/`checksumScope`/
-`maxDecompressedBytes`/`requireEncryption`은 secure 진입점(`@ddunigma/node/secure`)에서만
-동작합니다. 기본/브라우저 lean 진입점은 타입 단계에서 이 옵션들을 차단합니다.
+`@ddunigma/node`와 `@ddunigma/node/browser`는 adapter-backed 옵션(`compress`,
+`encryptionKey`)이 켜진 비동기 encode/decode 호출에서만 secure 래퍼를 동적 import합니다. 동기
+압축/암호화는 `@ddunigma/node/secure`를 사용하세요. `checksum`/`checksumScope`/청킹/
+난독화는 플랫폼 어댑터 없이도 동작합니다.
 
 Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코딩, 기본 64 MiB)와
 `maxBufferedChars`(디코딩, 기본 64 Mi 문자)를 추가로 지원합니다.
@@ -86,16 +87,16 @@ Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코�
 | `useRepeatPadding` | `boolean`                    | 프리셋 설정 | 반복 패딩 방식 사용                 |
 | `throwOnError`     | `boolean`                    | `true`      | 잘못된 charset 설정에서 예외 발생   |
 | `urlSafe`          | `boolean`                    | `false`     | URL-Safe 출력 변환                  |
-| `encryptionKey`    | `string`                     | 미사용      | AES-256-GCM 암호화 키 (secure 전용) |
-| `keyDerivation`    | `KeyDerivationOptions`       | `pbkdf2`    | 암호화 키 파생 방식 (secure 전용)   |
+| `encryptionKey`    | `string`                     | 미사용      | AES-256-GCM 암호화 키               |
+| `keyDerivation`    | `KeyDerivationOptions`       | `pbkdf2`    | 암호화 키 파생 방식                 |
 | `adapter`          | `PlatformAdapter`            | 진입점 설정 | 플랫폼 어댑터 직접 주입             |
 
 ## 압축, 암호화, 체크섬
 
-압축/암호화/체크섬/Web Streams는 6.0부터 secure 진입점으로 이동했습니다.
+기본 진입점은 비동기 메서드에서 압축/암호화 어댑터를 필요할 때만 불러옵니다.
 
 ```typescript
-import { Ddu64 } from "@ddunigma/node/secure";
+import { Ddu64 } from "@ddunigma/node";
 
 const ddu = new Ddu64({
   compress: true,
@@ -110,9 +111,13 @@ const ddu = new Ddu64({
   checksum: true,
 });
 
-const encoded = ddu.encode("보호할 데이터");
-const decoded = ddu.decode(encoded);
+const encoded = await ddu.encodeAsync("보호할 데이터");
+const decoded = await ddu.decodeAsync(encoded);
 ```
+
+동기 압축/암호화나 Web Streams가 필요하면 `@ddunigma/node/secure`를 사용합니다.
+호출 옵션으로 `compress: true`를 켰다면 decode 쪽에도 `compress: true`를 전달해야 기본
+진입점의 lazy adapter가 켜집니다. 생성자 기본값으로 두면 반복 전달하지 않아도 됩니다.
 
 복호화에는 인코딩에 사용한 `encryptionKey`와 키 파생 설정(`algorithm`/`salt`/`iterations`)이
 동일하게 필요합니다. 키 파생 파라미터는 wire format에 기록되지 않습니다.
@@ -153,12 +158,12 @@ const decoded = ddu.decode(encoded);
 ## 브라우저와 Workers
 
 기본 브라우저 진입점(`@ddunigma/node/browser`)은 인코딩 + 난독화(lean)를 제공합니다.
-브라우저에서 압축/암호화/체크섬이 필요하면 `@ddunigma/node/secure`를 사용합니다. 조건부
-`exports`가 브라우저 환경에서 secure 브라우저 빌드(WebCrypto·CompressionStream 기반)를
-선택합니다.
+브라우저에서 압축/암호화가 필요하면 기본 브라우저 진입점의 비동기 메서드를 쓰면 됩니다.
+해당 옵션이 켜진 호출에서만 secure 브라우저 래퍼(WebCrypto·CompressionStream 기반)를
+동적 import합니다.
 
 ```typescript
-import { Ddu64 } from "@ddunigma/node/secure";
+import { Ddu64 } from "@ddunigma/node/browser";
 
 const ddu = new Ddu64({ compress: true, checksum: true });
 const encoded = await ddu.encodeAsync("browser data");
@@ -189,16 +194,16 @@ const stats = ddu.getStats("payload");
 const asyncStats = await ddu.getStatsAsync("payload", { compress: true });
 ```
 
-브라우저에서 압축 통계를 계산할 때는 `getStatsAsync`를 사용합니다.
+브라우저에서 압축 통계나 Web Streams가 필요하면 `@ddunigma/node/secure`를 사용합니다.
 
 ## 진입점
 
-| 진입점                   | 노출 `Ddu64`          | 기능                                    | 용도                         |
-| ------------------------ | --------------------- | --------------------------------------- | ---------------------------- |
-| `@ddunigma/node`         | `Ddu64Node` (lean)    | 인코딩 + 한글 난독화                    | 기본 — 재미 + 시각적 난독화  |
-| `@ddunigma/node/browser` | `Ddu64Browser` (lean) | 인코딩 + 한글 난독화                    | 브라우저/Workers 기본        |
-| `@ddunigma/node/secure`  | `Ddu64Secure`         | 압축/암호화/체크섬/Web Streams + 난독화 | 보안·압축 배터리             |
-| `@ddunigma/node/core`    | `Ddu64Core`           | 순수 인코딩/디코딩                      | 어댑터/난독 미포함 최소 번들 |
+| 진입점                   | 노출 `Ddu64`     | 기능                                      | 용도                         |
+| ------------------------ | ---------------- | ----------------------------------------- | ---------------------------- |
+| `@ddunigma/node`         | `Ddu64Node`      | 인코딩 + 난독화, async encode/decode secure lazy | Node 기본              |
+| `@ddunigma/node/browser` | `Ddu64Browser`   | 인코딩 + 난독화, async encode/decode secure lazy | 브라우저/Workers 기본  |
+| `@ddunigma/node/secure`  | `Ddu64Secure`    | sync/async 압축/암호화/체크섬/Web Streams | 보안·압축 배터리 명시 사용   |
+| `@ddunigma/node/core`    | `Ddu64Core`      | 순수 인코딩/디코딩                        | 어댑터/난독 미포함 최소 번들 |
 
 ```typescript
 import { Ddu64 as NodeDdu64 } from "@ddunigma/node";

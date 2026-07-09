@@ -2,6 +2,29 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다.
 
+## Unreleased
+
+### 기본 진입점에 lazy secure 추가 (편의성 개선)
+
+기본 진입점(`@ddunigma/node`, `@ddunigma/node/browser`)에서 secure 옵션(`compress`,
+`encryptionKey`)이 감지된 **비동기** 호출은 이제 secure 래퍼(`Ddu64Secure`/`Ddu64SecureBrowser`)를
+`import()`로 지연 로드해 그대로 처리합니다. lean 정적 import 그래프는 유지되며(어댑터는 동적
+청크에만 포함), 순수 인코딩/난독화 경로는 종전대로 어댑터를 로드하지 않습니다.
+
+- 대상 async 메서드: `encodeAsync`/`decodeAsync`/`decodeToUint8ArrayAsync`/`decodeToBufferAsync`,
+  그리고 압축 통계용 `getStatsAsync`(Node·브라우저 대칭).
+- 동기 secure(예: `encode({ compress: true })`)는 여전히 지원하지 않으며, `encode`/`decode`/
+  `decodeToUint8Array`/`getStats`가 대칭적으로 `Ddu64AdapterError`를 던져 `encodeAsync`/
+  `decodeAsync`/`getStatsAsync` 또는 `@ddunigma/node/secure`를 안내합니다.
+- **타입 표면 변경(주의):** 기본 진입점의 공개 옵션 타입이 `DduBaseOptions` → `DduOptions`
+  (secure 전체)로 넓어졌습니다. 이에 따라 6.0의 **컴파일 단계 차단**(`encode(x, { compress: true })`가
+  타입 에러)이 **런타임 가드**로 전환됩니다. 동기 메서드에 secure 옵션을 넘기면 컴파일은
+  통과하고 호출 시 위 `Ddu64AdapterError`가 발생합니다.
+- 명시 `adapter`를 기본 진입점 생성자에 주입하면 base 코어가 sync/async secure를 직접 처리하며
+  lazy 우회 및 동기 가드가 비활성화됩니다.
+- 성능: adapter 판정을 생성 시점 boolean 캐시로 옮겨, async hot-path에서 호출마다 발생하던
+  `getCharSetInfo()` 할당(charset 배열 복사 + 정보 객체)을 제거했습니다.
+
 ## 6.0.0
 
 이전 published 버전(5.0.0) 대비 호환성에 영향을 주는 변경이 포함되어 메이저로 올립니다.

@@ -43,12 +43,12 @@ dduV1.decode(".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌
 
 ## 진입점
 
-| 진입점                   | 기능                                    | 용도                  |
-| ------------------------ | --------------------------------------- | --------------------- |
-| `@ddunigma/node`         | 인코딩 + 한글 난독화                    | Node 기본 lean        |
-| `@ddunigma/node/browser` | 인코딩 + 한글 난독화                    | 브라우저/Workers lean |
-| `@ddunigma/node/secure`  | 압축/암호화/체크섬/Web Streams + 난독화 | 배터리 필요할 때      |
-| `@ddunigma/node/core`    | 순수 인코딩/디코딩                      | 최소 번들             |
+| 진입점                   | 기능                                           | 용도                         |
+| ------------------------ | ---------------------------------------------- | ---------------------------- |
+| `@ddunigma/node`         | 인코딩 + 난독화, async encode/decode secure lazy | Node 기본                  |
+| `@ddunigma/node/browser` | 인코딩 + 난독화, async encode/decode secure lazy | 브라우저/Workers 기본      |
+| `@ddunigma/node/secure`  | sync/async 압축/암호화/체크섬/Web Streams      | 배터리 명시 사용             |
+| `@ddunigma/node/core`    | 순수 인코딩/디코딩                             | 최소 번들                    |
 
 ```typescript
 import { Ddu64 as NodeDdu64 } from "@ddunigma/node";
@@ -70,7 +70,7 @@ const decoded = ddu.decode(encoded);
 ## 압축, 암호화, 체크섬
 
 ```typescript
-import { Ddu64 } from "@ddunigma/node/secure";
+import { Ddu64 } from "@ddunigma/node";
 
 const ddu = new Ddu64({
   compress: true,
@@ -83,9 +83,11 @@ const ddu = new Ddu64({
   checksum: true,
 });
 
-const encoded = ddu.encode("보호할 데이터");
-const decoded = ddu.decode(encoded);
+const encoded = await ddu.encodeAsync("보호할 데이터");
+const decoded = await ddu.decodeAsync(encoded);
 ```
+
+동기 압축/암호화가 필요하면 `@ddunigma/node/secure`를 import하세요.
 
 ## Reference
 

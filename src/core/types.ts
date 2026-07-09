@@ -165,9 +165,8 @@ export interface KeyDerivationOptions {
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 /**
- * 기본(Base) 런타임 옵션 — 기본 진입점(`@ddunigma/node`, `@ddunigma/node/browser`)이
- * 공개하는 옵션 표면. 인코딩 + 한글 난독화(재미 풀세트)에 필요한 옵션만 포함하며
- * 압축/암호화/체크섬 같은 secure 부가기능은 포함하지 않습니다.
+ * 기본(Base) 런타임 옵션 — 플랫폼 어댑터 없이 처리 가능한 옵션 부분집합입니다.
+ * 인코딩 + 한글 난독화(재미 풀세트)에 필요한 옵션을 포함합니다.
  */
 export interface DduBaseOptions {
   /** 최대 디코딩 바이트 수 (Zip Bomb 방어) */
@@ -191,8 +190,9 @@ export interface DduBaseOptions {
 }
 
 /**
- * Secure 확장 옵션 — secure 진입점(`@ddunigma/node/secure`)이 공개하는 옵션 표면.
- * `DduBaseOptions`를 확장하며 압축/암호화/체크섬 부가기능 옵션을 추가합니다.
+ * Secure 확장 옵션 — `DduBaseOptions`에 압축/암호화/체크섬 부가기능 옵션을 더합니다.
+ * `@ddunigma/node`/`@ddunigma/node/browser`는 adapter-backed 옵션을 비동기 메서드에서
+ * lazy secure로 처리하고, `@ddunigma/node/secure`는 sync/async secure 표면을 모두 제공합니다.
  */
 export interface DduSecureOptions extends DduBaseOptions {
   /** 압축 사용 여부 (zlib deflate 또는 brotli) */
@@ -222,8 +222,7 @@ export interface DduSecureOptions extends DduBaseOptions {
 
 /**
  * 하위호환 별칭. 6.0 이전 코드 및 코어 내부 시그니처가 사용하던 전 기능 런타임 옵션
- * 타입으로, secure 표면 전체(`DduSecureOptions`)와 동일합니다. 코어는 계속 전 기능
- * 타입으로 동작하며, 진입점별 공개 표면은 `DduBaseOptions`/`DduSecureOptions`로 분리됩니다.
+ * 타입으로, secure 표면 전체(`DduSecureOptions`)와 동일합니다.
  */
 export type DduOptions = DduSecureOptions;
 
@@ -252,8 +251,7 @@ export interface DduStreamOptions extends DduSecureOptions {
 }
 
 /**
- * 기본(Base) 생성자 옵션 — charset/padding/urlSafe 계열과 Base 런타임 옵션을 포함합니다.
- * 기본 진입점 래퍼(`Ddu64Node`/`Ddu64Browser`)의 생성자 표면입니다.
+ * 기본(Base) 생성자 옵션 — charset/padding/urlSafe 계열과 adapter-free 런타임 옵션을 포함합니다.
  */
 export interface DduBaseConstructorOptions extends DduBaseOptions {
   /** 미리 정의된 charset 심볼 (enum 멤버 또는 그 문자열 리터럴) */
@@ -295,7 +293,7 @@ export interface DduBaseConstructorOptions extends DduBaseOptions {
 
 /**
  * Secure 생성자 옵션 — Base 생성자 옵션 + Secure 런타임 옵션에 암호화 키/어댑터를 더한,
- * 코어가 사용하는 전 기능 생성자 표면입니다. secure 진입점 래퍼(`Ddu64Secure` 계열)가 사용합니다.
+ * 코어와 공개 래퍼가 사용하는 전 기능 생성자 표면입니다.
  */
 export interface DduSecureConstructorOptions extends DduBaseConstructorOptions, DduSecureOptions {
   /** 암호화 키 (AES-256-GCM) */

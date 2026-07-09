@@ -3,9 +3,9 @@
  *
  * 4개 진입점(`.`/`./browser`/`./secure`/`./core`)의 공개 표면을 검증한다:
  * - 각 진입점에서 `Ddu64`가 노출되고 obfuscate 옵션이 동작
+ * - 기본/브라우저 진입점에서 secure 옵션 타입은 받되, 어댑터/WebStreams는 노출하지 않음
+ * - 기본 진입점 비동기 메서드는 secure 옵션을 lazy secure로 처리
  * - secure 진입점에서 압축/암호화/체크섬과 어댑터/WebStreams 함수가 노출
- * - 기본/브라우저 진입점에서 NodeAdapter/BrowserAdapter/WebStreams가 노출되지 않음(이전 완료)
- * - 기본 진입점 타입에서 `encode(x, { compress: true })`가 컴파일 에러(@ts-expect-error)
  * - package.json exports['./secure'] 조건부 매핑이 올바른 빌드를 가리킴
  *
  * Requirements: 1.1, 1.2, 1.3, 2.1, 2.3, 2.4, 3.1, 4.1, 4.4, 6.3, 8.5
@@ -40,11 +40,28 @@ describe("진입점 import 스모크", () => {
       expect(keys).not.toContain("createReadableDecodeStream");
     });
 
-    it("기본 진입점 타입은 secure 옵션을 노출하지 않는다(컴파일 차단)", () => {
+    it("secure 옵션은 비동기에서 lazy secure로 동작하고 sync는 명시 경로를 안내한다", async () => {
       const ddu = new nodeEntry.Ddu64();
-      // @ts-expect-error compress는 DduBaseOptions에 없으므로 컴파일 에러여야 한다.
-      void (() => ddu.encode("x", { compress: true }));
-      expect(ddu).toBeInstanceOf(nodeEntry.Ddu64);
+      const input = "root lazy secure 압축 ".repeat(20);
+      const encoded = await ddu.encodeAsync(input, { compress: true, checksum: true });
+
+      expect(await ddu.decodeAsync(encoded, { compress: true, checksum: true })).toBe(input);
+      expect(() => ddu.encode(input, { compress: true })).toThrow(
+        /encodeAsync.*@ddunigma\/node\/secure/s,
+      );
+      // sync decode도 encode와 동일하게 명시 경로를 안내한다(가드 대칭).
+      expect(() => ddu.decode(encoded, { compress: true })).toThrow(
+        /encodeAsync.*@ddunigma\/node\/secure/s,
+      );
+    });
+
+    it("생성자 secure 옵션도 비동기에서 lazy secure로 동작한다", async () => {
+      const ddu = new nodeEntry.Ddu64({ encryptionKey: "root-lazy-key", checksum: true });
+      const input = "root lazy secure 암호화";
+      const encoded = await ddu.encodeAsync(input);
+
+      expect(await ddu.decodeAsync(encoded)).toBe(input);
+      expect(() => ddu.encode(input)).toThrow(/encodeAsync.*@ddunigma\/node\/secure/s);
     });
   });
 
@@ -60,6 +77,21 @@ describe("진입점 import 스모크", () => {
       expect(keys).not.toContain("BrowserAdapter");
       expect(keys).not.toContain("createReadableEncodeStream");
       expect(keys).not.toContain("createReadableDecodeStream");
+    });
+
+    it("adapter-backed sync 옵션은 async/secure 경로를 안내한다", () => {
+      const ddu = new browserEntry.Ddu64();
+      expect(() => ddu.encode("x", { compress: true })).toThrow(/encodeAsync/);
+    });
+
+    it("압축 옵션은 비동기에서 lazy secure로 라운드트립하고 통계도 산출한다", async () => {
+      const ddu = new browserEntry.Ddu64();
+      const input = "browser lazy secure 압축 ".repeat(20);
+      const encoded = await ddu.encodeAsync(input, { compress: true, checksum: true });
+
+      expect(await ddu.decodeAsync(encoded, { compress: true, checksum: true })).toBe(input);
+      const stats = await ddu.getStatsAsync(input, { compress: true });
+      expect(typeof stats.compressedSize).toBe("number");
     });
   });
 
