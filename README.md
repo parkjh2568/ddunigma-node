@@ -2,6 +2,8 @@
 
 [![npm version](https://badge.fury.io/js/@ddunigma%2Fnode.svg)](https://www.npmjs.com/package/@ddunigma/node)
 
+커스텀 charset을 사용하는 Base64 스타일 인코더/디코더 라이브러리입니다.
+
 V2 추가사항
 
 - 이제 한글 종성 결합 시스템을 활용하여 8개 기본 문자 × 8개 종성으로 64가지 조합을 만들어, 6비트를 한 글자로 표현합니다.
@@ -65,9 +67,6 @@ const encoded = ddu.encode("재미있는 난독화");
 const decoded = ddu.decode(encoded);
 ```
 
-키 없는 난독화는 암호화가 아닙니다. 동일 입력은 항상 동일 출력이 되어 기밀성·변조 방지를 제공하지
-않습니다.
-
 ## 압축, 암호화, 체크섬
 
 ```typescript
@@ -88,16 +87,7 @@ const encoded = ddu.encode("보호할 데이터");
 const decoded = ddu.decode(encoded);
 ```
 
-AES-256-GCM은 부가 기능입니다. 저엔트로피 키를 쓰면 애플리케이션 고유 `salt`와 높은
-`iterations`를 명시하세요.
-
 ## Reference
 
 전체 옵션, 커스텀 charset, URL-Safe, Web Streams, `/core` 고급 사용법은
 [docs/REFERENCE.md](docs/REFERENCE.md)를 보세요.
-
-## Migration notes
-
-6.0에서 압축/암호화/체크섬/Web Streams는 기본 진입점에서 `@ddunigma/node/secure`로 이동했습니다.
-WASM API(`preloadWasm`, `getWasmCodec`, `wasmThreshold`)는 제거됐습니다. 기존 wire format은 유지되어
-기존 데이터는 그대로 디코딩됩니다.

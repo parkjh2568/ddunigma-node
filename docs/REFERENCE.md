@@ -1,8 +1,5 @@
 # ddunigma Node Reference
 
-`@ddunigma/node` 6.0 상세 사용법입니다. README는 빠른 시작과 정체성 중심이고, 전체 옵션과 고급
-진입점 사용법은 이 문서가 기준입니다.
-
 ## 문자열과 바이너리
 
 ```typescript
@@ -53,21 +50,21 @@ charset 문자와 `paddingChar`는 각각 단일 UTF-16 코드 유닛이어야 �
 
 ### 공통 옵션
 
-| 옵션 | 타입 | 기본값 | 용도 |
-| --- | --- | --- | --- |
-| `compress` | `boolean` | `false` | 압축 사용 |
-| `compressionAlgorithm` | `"deflate" \| "brotli"` | `"deflate"` | 압축 알고리즘 |
-| `compressionLevel` | `number` | `6` | 압축 레벨 |
-| `checksum` | `boolean` | `false` | CRC32 체크섬 추가 및 검증 |
-| `checksumScope` | `"plaintext" \| "output"` | `"output"` | CRC32 계산 범위 |
-| `chunkSize` | `number` | 미사용 | 출력 문자열 분할 크기 |
-| `chunkSeparator` | `string` | `"\n"` | 청크 구분자 |
-| `maxDecodedBytes` | `number` | `67108864` | 최대 디코딩 바이트 수 |
-| `maxEncodedChars` | `number` | 비례 자동 산정 | 최대 디코딩 입력 문자열 길이 |
-| `maxDecompressedBytes` | `number` | `67108864` | 최대 압축 해제 바이트 수 |
-| `obfuscate` | `boolean` | `false` | 출력을 한글 음절로 난독화 |
-| `requireEncryption` | `boolean` | 키 사용 시 `true` | 키가 있는 decoder에서 평문 payload 거부 |
-| `onProgress` | `(info: DduProgressInfo) => void` | 미사용 | 처리 진행률 콜백 |
+| 옵션                   | 타입                              | 기본값            | 용도                                    |
+| ---------------------- | --------------------------------- | ----------------- | --------------------------------------- |
+| `compress`             | `boolean`                         | `false`           | 압축 사용                               |
+| `compressionAlgorithm` | `"deflate" \| "brotli"`           | `"deflate"`       | 압축 알고리즘                           |
+| `compressionLevel`     | `number`                          | `6`               | 압축 레벨                               |
+| `checksum`             | `boolean`                         | `false`           | CRC32 체크섬 추가 및 검증               |
+| `checksumScope`        | `"plaintext" \| "output"`         | `"output"`        | CRC32 계산 범위                         |
+| `chunkSize`            | `number`                          | 미사용            | 출력 문자열 분할 크기                   |
+| `chunkSeparator`       | `string`                          | `"\n"`            | 청크 구분자                             |
+| `maxDecodedBytes`      | `number`                          | `67108864`        | 최대 디코딩 바이트 수                   |
+| `maxEncodedChars`      | `number`                          | 비례 자동 산정    | 최대 디코딩 입력 문자열 길이            |
+| `maxDecompressedBytes` | `number`                          | `67108864`        | 최대 압축 해제 바이트 수                |
+| `obfuscate`            | `boolean`                         | `false`           | 출력을 한글 음절로 난독화               |
+| `requireEncryption`    | `boolean`                         | 키 사용 시 `true` | 키가 있는 decoder에서 평문 payload 거부 |
+| `onProgress`           | `(info: DduProgressInfo) => void` | 미사용            | 처리 진행률 콜백                        |
 
 `compress`/`compressionAlgorithm`/`compressionLevel`/`checksum`/`checksumScope`/
 `maxDecompressedBytes`/`requireEncryption`은 secure 진입점(`@ddunigma/node/secure`)에서만
@@ -78,20 +75,20 @@ Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코�
 
 ### 생성자 전용 옵션
 
-| 옵션 | 타입 | 기본값 | 용도 |
-| --- | --- | --- | --- |
-| `dduSetSymbol` | `DduSetSymbol \| "ddu" \| …` | `DDU` | 기본 charset 프리셋 선택 |
-| `dduChar` | `string \| string[]` | 프리셋 사용 | 커스텀 charset |
-| `codaChar` | `string[]` | 미사용 | 기본 문자와 조합할 한글 종성 |
-| `paddingChar` | `string` | 프리셋 사용 | 커스텀 패딩 문자 |
-| `requiredLength` | `number` | `64` | 필요한 charset 문자 수 |
-| `usePowerOfTwo` | `boolean` | 자동 결정 | 2의 제곱수 charset 직접 인덱스 모드 |
-| `useRepeatPadding` | `boolean` | 프리셋 설정 | 반복 패딩 방식 사용 |
-| `throwOnError` | `boolean` | `true` | 잘못된 charset 설정에서 예외 발생 |
-| `urlSafe` | `boolean` | `false` | URL-Safe 출력 변환 |
-| `encryptionKey` | `string` | 미사용 | AES-256-GCM 암호화 키 (secure 전용) |
-| `keyDerivation` | `KeyDerivationOptions` | `pbkdf2` | 암호화 키 파생 방식 (secure 전용) |
-| `adapter` | `PlatformAdapter` | 진입점 설정 | 플랫폼 어댑터 직접 주입 |
+| 옵션               | 타입                         | 기본값      | 용도                                |
+| ------------------ | ---------------------------- | ----------- | ----------------------------------- |
+| `dduSetSymbol`     | `DduSetSymbol \| "ddu" \| …` | `DDU`       | 기본 charset 프리셋 선택            |
+| `dduChar`          | `string \| string[]`         | 프리셋 사용 | 커스텀 charset                      |
+| `codaChar`         | `string[]`                   | 미사용      | 기본 문자와 조합할 한글 종성        |
+| `paddingChar`      | `string`                     | 프리셋 사용 | 커스텀 패딩 문자                    |
+| `requiredLength`   | `number`                     | `64`        | 필요한 charset 문자 수              |
+| `usePowerOfTwo`    | `boolean`                    | 자동 결정   | 2의 제곱수 charset 직접 인덱스 모드 |
+| `useRepeatPadding` | `boolean`                    | 프리셋 설정 | 반복 패딩 방식 사용                 |
+| `throwOnError`     | `boolean`                    | `true`      | 잘못된 charset 설정에서 예외 발생   |
+| `urlSafe`          | `boolean`                    | `false`     | URL-Safe 출력 변환                  |
+| `encryptionKey`    | `string`                     | 미사용      | AES-256-GCM 암호화 키 (secure 전용) |
+| `keyDerivation`    | `KeyDerivationOptions`       | `pbkdf2`    | 암호화 키 파생 방식 (secure 전용)   |
+| `adapter`          | `PlatformAdapter`            | 진입점 설정 | 플랫폼 어댑터 직접 주입             |
 
 ## 압축, 암호화, 체크섬
 
@@ -123,10 +120,6 @@ const decoded = ddu.decode(encoded);
 `encryptionKey`가 설정된 인스턴스는 기본적으로 암호화 footer가 없는 payload를 거부합니다.
 레거시 평문을 같은 인스턴스로 읽어야 하면 해당 decode 호출에 `requireEncryption: false`를
 명시합니다.
-
-> 보안 주의: AES-256-GCM 암호화는 부가 기능이며 단독 보안 솔루션이 아닙니다. 기본 PBKDF2는
-> 210k 반복 + 고정 기본 salt라 저엔트로피 키에는 부족합니다. 애플리케이션 고유 `salt`와 높은
-> `iterations`를 명시하세요.
 
 ## URL-Safe와 청크 분할
 
@@ -200,12 +193,12 @@ const asyncStats = await ddu.getStatsAsync("payload", { compress: true });
 
 ## 진입점
 
-| 진입점 | 노출 `Ddu64` | 기능 | 용도 |
-| --- | --- | --- | --- |
-| `@ddunigma/node` | `Ddu64Node` (lean) | 인코딩 + 한글 난독화 | 기본 — 재미 + 시각적 난독화 |
-| `@ddunigma/node/browser` | `Ddu64Browser` (lean) | 인코딩 + 한글 난독화 | 브라우저/Workers 기본 |
-| `@ddunigma/node/secure` | `Ddu64Secure` | 압축/암호화/체크섬/Web Streams + 난독화 | 보안·압축 배터리 |
-| `@ddunigma/node/core` | `Ddu64Core` | 순수 인코딩/디코딩 | 어댑터/난독 미포함 최소 번들 |
+| 진입점                   | 노출 `Ddu64`          | 기능                                    | 용도                         |
+| ------------------------ | --------------------- | --------------------------------------- | ---------------------------- |
+| `@ddunigma/node`         | `Ddu64Node` (lean)    | 인코딩 + 한글 난독화                    | 기본 — 재미 + 시각적 난독화  |
+| `@ddunigma/node/browser` | `Ddu64Browser` (lean) | 인코딩 + 한글 난독화                    | 브라우저/Workers 기본        |
+| `@ddunigma/node/secure`  | `Ddu64Secure`         | 압축/암호화/체크섬/Web Streams + 난독화 | 보안·압축 배터리             |
+| `@ddunigma/node/core`    | `Ddu64Core`           | 순수 인코딩/디코딩                      | 어댑터/난독 미포함 최소 번들 |
 
 ```typescript
 import { Ddu64 as NodeDdu64 } from "@ddunigma/node";
