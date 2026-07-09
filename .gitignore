@@ -5,7 +5,6 @@ package-lock.json
 coverage/
 test-decode.ts
 muyaho
-docs/
 # 커밋 메시지 임시 파일 등
 *.tmp
 .git-commit-msg.tmp

@@ -2,19 +2,12 @@
 
 [![npm version](https://badge.fury.io/js/@ddunigma%2Fnode.svg)](https://www.npmjs.com/package/@ddunigma/node)
 
-한글/커스텀 charset으로 문자열·바이너리를 가역 인코딩하는 zero-runtime-dependency 라이브러리입니다.
-기본 진입점은 인코딩 + 한글 난독화만 담은 lean 빌드입니다. 압축·암호화·체크섬·Web Streams는
-`@ddunigma/node/secure`로 분리했습니다.
+## Credits
 
-## 왜 쓰나
-
-- 한글처럼 보이는 reversible payload가 필요할 때.
-- 표준 Base64 말고 커스텀 charset 표현이 필요할 때.
-- 기본 번들은 가볍게 두고, 압축/암호화 기능은 필요한 사용자만 가져가게 하고 싶을 때.
-- Node/browser/Workers에서 같은 wire format을 유지해야 할 때.
-
-보안 저장소나 비밀번호 보호가 목적이면 전용 암호화 라이브러리를 쓰세요. 키 없는 난독화는 암호화가
-아닙니다.
+- Origin implementation by:
+  - [@i3ls](https://github.com/i3l3)
+  - [@gunu3371](https://github.com/gunu3371)
+- Original Repository: [ddunigma](https://github.com/i3l3/ddunigma)
 
 ## Requirements
 
@@ -44,12 +37,12 @@ dduV1.decode(".우땨땨이?땨뜌.이.뜌이?이!.우우땨이?우뜌.우땨뜌
 
 ## 진입점
 
-| 진입점 | 기능 | 용도 |
-| --- | --- | --- |
-| `@ddunigma/node` | 인코딩 + 한글 난독화 | Node 기본 lean |
-| `@ddunigma/node/browser` | 인코딩 + 한글 난독화 | 브라우저/Workers lean |
-| `@ddunigma/node/secure` | 압축/암호화/체크섬/Web Streams + 난독화 | 배터리 필요할 때 |
-| `@ddunigma/node/core` | 순수 인코딩/디코딩 | 최소 번들 |
+| 진입점                   | 기능                                    | 용도                  |
+| ------------------------ | --------------------------------------- | --------------------- |
+| `@ddunigma/node`         | 인코딩 + 한글 난독화                    | Node 기본 lean        |
+| `@ddunigma/node/browser` | 인코딩 + 한글 난독화                    | 브라우저/Workers lean |
+| `@ddunigma/node/secure`  | 압축/암호화/체크섬/Web Streams + 난독화 | 배터리 필요할 때      |
+| `@ddunigma/node/core`    | 순수 인코딩/디코딩                      | 최소 번들             |
 
 ```typescript
 import { Ddu64 as NodeDdu64 } from "@ddunigma/node";
@@ -104,10 +97,3 @@ AES-256-GCM은 부가 기능입니다. 저엔트로피 키를 쓰면 애플리�
 6.0에서 압축/암호화/체크섬/Web Streams는 기본 진입점에서 `@ddunigma/node/secure`로 이동했습니다.
 WASM API(`preloadWasm`, `getWasmCodec`, `wasmThreshold`)는 제거됐습니다. 기존 wire format은 유지되어
 기존 데이터는 그대로 디코딩됩니다.
-
-## Credits
-
-- Origin implementation by:
-  - [@i3ls](https://github.com/i3l3)
-  - [@gunu3371](https://github.com/gunu3371)
-- Original Repository: [ddunigma](https://github.com/i3l3/ddunigma)
