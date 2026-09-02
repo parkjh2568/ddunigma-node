@@ -5,6 +5,7 @@
  */
 
 import { calculateCRC32, normalizeCompressionLevel, stringToBytes } from "../codecUtils.js";
+import { Ddu64InvalidInputError } from "../errors.js";
 import type { DduInternalOptions, DduProgressInfo } from "../types.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
@@ -181,7 +182,7 @@ function resolveEncodeSettings(
   chunkSize: number | undefined;
   chunkSeparator: string;
 } {
-  return {
+  const settings = {
     shouldCompress: options?.compress ?? context.defaultCompress,
     shouldChecksum: options?.checksum ?? context.defaultChecksum,
     checksumScope: options?.checksumScope ?? context.defaultChecksumScope,
@@ -189,6 +190,17 @@ function resolveEncodeSettings(
     chunkSize: options?.chunkSize ?? context.defaultChunkSize,
     chunkSeparator: options?.chunkSeparator ?? context.defaultChunkSeparator,
   };
+  if (
+    settings.chunkSize !== undefined &&
+    settings.chunkSize > 0 &&
+    settings.chunkSeparator === ""
+  ) {
+    throw new Ddu64InvalidInputError(
+      "[Ddu64 options] Invalid chunkSeparator must not be empty when chunkSize is enabled.",
+      "encode",
+    );
+  }
+  return settings;
 }
 
 function reportStart(context: EncodePipelineBaseContext, totalBytes: number): void {

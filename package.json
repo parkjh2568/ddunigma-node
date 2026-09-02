@@ -1,6 +1,6 @@
 {
   "name": "@ddunigma/node",
-  "version": "6.1.0",
+  "version": "6.1.1",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -19,7 +19,8 @@
     "gen:scoped-checksum-vectors": "node --import tsx scripts/gen-scoped-checksum-vectors.ts",
     "pack:check": "node scripts/verify-pack.mjs",
     "smoke": "node scripts/runtime-smoke.mjs",
-    "verify": "pnpm typecheck && pnpm lint && pnpm knip && pnpm build && pnpm test:coverage && pnpm size && pnpm pack:check && pnpm smoke",
+    "smoke:web": "node scripts/runtime-web-smoke.mjs",
+    "verify": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm knip && pnpm build && pnpm test:coverage && pnpm size && pnpm pack:check && pnpm smoke && pnpm smoke:web",
     "prepublishOnly": "pnpm verify",
     "knip": "knip",
     "size": "size-limit",
@@ -27,9 +28,10 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "lint": "eslint --max-warnings=0 src scripts eslint.config.mjs tsup.config.ts vitest.config.ts",
-    "lint:fix": "eslint --max-warnings=0 src scripts eslint.config.mjs tsup.config.ts vitest.config.ts --fix",
-    "format": "prettier --write src/"
+    "lint": "eslint --max-warnings=0 src test scripts benchmarks eslint.config.mjs tsup.config.ts vitest.config.ts",
+    "lint:fix": "eslint --max-warnings=0 src test scripts benchmarks eslint.config.mjs tsup.config.ts vitest.config.ts --fix",
+    "format": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore",
+    "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore"
   },
   "exports": {
     ".": {
@@ -130,6 +132,7 @@
   },
   "files": [
     "CHANGELOG.md",
+    "CONTRIBUTING.md",
     "ROADMAP.md",
     "docs/REFERENCE.md",
     "dist",
@@ -139,12 +142,16 @@
     "type": "git",
     "url": "git+https://github.com/parkjh2568/ddunigma-node.git"
   },
+  "homepage": "https://github.com/parkjh2568/ddunigma-node#readme",
+  "bugs": {
+    "url": "https://github.com/parkjh2568/ddunigma-node/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
   "author": "parkjh2568",
   "license": "BSD-2-Clause",
-  "description": "ddunigma",
+  "description": "Zero-dependency custom-charset codec with reversible Hangul obfuscation and optional compression and encryption",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@size-limit/preset-small-lib": "^12.1.0",
@@ -164,15 +171,14 @@
     "vitest": "^4.1.8"
   },
   "keywords": [
-    "ddu",
-    "enigma",
-    "Base64",
-    "base conversion",
-    "base64 encode",
-    "base64 decode",
-    "base64_encode",
-    "base64_decode",
-    "encode",
-    "decode"
+    "base64",
+    "codec",
+    "compression",
+    "custom-charset",
+    "encoding",
+    "hangul",
+    "obfuscation",
+    "typescript",
+    "zero-dependency"
   ]
 }

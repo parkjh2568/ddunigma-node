@@ -1,26 +1,26 @@
 {
-    "compilerOptions": {
-      "target": "ES2022",
-      "allowJs": true,
-      "allowSyntheticDefaultImports": true,
-      "baseUrl": "src",
-      "declaration": true,
-      "esModuleInterop": true,
-      "inlineSourceMap": false,
-      "listEmittedFiles": false,
-      "listFiles": false,
-      "moduleResolution": "bundler",
-      "noFallthroughCasesInSwitch": true,
-      "noUnusedLocals": true,
-      "noUnusedParameters": true,
-      "pretty": true,
-      "resolveJsonModule": true,
-      "rootDir": "src",
-      "skipLibCheck": true,
-      "strict": true,
-      "traceResolution": false
-    },
-    "compileOnSave": false,
-    "exclude": ["node_modules", "dist", "src/test", "**/*.test.ts", "**/*.spec.ts"],
-    "include": ["src"]
-  }
+  "compilerOptions": {
+    "target": "ES2022",
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": "src",
+    "declaration": true,
+    "esModuleInterop": true,
+    "inlineSourceMap": false,
+    "listEmittedFiles": false,
+    "listFiles": false,
+    "moduleResolution": "bundler",
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "pretty": true,
+    "resolveJsonModule": true,
+    "rootDir": "src",
+    "skipLibCheck": true,
+    "strict": true,
+    "traceResolution": false
+  },
+  "compileOnSave": false,
+  "exclude": ["node_modules", "dist", "test", "**/*.test.ts", "**/*.spec.ts"],
+  "include": ["src"]
+}

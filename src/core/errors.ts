@@ -146,10 +146,7 @@ export function wrapDdu64Error(
   error: unknown,
   fallbackOperation: "encode" | "decode" | "stream",
 ): Ddu64Error {
-  // 내부 모듈은 발생 지점에서 도메인 타입 에러(Ddu64XxxError)를 직접 throw하므로,
-  // 여기서는 이미 타입화된 에러를 그대로 통과시키고, 외부/예기치 못한 에러만 operation
-  // 기반 fallback으로 감쌉니다. (과거의 메시지 키워드 추측 분류는 제거됨 — 분류 책임은
-  // 단일 진실 소스인 발생 지점에 있습니다.)
+  // 도메인 에러는 발생 지점에서 분류하고, 외부 또는 예기치 못한 에러만 operation 기준으로 감쌉니다.
   if (isDdu64Error(error)) return error;
 
   const message = toErrorMessage(error);

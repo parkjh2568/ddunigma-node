@@ -2,8 +2,7 @@
  * 난독화 레이어를 위한 한글 음절 매핑 유틸리티.
  *
  * 한국어 음절 블록 범위 U+AC00–U+D7A3에는 11,172개의 조합형 음절이 포함됩니다.
- * 이 모듈은 임의의 입력 알파벳과 한글 음절 간의 결정론적 전단사 매핑을 제공하며,
- * 출력 빈도를 균등하게 분배합니다.
+ * 이 모듈은 입력 알파벳별로 가역 변환에 사용할 연속 음절 범위를 구성합니다.
  *
  * 플랫폼 독립적: Node.js 임포트 없음.
  *
@@ -70,52 +69,4 @@ export function buildSyllableMap(alphabet: string[]): SyllableMapConfig {
     syllablesPerChar,
     charToIndex,
   };
-}
-
-/**
- * 입력 문자를 한글 음절에 매핑합니다.
- *
- * 알파벳에서의 문자 인덱스와 문자열 내 위치를 사용하여
- * 문자의 할당된 범위에서 특정 음절을 선택합니다.
- * 이를 통해 범위 전체에 걸쳐 균등한 출력 빈도 분포를 보장합니다.
- *
- * @param charIndex - 알파벳에서의 문자 인덱스
- * @param position - 입력 문자열에서의 문자 위치 (분포용)
- * @param config - 음절 맵 설정
- * @returns 선택된 한글 음절의 코드 포인트
- */
-export function charToSyllable(
-  charIndex: number,
-  position: number,
-  config: SyllableMapConfig,
-): number {
-  const rangeStart = HANGUL_SYLLABLE_START + charIndex * config.syllablesPerChar;
-  // 균등 분포를 위해 위치를 사용하여 범위 내에서 선택
-  const offset = position % config.syllablesPerChar;
-  return rangeStart + offset;
-}
-
-/**
- * 한글 음절을 원래 문자 인덱스로 역매핑합니다.
- *
- * 음절이 어떤 문자의 범위에 속하는지 판별합니다.
- *
- * @param codePoint - 한글 음절의 코드 포인트
- * @param config - 음절 맵 설정
- * @returns 알파벳에서의 원래 문자 인덱스, 유효하지 않으면 -1
- */
-export function syllableToCharIndex(codePoint: number, config: SyllableMapConfig): number {
-  if (codePoint < HANGUL_SYLLABLE_START || codePoint > HANGUL_SYLLABLE_END) {
-    return -1;
-  }
-
-  const offset = codePoint - HANGUL_SYLLABLE_START;
-  const charIndex = Math.floor(offset / config.syllablesPerChar);
-
-  // 음절이 유효한 매핑 범위 내에 있는지 확인
-  if (charIndex >= config.alphabet.length) {
-    return -1;
-  }
-
-  return charIndex;
 }

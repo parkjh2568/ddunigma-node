@@ -12,7 +12,10 @@ import {
   PIPELINE_V4_MARKER,
 } from "../wireFormat.js";
 
-export function buildObfuscationAlphabet(dduChar: readonly string[], paddingChar: string): string[] {
+export function buildObfuscationAlphabet(
+  dduChar: readonly string[],
+  paddingChar: string,
+): string[] {
   const alphabetSet = new Set<string>(dduChar);
   alphabetSet.add(paddingChar);
 

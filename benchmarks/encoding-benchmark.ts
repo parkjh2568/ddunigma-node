@@ -75,13 +75,12 @@ function inputToBytes(input: Uint8Array | string): Uint8Array {
 function withoutNativeBase64<T>(disabled: boolean | undefined, fn: () => T): T {
   if (!disabled) return fn();
 
-  const globals = globalThis as typeof globalThis & { Buffer?: unknown };
-  const originalBuffer = globals.Buffer;
+  const originalBuffer = globalThis.Buffer;
   try {
-    globals.Buffer = undefined;
+    Reflect.set(globalThis, "Buffer", undefined);
     return fn();
   } finally {
-    globals.Buffer = originalBuffer;
+    Reflect.set(globalThis, "Buffer", originalBuffer);
   }
 }
 

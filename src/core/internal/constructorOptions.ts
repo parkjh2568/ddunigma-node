@@ -1,8 +1,4 @@
-/**
- * Shared constructor overload helper for Ddu64 wrappers.
- *
- * @module core/internal/constructorOptions
- */
+/** Constructor overload argument normalization. @module core/internal/constructorOptions */
 
 import type { DduConstructorOptions } from "../types.js";
 
@@ -32,4 +28,3 @@ export function resolveConstructorArgs(
 
   return { dduChar, paddingChar, dduOptions };
 }
-

@@ -8,12 +8,20 @@
  */
 
 import type { PlatformAdapter } from "../types.js";
-import { Ddu64AdapterError } from "../errors.js";
+import {
+  Ddu64AdapterError,
+  Ddu64CompressionError,
+  Ddu64DecompressionError,
+  Ddu64DecryptionError,
+  Ddu64EncryptionError,
+  isDdu64Error,
+  toErrorMessage,
+} from "../errors.js";
 import type { AdapterGatewayContext } from "./AdapterGatewayContext.js";
 
 type SyncGatewayOperation = "encode" | "decode";
 
-export function requireSyncAdapter(
+function requireSyncAdapter(
   adapter: PlatformAdapter | undefined,
   operation: SyncGatewayOperation,
 ): PlatformAdapter {
@@ -28,86 +36,106 @@ export function requireSyncAdapter(
   return adapter;
 }
 
-export function encryptSyncWithAdapter(
+export function runEncryptSync(
   context: AdapterGatewayContext,
   data: Uint8Array,
   aad?: Uint8Array,
 ): Uint8Array {
-  const adapter = requireSyncAdapter(context.adapter, "encode");
-  if (!adapter.encryptSync) {
-    throw new Ddu64AdapterError(
-      "[Ddu64 encrypt] Sync encryption unavailable. Use encodeAsync() in browser environments.",
-      "encode",
-    );
+  try {
+    const adapter = requireSyncAdapter(context.adapter, "encode");
+    if (!adapter.encryptSync) {
+      throw new Ddu64AdapterError(
+        "[Ddu64 encrypt] Sync encryption unavailable. Use encodeAsync() in browser environments.",
+        "encode",
+      );
+    }
+    const keyHash = getSyncKeyHash(context, adapter, "encrypt", "encode");
+    return adapter.encryptSync(data, keyHash, aad);
+  } catch (err) {
+    if (isDdu64Error(err)) throw err;
+    throw new Ddu64EncryptionError(toErrorMessage(err), err);
   }
-  const keyHash = getSyncKeyHash(context, adapter, "encrypt", "encode");
-  return adapter.encryptSync(data, keyHash, aad);
 }
 
-export function decryptSyncWithAdapter(
+export function runDecryptSync(
   context: AdapterGatewayContext,
   data: Uint8Array,
   aad?: Uint8Array,
 ): Uint8Array {
-  const adapter = requireSyncAdapter(context.adapter, "decode");
-  if (!adapter.decryptSync) {
-    throw new Ddu64AdapterError(
-      "[Ddu64 decrypt] Sync decryption unavailable. Use decodeAsync() in browser environments.",
-      "decode",
-    );
+  try {
+    const adapter = requireSyncAdapter(context.adapter, "decode");
+    if (!adapter.decryptSync) {
+      throw new Ddu64AdapterError(
+        "[Ddu64 decrypt] Sync decryption unavailable. Use decodeAsync() in browser environments.",
+        "decode",
+      );
+    }
+    const keyHash = getSyncKeyHash(context, adapter, "decrypt", "decode");
+    return adapter.decryptSync(data, keyHash, aad);
+  } catch (err) {
+    if (isDdu64Error(err)) throw err;
+    throw new Ddu64DecryptionError(toErrorMessage(err), err);
   }
-  const keyHash = getSyncKeyHash(context, adapter, "decrypt", "decode");
-  return adapter.decryptSync(data, keyHash, aad);
 }
 
-export function compressSyncWithAdapter(
+export function runCompressSync(
   adapter: PlatformAdapter | undefined,
   data: Uint8Array,
   algorithm: "deflate" | "brotli",
   level: number,
 ): Uint8Array {
-  const syncAdapter = requireSyncAdapter(adapter, "encode");
-  if (algorithm === "brotli") {
-    if (!syncAdapter.brotliCompressSync) {
+  try {
+    const syncAdapter = requireSyncAdapter(adapter, "encode");
+    if (algorithm === "brotli") {
+      if (!syncAdapter.brotliCompressSync) {
+        throw new Ddu64AdapterError(
+          "[Ddu64 compress] Brotli compression is unavailable in the current runtime.",
+          "encode",
+        );
+      }
+      return syncAdapter.brotliCompressSync(data, level);
+    }
+    if (!syncAdapter.deflateSync) {
       throw new Ddu64AdapterError(
-        "[Ddu64 compress] Brotli compression is unavailable in the current runtime.",
+        "[Ddu64 compress] Sync compression unavailable. Use encodeAsync() in browser environments.",
         "encode",
       );
     }
-    return syncAdapter.brotliCompressSync(data, level);
+    return syncAdapter.deflateSync(data, level);
+  } catch (err) {
+    if (isDdu64Error(err)) throw err;
+    throw new Ddu64CompressionError(toErrorMessage(err), err);
   }
-  if (!syncAdapter.deflateSync) {
-    throw new Ddu64AdapterError(
-      "[Ddu64 compress] Sync compression unavailable. Use encodeAsync() in browser environments.",
-      "encode",
-    );
-  }
-  return syncAdapter.deflateSync(data, level);
 }
 
-export function decompressSyncWithAdapter(
+export function runDecompressSync(
   adapter: PlatformAdapter | undefined,
   data: Uint8Array,
   algorithm: "deflate" | "brotli",
   maxBytes: number,
 ): Uint8Array {
-  const syncAdapter = requireSyncAdapter(adapter, "decode");
-  if (algorithm === "brotli") {
-    if (!syncAdapter.brotliDecompressSync) {
+  try {
+    const syncAdapter = requireSyncAdapter(adapter, "decode");
+    if (algorithm === "brotli") {
+      if (!syncAdapter.brotliDecompressSync) {
+        throw new Ddu64AdapterError(
+          "[Ddu64 decompress] Brotli decompression is unavailable in the current runtime.",
+          "decode",
+        );
+      }
+      return syncAdapter.brotliDecompressSync(data, maxBytes);
+    }
+    if (!syncAdapter.inflateSync) {
       throw new Ddu64AdapterError(
-        "[Ddu64 decompress] Brotli decompression is unavailable in the current runtime.",
+        "[Ddu64 decompress] Sync decompression unavailable. Use decodeAsync() in browser environments.",
         "decode",
       );
     }
-    return syncAdapter.brotliDecompressSync(data, maxBytes);
+    return syncAdapter.inflateSync(data, maxBytes);
+  } catch (err) {
+    if (isDdu64Error(err)) throw err;
+    throw new Ddu64DecompressionError(toErrorMessage(err), err);
   }
-  if (!syncAdapter.inflateSync) {
-    throw new Ddu64AdapterError(
-      "[Ddu64 decompress] Sync decompression unavailable. Use decodeAsync() in browser environments.",
-      "decode",
-    );
-  }
-  return syncAdapter.inflateSync(data, maxBytes);
 }
 
 function getSyncKeyHash(

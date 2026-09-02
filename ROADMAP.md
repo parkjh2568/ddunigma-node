@@ -7,7 +7,7 @@ envelope, ⑤ 프레임드 스트리밍 `DDS2`) 모두 검토·시제 구현 후
 
 ---
 
-## ④ 암호화 KDF envelope v5 (self-describing KDF) — ❌ 제외 (범위 밖)
+## ④ 암호화 KDF envelope v5 (self-describing KDF) - 제외 (범위 밖)
 
 > 결정: **구현하지 않음.** opt-in(`encryptionVersion: 5`)으로 한 차례 구현했다가 되돌렸다.
 > 이유: 자기기술 KDF envelope는 **인코딩 유틸리티의 정체성과 미스매치**다. 새로운 영구
@@ -22,7 +22,7 @@ envelope, ⑤ 프레임드 스트리밍 `DDS2`) 모두 검토·시제 구현 후
 
 ---
 
-## ⑤ 진짜 스트리밍 (프레임드 와이어 포맷 `DDS2`) — ❌ 제외 (범위 밖, 제거됨)
+## ⑤ 진짜 스트리밍 (프레임드 와이어 포맷 `DDS2`) - 제외 (범위 밖, 제거됨)
 
 > 결정: **구현하지 않음(제거 완료).** opt-in(`createFramedEncodeStream`/`createFramedDecodeStream`,
 > `src/streams/FramedStreams.ts`)으로 한 차례 구현했다가 ④ v5 KDF와 같은 이유로 되돌렸다.
@@ -58,18 +58,20 @@ envelope, ⑤ 프레임드 스트리밍 `DDS2`) 모두 검토·시제 구현 후
 > 영구 포맷을 늘리지 않는다(V4 페이로드/DDS1 스트림 헤더 불변). 따라서 분리·폐기 없이 전부
 > 유지한다.
 >
-> 진입점 구성은 4종으로 고정한다: 기본(`@ddunigma/node`, lean = 인코딩+난독화),
-> `@ddunigma/node/browser`(lean), `@ddunigma/node/secure`(배터리 풀세트),
-> `@ddunigma/node/core`(순수 인코딩). lean 진입점은 어댑터(zlib/crypto)를 정적 import하지 않아
-> 트리셰이킹되고, secure 진입점에만 배터리가 포함된다. 이 분리로 "경량 기본 + 필요 시 배터리"를
-> 동시에 만족한다.
+> 진입점 구성은 4종으로 고정한다. 기본 `@ddunigma/node`와 `/browser`는 codec·체크섬·난독화를
+> 동기로 처리하고, 비동기 압축·암복호화가 실제 실행될 때만 현재 core에 플랫폼 adapter를 동적
+> import·주입한다. `/secure`는 adapter를 정적으로 포함해 Node 동기 secure API와 Web Streams,
+> adapter export를 제공한다. `/core`는 구체 adapter와 난독화 구현을 포함하지 않는 직접 주입용
+> 표면이다. 이 구조는 단일 root API의 편의성과 미사용 adapter의 정적 번들 비용 회피를 함께
+> 유지한다.
 >
-> 비고: lean 진입점 번들 여유가 빠듯하므로(size-limit 예산 근접) **신규 기능은 secure/core
-> 쪽에 싣고 lean 경로는 가볍게 유지**한다.
+> 비고: root의 lazy adapter는 별도 secure 인스턴스를 만들지 않으며 첫 동시 import Promise를
+> 공유한다. 동기 압축·암호화는 동적 import와 양립할 수 없으므로 `/secure`의 명시적 역할로 둔다.
+> 신규 기능은 wire format·정적 import 그래프·size-limit에 미치는 영향을 함께 검토한다.
 
 ---
 
-## 인코딩 성능 최적화 — ✅ 완료 (출력 불변)
+## 인코딩 성능 최적화 - 완료 (출력 불변)
 
 > `encoding-perf-optimization` 스펙으로 한글/커스텀 charset hot path를 최적화했다. `bitLength 6/8`
 > 직접 매핑 언롤 융합으로 인코드 `packPow2ToString` ~40→~183 MB/s(약 4.5x), 디코드
@@ -89,4 +91,3 @@ envelope, ⑤ 프레임드 스트리밍 `DDS2`) 모두 검토·시제 구현 후
 - 경량 인코더 정체성에 부합하지 않는 대형 기능은 애플리케이션 레벨/전용 라이브러리로 위임한다.
 - secure 진입점의 현행 배터리(압축/암호화/체크섬/Web Streams)는 전부 유지한다(신규 영구 포맷을
   늘리지 않으므로 ④⑤ 제외 논리와 충돌하지 않음).
-- 제거된 기능(⑤ DDS2)의 스펙 아티팩트(`.kiro/specs/dds2-true-streaming/`)는 정리했다.

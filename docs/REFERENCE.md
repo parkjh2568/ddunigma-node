@@ -66,8 +66,13 @@ charset 문자와 `paddingChar`는 각각 단일 UTF-16 코드 유닛이어야 �
 | `requireEncryption`    | `boolean`                         | 키 사용 시 `true` | 키가 있는 decoder에서 평문 payload 거부 |
 | `onProgress`           | `(info: DduProgressInfo) => void` | 미사용            | 처리 진행률 콜백                        |
 
-`@ddunigma/node`와 `@ddunigma/node/browser`는 adapter-backed 옵션(`compress`,
-`encryptionKey`)이 켜진 비동기 encode/decode 호출에서만 secure 래퍼를 동적 import합니다. 동기
+`maxEncodedChars`의 자동값은 `maxDecodedBytes * 4 + 1024`입니다. 호출 옵션에서
+`maxDecodedBytes`를 더 작게 지정하면 명시적인 `maxEncodedChars`가 없는 한 원시 입력 상한도
+함께 낮아집니다. `chunkSize: 1`과 긴 사용자 구분자처럼 조밀한 청킹을 사용한다면
+`maxEncodedChars`를 별도로 지정하세요.
+
+`@ddunigma/node`와 `@ddunigma/node/browser`는 비동기 파이프라인이 실제 압축·암복호화
+단계에 도달할 때만 플랫폼 adapter를 동적 import해 현재 core에 주입합니다. 동기
 압축/암호화는 `@ddunigma/node/secure`를 사용하세요. `checksum`/`checksumScope`/청킹/
 난독화는 플랫폼 어댑터 없이도 동작합니다.
 
@@ -116,11 +121,13 @@ const decoded = await ddu.decodeAsync(encoded);
 ```
 
 동기 압축/암호화나 Web Streams가 필요하면 `@ddunigma/node/secure`를 사용합니다.
-호출 옵션으로 `compress: true`를 켰다면 decode 쪽에도 `compress: true`를 전달해야 기본
-진입점의 lazy adapter가 켜집니다. 생성자 기본값으로 두면 반복 전달하지 않아도 됩니다.
+압축 여부와 알고리즘은 footer에서 판별하므로 decode 쪽에 `compress` 옵션을 반복할
+필요가 없습니다.
 
 복호화에는 인코딩에 사용한 `encryptionKey`와 키 파생 설정(`algorithm`/`salt`/`iterations`)이
 동일하게 필요합니다. 키 파생 파라미터는 wire format에 기록되지 않습니다.
+저엔트로피 비밀번호를 사용하면 application-specific `salt`와 명시적 PBKDF2 iteration을
+설정하세요. 기본 210,000회·고정 fallback salt는 기존 데이터 호환을 위해 유지됩니다.
 
 `encryptionKey`가 설정된 인스턴스는 기본적으로 암호화 footer가 없는 payload를 거부합니다.
 레거시 평문을 같은 인스턴스로 읽어야 하면 해당 decode 호출에 `requireEncryption: false`를
@@ -141,8 +148,9 @@ const decoded = ddu.decode(encoded);
 
 ## 한글 난독화
 
-난독화는 암호화 키 없이 기본 진입점에서 바로 사용할 수 있습니다. 인코딩 결과 전체를 한글 음절
-블록(U+AC00–U+D7A3)으로 가역 변환합니다.
+난독화는 암호화 키 없이 기본 진입점에서 바로 사용할 수 있습니다. charset payload를
+한글 음절 블록(U+AC00–U+D7A3)으로 1:1 가역 변환합니다. Checksum을 함께 사용하면
+checksum marker와 값은 난독화 밖의 ASCII suffix로 남습니다.
 
 ```typescript
 import { Ddu64 } from "@ddunigma/node";
@@ -152,14 +160,14 @@ const encoded = ddu.encode("재미있는 난독화");
 const decoded = ddu.decode(encoded);
 ```
 
-키 없는 난독화는 암호화가 아닙니다. 기밀성이 필요하면 secure 진입점에서 `encryptionKey`와 함께
-`obfuscate`를 쓰세요.
+키 없는 난독화는 암호화가 아니며 입력 빈도를 숨기지 않습니다. 기밀성이 필요하면
+`encryptionKey`와 함께 사용하세요.
 
 ## 브라우저와 Workers
 
-기본 브라우저 진입점(`@ddunigma/node/browser`)은 인코딩 + 난독화(lean)를 제공합니다.
-브라우저에서 압축/암호화가 필요하면 기본 브라우저 진입점의 비동기 메서드를 쓰면 됩니다.
-해당 옵션이 켜진 호출에서만 secure 브라우저 래퍼(WebCrypto·CompressionStream 기반)를
+기본 브라우저 진입점(`@ddunigma/node/browser`)은 codec·체크섬·난독화를 동기로 제공합니다.
+브라우저에서 압축/암호화가 필요하면 같은 진입점의 비동기 메서드를 쓰면 됩니다.
+해당 연산이 실제로 필요한 시점에만 BrowserAdapter(WebCrypto·CompressionStream 기반)를
 동적 import합니다.
 
 ```typescript
@@ -194,16 +202,17 @@ const stats = ddu.getStats("payload");
 const asyncStats = await ddu.getStatsAsync("payload", { compress: true });
 ```
 
-브라우저에서 압축 통계나 Web Streams가 필요하면 `@ddunigma/node/secure`를 사용합니다.
+브라우저의 압축 통계는 root의 `getStatsAsync`를 사용합니다. Web Streams는
+`@ddunigma/node/secure`를 사용합니다.
 
 ## 진입점
 
-| 진입점                   | 노출 `Ddu64`     | 기능                                      | 용도                         |
-| ------------------------ | ---------------- | ----------------------------------------- | ---------------------------- |
-| `@ddunigma/node`         | `Ddu64Node`      | 인코딩 + 난독화, async encode/decode secure lazy | Node 기본              |
-| `@ddunigma/node/browser` | `Ddu64Browser`   | 인코딩 + 난독화, async encode/decode secure lazy | 브라우저/Workers 기본  |
-| `@ddunigma/node/secure`  | `Ddu64Secure`    | sync/async 압축/암호화/체크섬/Web Streams | 보안·압축 배터리 명시 사용   |
-| `@ddunigma/node/core`    | `Ddu64Core`      | 순수 인코딩/디코딩                        | 어댑터/난독 미포함 최소 번들 |
+| 진입점                   | 노출 `Ddu64`                                       | 기능                                       | 용도                         |
+| ------------------------ | -------------------------------------------------- | ------------------------------------------ | ---------------------------- |
+| `@ddunigma/node`         | `Ddu64Node`                                        | codec/checksum/난독화 + async adapter lazy | Node 기본                    |
+| `@ddunigma/node/browser` | `Ddu64Browser`                                     | codec/checksum/난독화 + async adapter lazy | 브라우저/Workers 기본        |
+| `@ddunigma/node/secure`  | Node: `Ddu64Secure`, browser: `Ddu64SecureBrowser` | sync/async 압축/암호화/체크섬/Web Streams  | 보안·압축 배터리 명시 사용   |
+| `@ddunigma/node/core`    | `Ddu64Core`                                        | 플랫폼 독립 codec/checksum                 | 어댑터/난독 미포함 최소 번들 |
 
 ```typescript
 import { Ddu64 as NodeDdu64 } from "@ddunigma/node";
@@ -220,21 +229,20 @@ import { Ddu64 as CoreDdu64 } from "@ddunigma/node/core";
 ```typescript
 import { Ddu64Core, DduSetSymbol } from "@ddunigma/node/core";
 
-const enc = new Ddu64Core(undefined, undefined, { dduSetSymbol: DduSetSymbol.DDU });
+const enc = new Ddu64Core({ dduSetSymbol: DduSetSymbol.DDU });
 const encoded = enc.encode("hello");
 const decoded = enc.decode(encoded);
 ```
 
-`/core`에서 압축·암호화를 쓰려면 `adapter`(또는 `adapterFactory`)를, 난독화를 쓰려면
-`obfuscationLayerFactory`를 직접 주입하세요.
+`/core`에서 압축·암호화를 쓰려면 공개 `PlatformAdapter`를 `adapter`로 직접 주입하세요.
+난독화까지 필요하면 내부 팩토리를 주입하기보다 root 진입점을 사용하는 편이 안정적입니다.
 
 ```typescript
 import { Ddu64Core } from "@ddunigma/node/core";
-import { NodeAdapter, HangulObfuscationLayer } from "@ddunigma/node/secure";
+import { NodeAdapter } from "@ddunigma/node/secure";
 
-const enc = new Ddu64Core(undefined, undefined, {
+const enc = new Ddu64Core({
   encryptionKey: "secret",
-  adapterFactory: () => new NodeAdapter(),
-  obfuscationLayerFactory: (alphabet) => new HangulObfuscationLayer(alphabet),
+  adapter: new NodeAdapter(),
 });
 ```

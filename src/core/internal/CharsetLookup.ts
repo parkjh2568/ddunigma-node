@@ -18,7 +18,7 @@ const predefinedLookupCache = new Map<string, CharsetLookupTables>();
  *
  * 테이블 길이는 charset의 [최소, 최대] 코드 유닛 범위로 맞추고(`maxCode - minCode + 1`),
  * 조회는 `lookup[code - lookupOffset]`로 수행합니다. 클러스터된 charset(예: 한글 종성
- * 결합 64자)에서 테이블 크기가 크게 줄어듭니다(이전엔 `maxCode + 1` 크기였음).
+ * 결합 64자)에서도 작은 룩업 테이블을 유지합니다.
  * 범위를 벗어나는 코드 유닛은 lookupCharIndex가 -1로 처리합니다.
  *
  * @param charset - 단일 BMP 심볼 charset

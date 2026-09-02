@@ -71,12 +71,25 @@ export function runDecodePrelude(
   let workingInput = input;
   context.reportDecodeStart(input.length);
 
+  const maxDecodedBytes = normalizeLimit(
+    options?.maxDecodedBytes,
+    context.defaultMaxDecodedBytes,
+    true,
+    "maxDecodedBytes",
+  );
+
   // 전처리(청크/개행 제거, URL-safe 역변환, 문자열 복사) 이전에 입력 길이를 선검사합니다.
-  // 개행만 가득한 거대한 입력이 출력 한도(maxDecodedBytes)를 우회하면서 대량 문자열
-  // 복사/스캔을 유발하는 것을 차단합니다.
+  // 호출 단위로 maxDecodedBytes를 낮추면 명시적인 maxEncodedChars가 없는 한 원시 입력
+  // 상한도 함께 낮아집니다.
   const maxEncodedChars = normalizeLimit(
     options?.maxEncodedChars,
-    context.defaultMaxEncodedChars,
+    maxDecodedBytes === Number.POSITIVE_INFINITY
+      ? context.defaultMaxEncodedChars
+      : Math.min(
+          context.defaultMaxEncodedChars,
+          Number.MAX_SAFE_INTEGER,
+          maxDecodedBytes * 4 + 1024,
+        ),
     true,
     "maxEncodedChars",
   );
@@ -140,12 +153,6 @@ export function runDecodePrelude(
   );
   assertDecodedBitLength(cleanedInput, paddingBits, context.bitLength, context.usePowerOfTwo);
 
-  const maxDecodedBytes = normalizeLimit(
-    options?.maxDecodedBytes,
-    context.defaultMaxDecodedBytes,
-    true,
-    "maxDecodedBytes",
-  );
   const estimatedDecodedBytes = estimateDecodedBytes(
     cleanedInput.length,
     paddingBits,

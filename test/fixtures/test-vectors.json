@@ -1,0 +1,162 @@
+{
+  "version": "1.0.0",
+  "description": "ddunigma v4 wire format test vectors for cross-platform verification",
+  "generatedBy": "scripts/generate-test-vectors.ts",
+  "vectors": [
+    {
+      "id": "plain-ddu-hello",
+      "description": "Plain encoding of 'Hello' with DDU preset (jongseong combination, repeat padding)",
+      "input": { "raw": "48656c6c6f", "encoding": "utf-8" },
+      "charset": { "preset": "ddu", "paddingChar": "뭐" },
+      "options": { "useRepeatPadding": true },
+      "expected": { "encoded": "읶뜟잉듖욷뜟뎾뭐" },
+      "tags": ["plain", "ddu-preset"]
+    },
+    {
+      "id": "plain-ddu-korean",
+      "description": "Plain encoding of Korean text '안녕하세요' with DDU preset",
+      "input": { "raw": "ec9588eb8595ed9598ec84b8ec9a94", "encoding": "utf-8" },
+      "charset": { "preset": "ddu", "paddingChar": "뭐" },
+      "options": { "useRepeatPadding": true },
+      "expected": { "encoded": "뎯땩잇땨뎪뎨잇잉뎯욱잇우뎯땨읶뎨뎯땩듂잊" },
+      "tags": ["plain", "ddu-preset"]
+    },
+    {
+      "id": "plain-ddu-binary",
+      "description": "Plain encoding of binary data [0x00, 0xFF, 0xAA] with DDU preset",
+      "input": { "raw": "00ffaa", "encoding": "binary" },
+      "charset": { "preset": "ddu", "paddingChar": "뭐" },
+      "options": { "useRepeatPadding": true },
+      "expected": { "encoded": "뜌땼뎻듂" },
+      "tags": ["plain", "ddu-preset", "binary"]
+    },
+    {
+      "id": "plain-onecharset-hello",
+      "description": "Plain encoding of 'Hello' with ONECHARSET preset (ASCII charset)",
+      "input": { "raw": "48656c6c6f", "encoding": "utf-8" },
+      "charset": { "preset": "oneCharSet", "paddingChar": "=" },
+      "options": {},
+      "expected": { "encoded": "R3Wga37=2" },
+      "tags": ["plain", "onecharset-preset"]
+    },
+    {
+      "id": "deflate-a100",
+      "description": "Deflate compression of 100 'A' characters with Base64 charset",
+      "input": {
+        "raw": "41414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+        "encoding": "utf-8"
+      },
+      "charset": { "dduChar": "base64", "paddingChar": "=" },
+      "options": { "compress": true, "compressionAlgorithm": "deflate" },
+      "expected": { "encoded": "c3SkPQAA=ELYSIA0" },
+      "tags": ["deflate", "compression"]
+    },
+    {
+      "id": "brotli-hello-repeat",
+      "description": "Brotli compression of repeated 'Hello World! ' (20x) with Base64 charset",
+      "input": {
+        "raw": "48656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c64212048656c6c6f20576f726c642120",
+        "encoding": "utf-8"
+      },
+      "charset": { "dduChar": "base64", "paddingChar": "=" },
+      "options": { "compress": true, "compressionAlgorithm": "brotli" },
+      "expected": { "encoded": "GwMBACRBQpBSkWQmy+ZbHWucGBwL=GRISEO0" },
+      "tags": ["brotli", "compression"]
+    },
+    {
+      "id": "urlsafe-basic",
+      "description": "URL-safe encoding with custom charset (no conflict chars)",
+      "input": { "raw": "55524c20736166652074657374", "encoding": "utf-8" },
+      "charset": {
+        "dduChar": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789~!",
+        "paddingChar": "*"
+      },
+      "options": { "urlSafe": true },
+      "expected": { "encoded": "VVJMIHNhZmUgdGVzdA*4" },
+      "tags": ["url-safe"]
+    },
+    {
+      "id": "chunking-basic",
+      "description": "Chunked encoding with chunkSize=20 and newline separator",
+      "input": {
+        "raw": "48656c6c6f20576f726c642120546869732069732061206368756e6b656420656e636f64696e6720746573742e",
+        "encoding": "utf-8"
+      },
+      "charset": { "dduChar": "base64", "paddingChar": "=" },
+      "options": { "chunkSize": 20 },
+      "expected": { "encoded": "SGVsbG8gV29ybGQhIFRo\naXMgaXMgYSBjaHVua2Vk\nIGVuY29kaW5nIHRlc3Qu" },
+      "tags": ["chunking"]
+    },
+    {
+      "id": "checksum-hello",
+      "description": "Encoding with CRC32 checksum appended (scoped CK marker + 8 hex chars)",
+      "input": { "raw": "48656c6c6f", "encoding": "utf-8" },
+      "charset": { "dduChar": "base64", "paddingChar": "=" },
+      "options": { "checksum": true },
+      "expected": { "encoded": "SGVsbG8=2CKOf7d18982" },
+      "tags": ["checksum"]
+    },
+    {
+      "id": "combined-compress-encrypt",
+      "description": "Combined deflate compression + AES-256-GCM encryption (round-trip only, IV is random)",
+      "input": {
+        "raw": "41414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141",
+        "encoding": "utf-8"
+      },
+      "charset": { "dduChar": "base64", "paddingChar": "=" },
+      "options": {
+        "compress": true,
+        "compressionAlgorithm": "deflate",
+        "encrypt": true,
+        "encryptionKey": "test-secret-key"
+      },
+      "expected": { "encoded": "" },
+      "tags": ["compression", "encryption", "combined", "round-trip-only"]
+    },
+    {
+      "id": "cross-lang-empty",
+      "description": "Cross-language: empty input (0 bytes)",
+      "input": { "raw": "", "encoding": "utf-8" },
+      "charset": { "preset": "ddu", "paddingChar": "뭐" },
+      "options": { "useRepeatPadding": true },
+      "expected": { "encoded": "" },
+      "tags": ["cross-language", "origin-compatible"]
+    },
+    {
+      "id": "cross-lang-single-ascii",
+      "description": "Cross-language: single ASCII byte 'A' (requires padding)",
+      "input": { "raw": "41", "encoding": "utf-8" },
+      "charset": { "preset": "ddu", "paddingChar": "뭐" },
+      "options": { "useRepeatPadding": true },
+      "expected": { "encoded": "이이뭐뭐" },
+      "tags": ["cross-language", "origin-compatible"]
+    },
+    {
+      "id": "cross-lang-multibyte-utf8",
+      "description": "Cross-language: multi-byte UTF-8 string '한글' (6 bytes)",
+      "input": { "raw": "ed959ceab880", "encoding": "utf-8" },
+      "charset": { "preset": "ddu", "paddingChar": "뭐" },
+      "options": { "useRepeatPadding": true },
+      "expected": { "encoded": "뎯욱잇웆뎪듇앾뜌" },
+      "tags": ["cross-language", "origin-compatible"]
+    },
+    {
+      "id": "cross-lang-no-padding",
+      "description": "Cross-language: 3-byte input 'ABC' requiring no padding (24 bits = 4 x 6-bit chunks)",
+      "input": { "raw": "414243", "encoding": "utf-8" },
+      "charset": { "preset": "ddu", "paddingChar": "뭐" },
+      "options": { "useRepeatPadding": true },
+      "expected": { "encoded": "이잊땩뜓" },
+      "tags": ["cross-language", "origin-compatible"]
+    },
+    {
+      "id": "cross-lang-max-padding",
+      "description": "Cross-language: single byte 'X' requiring maximum padding (4 bits = 2 pad chars)",
+      "input": { "raw": "58", "encoding": "utf-8" },
+      "charset": { "preset": "ddu", "paddingChar": "뭐" },
+      "options": { "useRepeatPadding": true },
+      "expected": { "encoded": "잇뜌뭐뭐" },
+      "tags": ["cross-language", "origin-compatible"]
+    }
+  ]
+}

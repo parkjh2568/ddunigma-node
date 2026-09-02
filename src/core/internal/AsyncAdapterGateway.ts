@@ -30,7 +30,7 @@ export async function encryptAsyncWithAdapter(
     const keyHash = await getAsyncKeyHash(context, adapter);
     return await adapter.encrypt(data, keyHash, aad);
   } catch (err) {
-    throw toAsyncGatewayError(err, "encode", "encrypt");
+    throw toAsyncGatewayError(err, "encrypt");
   }
 }
 
@@ -44,7 +44,7 @@ export async function decryptAsyncWithAdapter(
     const keyHash = await getAsyncKeyHash(context, adapter);
     return await adapter.decrypt(data, keyHash, aad);
   } catch (err) {
-    throw toAsyncGatewayError(err, "decode", "decrypt");
+    throw toAsyncGatewayError(err, "decrypt");
   }
 }
 
@@ -67,7 +67,7 @@ export async function compressAsyncWithAdapter(
     }
     return await asyncAdapter.deflate(data, level);
   } catch (err) {
-    throw toAsyncGatewayError(err, "encode", "compress");
+    throw toAsyncGatewayError(err, "compress");
   }
 }
 
@@ -90,7 +90,7 @@ export async function decompressAsyncWithAdapter(
     }
     return await asyncAdapter.inflate(data, maxBytes);
   } catch (err) {
-    throw toAsyncGatewayError(err, "decode", "decompress");
+    throw toAsyncGatewayError(err, "decompress");
   }
 }
 
@@ -129,11 +129,7 @@ async function getAsyncKeyHash(
   return promise;
 }
 
-function toAsyncGatewayError(
-  error: unknown,
-  _fallbackOperation: GatewayOperation,
-  failureKind: AsyncFailureKind,
-): Error {
+function toAsyncGatewayError(error: unknown, failureKind: AsyncFailureKind): Error {
   if (isDdu64Error(error)) return error;
 
   const message = toErrorMessage(error);

@@ -19,8 +19,9 @@ import {
 } from "./keyDerivation.js";
 
 type BrowserCompressionFormat = "deflate-raw" | "brotli";
+type BrowserCompressionOperation = "compress" | "decompress";
 
-const compressionSupportCache = new Map<BrowserCompressionFormat, boolean>();
+const compressionSupportCache = new Set<string>();
 
 function toArrayBuffer(data: Uint8Array): ArrayBuffer {
   if (data.buffer instanceof ArrayBuffer) {
@@ -35,35 +36,33 @@ function toArrayBuffer(data: Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
-function supportsCompressionFormat(format: BrowserCompressionFormat): boolean {
-  const cached = compressionSupportCache.get(format);
-  if (cached !== undefined) return cached;
-
-  if (typeof CompressionStream === "undefined" || typeof DecompressionStream === "undefined") {
-    return false;
-  }
-
-  try {
-    new CompressionStream(format as CompressionFormat);
-    new DecompressionStream(format as CompressionFormat);
-    compressionSupportCache.set(format, true);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function requireCompressionFormat(
   format: BrowserCompressionFormat,
-  operation: "compress" | "decompress",
+  operation: BrowserCompressionOperation,
 ): CompressionFormat {
-  if (!supportsCompressionFormat(format)) {
-    const label = format === "brotli" ? "Brotli" : "Deflate raw";
-    throw new Ddu64AdapterError(
-      `[Ddu64 ${operation}] ${label} ${operation}ion is unsupported in the current runtime. ` +
-        `CompressionStream/DecompressionStream does not support "${format}".`,
-      operation,
-    );
+  const cacheKey = `${operation}:${format}`;
+  if (!compressionSupportCache.has(cacheKey)) {
+    try {
+      if (operation === "compress" && typeof CompressionStream !== "undefined") {
+        new CompressionStream(format as CompressionFormat);
+        compressionSupportCache.add(cacheKey);
+      } else if (operation === "decompress" && typeof DecompressionStream !== "undefined") {
+        new DecompressionStream(format as CompressionFormat);
+        compressionSupportCache.add(cacheKey);
+      }
+    } catch {
+      compressionSupportCache.delete(cacheKey);
+    }
+
+    if (!compressionSupportCache.has(cacheKey)) {
+      const label = format === "brotli" ? "Brotli" : "Deflate raw";
+      const api = operation === "compress" ? "CompressionStream" : "DecompressionStream";
+      throw new Ddu64AdapterError(
+        `[Ddu64 ${operation}] ${label} ${operation}ion is unsupported in the current runtime. ` +
+          `${api} does not support "${format}".`,
+        operation,
+      );
+    }
   }
 
   return format as CompressionFormat;
@@ -220,15 +219,7 @@ export class BrowserAdapter implements PlatformAdapter {
    * Node.js zlib.deflateRaw와의 상호운용성을 위해 'deflate-raw' 형식만 사용합니다.
    */
   async deflate(data: Uint8Array, _level?: number): Promise<Uint8Array> {
-    if (typeof CompressionStream === "undefined") {
-      throw new Ddu64AdapterError(
-        "[Ddu64 compress] Deflate compression is unsupported in the current runtime. " +
-          "CompressionStream API is not available.",
-        "compress",
-      );
-    }
-
-    const format = this.getDeflateFormat("compress");
+    const format = requireCompressionFormat("deflate-raw", "compress");
     const cs = new CompressionStream(format);
     return this.writeAndReadStream(cs, data);
   }
@@ -239,15 +230,7 @@ export class BrowserAdapter implements PlatformAdapter {
    * maxBytes가 지정되면 제한을 적용합니다.
    */
   async inflate(data: Uint8Array, maxBytes?: number): Promise<Uint8Array> {
-    if (typeof DecompressionStream === "undefined") {
-      throw new Ddu64AdapterError(
-        "[Ddu64 decompress] Deflate decompression is unsupported in the current runtime. " +
-          "DecompressionStream API is not available.",
-        "decompress",
-      );
-    }
-
-    const format = this.getDeflateFormat("decompress");
+    const format = requireCompressionFormat("deflate-raw", "decompress");
     const ds = new DecompressionStream(format);
     return this.writeAndReadStream(ds, data, maxBytes);
   }
@@ -271,25 +254,6 @@ export class BrowserAdapter implements PlatformAdapter {
     const format = requireCompressionFormat("brotli", "decompress");
     const ds = new DecompressionStream(format);
     return this.writeAndReadStream(ds, data, maxBytes);
-  }
-
-  // brotliCompressSync, brotliDecompressSync는 의도적으로 정의하지 않습니다.
-  // 브라우저 CompressionStream API가 비동기 스트림 기반이기 때문입니다.
-
-  // ─── 동기 메서드 (미지원) ────────────────────────────────────────────────
-
-  // deriveKeySync, encryptSync, decryptSync, deflateSync, inflateSync는
-  // 의도적으로 정의하지 않습니다 (미구현).
-  // 인터페이스에서 선택적(?)으로 표시되어 있으므로 단순히 부재합니다.
-
-  // ─── 비공개 헬퍼 ─────────────────────────────────────────────────────────
-
-  /**
-   * CompressionStream에 적합한 deflate 형식을 결정합니다.
-   * Node.js zlib.deflateRaw와의 상호운용성을 위해 'deflate-raw'만 사용합니다.
-   */
-  private getDeflateFormat(operation: "compress" | "decompress"): CompressionFormat {
-    return requireCompressionFormat("deflate-raw", operation);
   }
 
   private async writeAndReadStream(

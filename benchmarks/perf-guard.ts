@@ -13,22 +13,41 @@ let sink = 0;
 
 function consume(value: unknown): void {
   if (typeof value === "string") {
-    sink ^= value.length;
+    const signature = value.length === 0 ? 0 : value.length ^ value.charCodeAt(value.length >>> 1);
+    sink = Math.imul(sink ^ signature, 16_777_619);
     return;
   }
-  if (value && typeof value === "object") {
-    const maybeResult = value as { indices?: ArrayLike<number>; paddingBits?: number };
-    sink ^= maybeResult.indices?.length ?? 0;
-    sink ^= maybeResult.paddingBits ?? 0;
-  }
-}
 
-function makeBytes(length: number): Uint8Array {
-  const bytes = new Uint8Array(length);
-  for (let i = 0; i < length; i++) {
-    bytes[i] = (i * 31 + 17) & 0xff;
+  if (value instanceof Uint8Array) {
+    const signature =
+      value.length === 0
+        ? 0
+        : value.length ^ value[0] ^ value[value.length >>> 1] ^ value[value.length - 1];
+    sink = Math.imul(sink ^ signature, 16_777_619);
+    return;
   }
-  return bytes;
+
+  if (value && typeof value === "object") {
+    const result = value as {
+      payload?: string;
+      indices?: ArrayLike<number>;
+      paddingBits?: number;
+    };
+    let signature = result.paddingBits ?? 0;
+    if (result.payload !== undefined) {
+      signature ^=
+        result.payload.length === 0
+          ? 0
+          : result.payload.length ^ result.payload.charCodeAt(result.payload.length >>> 1);
+    }
+    if (result.indices !== undefined) {
+      signature ^=
+        result.indices.length === 0
+          ? 0
+          : result.indices.length ^ result.indices[result.indices.length >>> 1];
+    }
+    sink = Math.imul(sink ^ signature, 16_777_619);
+  }
 }
 
 function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boolean } {
@@ -53,7 +72,8 @@ function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boo
 }
 
 function main(): void {
-  const bytes16k = makeBytes(16 * 1024);
+  const bytes16k = new Uint8Array(16 * 1024);
+  for (let i = 0; i < bytes16k.length; i++) bytes16k[i] = (i * 31 + 17) & 0xff;
   const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const charCodes = new Uint16Array([...base64Chars].map((char) => char.charCodeAt(0)));
 

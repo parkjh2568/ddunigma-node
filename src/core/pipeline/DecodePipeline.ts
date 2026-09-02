@@ -43,11 +43,26 @@ export function runSyncDecodePipeline(
   const checksumScope = prep.extractedChecksumScope ?? options?.checksumScope ?? "plaintext";
 
   if (checksumScope === "output") verifyWireChecksum(prep, context);
-  decoded = runPreDecompressDecrypt(prep, context, decoded);
-  decoded = runDecompress(prep, options, context, decoded);
+  if (shouldRunPreDecompressDecrypt(prep, context)) {
+    reportStage(context, decoded.length, 55, "decrypt");
+    decoded = context.decrypt(decoded, prep.encryptionAAD);
+  }
+  if (shouldDecompress(prep)) {
+    const maxDecompressedBytes = normalizeLimit(
+      options?.maxDecompressedBytes,
+      context.defaultMaxDecompressedBytes,
+      true,
+      "maxDecompressedBytes",
+    );
+    reportStage(context, decoded.length, 70, "decompress");
+    decoded = context.decompress(decoded, prep.compressionAlgorithm, maxDecompressedBytes);
+  }
   if (checksumScope === "plaintext") verifyDecodedChecksum(prep, context, decoded);
-  decoded = runPostChecksumDecrypt(prep, context, decoded);
-  reportDone(context, decoded);
+  if (shouldRunPostChecksumDecrypt(prep, context)) {
+    reportStage(context, decoded.length, 90, "decrypt");
+    decoded = context.decrypt(decoded, prep.encryptionAAD);
+  }
+  reportStage(context, decoded.length, 100, "done");
 
   return decoded;
 }
@@ -68,9 +83,14 @@ export async function runAsyncDecodePipeline(
   }
 
   if (shouldDecompress(prep)) {
-    const maxDecompressedBytes = getMaxDecompressedBytes(options, context);
+    const maxDecompressedBytes = normalizeLimit(
+      options?.maxDecompressedBytes,
+      context.defaultMaxDecompressedBytes,
+      true,
+      "maxDecompressedBytes",
+    );
     reportStage(context, decoded.length, 70, "decompress");
-    decoded = await context.decompress(decoded, prep.compressionAlgorithm!, maxDecompressedBytes);
+    decoded = await context.decompress(decoded, prep.compressionAlgorithm, maxDecompressedBytes);
   }
 
   if (checksumScope === "plaintext") verifyDecodedChecksum(prep, context, decoded);
@@ -80,40 +100,8 @@ export async function runAsyncDecodePipeline(
     decoded = await context.decrypt(decoded, prep.encryptionAAD);
   }
 
-  reportDone(context, decoded);
+  reportStage(context, decoded.length, 100, "done");
   return decoded;
-}
-
-function runPreDecompressDecrypt(
-  prep: DecodePreludeResult,
-  context: SyncDecodePipelineContext,
-  decoded: Uint8Array,
-): Uint8Array {
-  if (!shouldRunPreDecompressDecrypt(prep, context)) return decoded;
-  reportStage(context, decoded.length, 55, "decrypt");
-  return context.decrypt(decoded, prep.encryptionAAD);
-}
-
-function runDecompress(
-  prep: DecodePreludeResult,
-  options: DduOptions | undefined,
-  context: SyncDecodePipelineContext,
-  decoded: Uint8Array,
-): Uint8Array {
-  if (!shouldDecompress(prep)) return decoded;
-  const maxDecompressedBytes = getMaxDecompressedBytes(options, context);
-  reportStage(context, decoded.length, 70, "decompress");
-  return context.decompress(decoded, prep.compressionAlgorithm!, maxDecompressedBytes);
-}
-
-function runPostChecksumDecrypt(
-  prep: DecodePreludeResult,
-  context: SyncDecodePipelineContext,
-  decoded: Uint8Array,
-): Uint8Array {
-  if (!shouldRunPostChecksumDecrypt(prep, context)) return decoded;
-  reportStage(context, decoded.length, 90, "decrypt");
-  return context.decrypt(decoded, prep.encryptionAAD);
 }
 
 function shouldRunPreDecompressDecrypt(
@@ -179,18 +167,6 @@ function verifyDecodedChecksum(
   }
 }
 
-function getMaxDecompressedBytes(
-  options: DduOptions | undefined,
-  context: DecodePipelineContext,
-): number {
-  return normalizeLimit(
-    options?.maxDecompressedBytes,
-    context.defaultMaxDecompressedBytes,
-    true,
-    "maxDecompressedBytes",
-  );
-}
-
 function reportStage(
   context: DecodePipelineContext,
   length: number,
@@ -203,8 +179,4 @@ function reportStage(
     percent,
     stage,
   });
-}
-
-function reportDone(context: DecodePipelineContext, decoded: Uint8Array): void {
-  reportStage(context, decoded.length, 100, "done");
 }

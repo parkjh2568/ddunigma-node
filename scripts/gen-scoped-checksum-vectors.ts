@@ -7,7 +7,7 @@
  * 기대 출력을 조립합니다. 회귀 기준이 될 벡터를 고정하기 위한 스크립트입니다.
  *
  * 실행: npx tsx scripts/gen-scoped-checksum-vectors.ts
- * 출력: src/test/fixtures/scoped-checksum-vectors.json
+ * 출력: test/fixtures/scoped-checksum-vectors.json
  *
  * @module scripts/gen-scoped-checksum-vectors
  */
@@ -107,7 +107,12 @@ for (const inp of inputs) {
       charset: { preset: "ddu" },
       options: { encryptionKey: "scoped-vector-key", checksum: true, checksumScope: scope },
       checksumSource: scope,
-      expected: { encoded: null, checksumMarker: CHECKSUM_MARKER_SCOPED, scopeChar, checksumHex: null },
+      expected: {
+        encoded: null,
+        checksumMarker: CHECKSUM_MARKER_SCOPED,
+        scopeChar,
+        checksumHex: null,
+      },
       tags: ["round-trip-only", "encrypt", `scope-${scope}`],
     });
   }
@@ -132,7 +137,7 @@ const out = {
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outPath = join(here, "..", "src", "test", "fixtures", "scoped-checksum-vectors.json");
+const outPath = join(here, "..", "test", "fixtures", "scoped-checksum-vectors.json");
 writeFileSync(outPath, JSON.stringify(out, null, 2) + "\n", "utf-8");
 
 const deterministic = vectors.filter((v) => v.tags.includes("deterministic")).length;

@@ -5,8 +5,8 @@
  * 검증합니다. 특히 선언된 최소 Node 버전(>=22)에서 Web Streams를 포함한
  * 전 기능이 저하 없이 동작하는지 확인하는 용도입니다.
  *
- * 6.0 진입점 구조: lean(인코딩+난독화)은 `dist/index.js`, 배터리(압축/암호화/체크섬/
- * Web Streams)는 `dist/secure.js`에서 가져옵니다.
+ * 기본 진입점의 lazy adapter 경로와 secure 진입점의 동기 adapter/Web Streams 경로를
+ * 각각 검증합니다.
  *
  * 사용: node scripts/runtime-smoke.mjs   (사전에 pnpm build 필요)
  */
@@ -42,28 +42,37 @@ async function main() {
     eq(new Uint8Array(ddu.decodeToBuffer(ddu.encode(bytes))), bytes, "decodeToBuffer");
   }
 
-  // 3) 압축 + 체크섬 (zlib + maxOutputLength 한도 경로) — secure 진입점
+  // 3) 기본 진입점 lazy adapter: wire metadata만으로 압축 해제
+  {
+    const encoder = new Ddu64({ compress: true });
+    const decoder = new Ddu64();
+    const input = "root lazy adapter ".repeat(256);
+    const encoded = await encoder.encodeAsync(input);
+    eq(await decoder.decodeAsync(encoded), input, "root lazy compression round-trip");
+  }
+
+  // 4) 압축 + 체크섬 (zlib + maxOutputLength 한도 경로) — secure 진입점
   {
     const ddu = new Ddu64Secure({ compress: true, checksum: true });
     const input = "x".repeat(4096);
     eq(ddu.decode(ddu.encode(input)), input, "compress+checksum round-trip");
   }
 
-  // 4) brotli — secure 진입점
+  // 5) brotli — secure 진입점
   {
     const ddu = new Ddu64Secure({ compress: true, compressionAlgorithm: "brotli" });
     const input = "y".repeat(4096);
     eq(ddu.decode(ddu.encode(input)), input, "brotli round-trip");
   }
 
-  // 5) AES-256-GCM 암호화 (pbkdf2 키 파생) — secure 진입점
+  // 6) AES-256-GCM 암호화 (pbkdf2 키 파생) — secure 진입점
   {
     const ddu = new Ddu64Secure({ encryptionKey: "smoke-secret", checksum: true });
     const input = "보호 대상 데이터";
     eq(ddu.decode(ddu.encode(input)), input, "encrypt round-trip");
   }
 
-  // 6) Web Streams (Node 글로벌 TransformStream) — secure 진입점
+  // 7) Web Streams (Node 글로벌 TransformStream) — secure 진입점
   {
     const ddu = new Ddu64Secure();
     const input = new TextEncoder().encode("stream payload ".repeat(1000));

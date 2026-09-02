@@ -139,6 +139,24 @@ export function validateRuntimeOptions(
   ) {
     invalid(operation, "adapter must be an object");
   }
+  if (
+    constructorOptions.adapterFactory !== undefined &&
+    typeof constructorOptions.adapterFactory !== "function"
+  ) {
+    invalid(operation, "adapterFactory must be a function");
+  }
+  if (
+    constructorOptions.asyncAdapterFactory !== undefined &&
+    typeof constructorOptions.asyncAdapterFactory !== "function"
+  ) {
+    invalid(operation, "asyncAdapterFactory must be a function");
+  }
+  if (
+    constructorOptions.obfuscationLayerFactory !== undefined &&
+    typeof constructorOptions.obfuscationLayerFactory !== "function"
+  ) {
+    invalid(operation, "obfuscationLayerFactory must be a function");
+  }
 
   const derivation = "keyDerivation" in options ? options.keyDerivation : undefined;
   if (derivation === undefined) return;

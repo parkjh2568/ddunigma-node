@@ -2,14 +2,14 @@
  * Node.js 전용 secure Ddu64 래퍼.
  *
  * Ddu64Core를 확장하여 압축/암호화/체크섬(배터리 포함)과 Node.js Buffer를 지원합니다:
- * - NodeAdapter 자동 주입 (zlib/crypto) → 압축/암호화/체크섬 사용 가능
+ * - NodeAdapter 자동 주입 (zlib/crypto) → 압축/암호화 사용 가능
+ * - 코어 CRC32 체크섬 사용 가능
  * - HangulObfuscationLayer 자동 주입 → 한글 난독화 사용 가능
  * - Node.js Buffer를 반환하는 `decodeToBuffer` 및 `decodeToBufferAsync` 제공
  * - encode()에 Buffer 입력 허용 (Buffer는 Uint8Array를 확장)
  *
- * 구 `Ddu64Node`의 배터리 동작을 계승합니다. 6.0부터 기본 진입점(`@ddunigma/node`)은
- * 인코딩 + 난독화만 제공하며, 압축/암호화/체크섬/스트림은 secure 진입점
- * (`@ddunigma/node/secure`)으로 이전되었습니다.
+ * 기본 진입점도 비동기 secure 작업을 lazy adapter로 처리합니다. 이 진입점은 NodeAdapter를
+ * 정적으로 포함해 동기 압축·암복호화와 Web Streams까지 명시적으로 사용하는 경로입니다.
  *
  * @module Ddu64Secure
  */
@@ -23,7 +23,7 @@ import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
 /**
  * Node.js 전용 secure Ddu64 인코더/디코더.
  *
- * Ddu64Core를 래핑하여 자동 NodeAdapter 주입(압축/암호화/체크섬)과
+ * Ddu64Core를 래핑하여 자동 NodeAdapter 주입(압축/암호화)과
  * 하위 호환성을 위한 Buffer 반환 디코드 메서드를 제공합니다.
  *
  * @example
@@ -43,13 +43,11 @@ export class Ddu64Secure extends Ddu64Core {
   ) {
     const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
 
-    // 명시적으로 제공된 어댑터가 없으면 NodeAdapter를 지연 생성하도록 팩토리를 주입.
-    // 순수 인코딩/디코딩만 하면 어댑터는 생성되지 않습니다(불필요한 zlib/crypto 배선 회피).
+    // secure 진입점은 NodeAdapter 모듈을 포함하되 인스턴스는 실제 사용 시 생성합니다.
     const options: DduSecureConstructorOptions = {
       ...resolved.dduOptions,
       ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
       ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
-      adapter: resolved.dduOptions?.adapter,
       adapterFactory: resolved.dduOptions?.adapterFactory ?? (() => new NodeAdapter()),
       obfuscationLayerFactory:
         resolved.dduOptions?.obfuscationLayerFactory ??

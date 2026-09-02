@@ -29,7 +29,7 @@ import {
   getStreamHeaderLength,
   type StreamHeaderMeta,
 } from "../core/wireFormat.js";
-import type { CharSetInfo, DduInternalOptions, DduStreamOptions } from "../core/types.js";
+import type { DduInternalOptions, DduStreamOptions } from "../core/types.js";
 import { Ddu64LimitError, wrapDdu64Error } from "../core/errors.js";
 import { normalizeLimit } from "../core/internal/DecodeValidation.js";
 import { validateRuntimeOptions } from "../core/internal/OptionValidation.js";
@@ -75,11 +75,17 @@ export function createReadableEncodeStream(
     "maxBufferedBytes",
   );
 
-  const canStreamChunks = canUseChunkStreaming(info, {
-    compressed: shouldCompress,
-    encrypted: shouldEncrypt,
-    checksum: shouldChecksum,
-  });
+  // 비-2의 제곱수 charset은 논리 심볼 하나가 문자 2개일 수 있어 전체 payload가 필요합니다.
+  const canStreamChunks =
+    info.usePowerOfTwo && !shouldCompress && !shouldEncrypt && !shouldChecksum;
+  let alignmentDivisor = info.bitLength;
+  let alignmentRemainder = 8;
+  while (alignmentRemainder !== 0) {
+    const nextRemainder = alignmentDivisor % alignmentRemainder;
+    alignmentDivisor = alignmentRemainder;
+    alignmentRemainder = nextRemainder;
+  }
+  const alignedByteLength = info.bitLength / alignmentDivisor;
 
   let headerEmitted = false;
   let chunks: Uint8Array[] = [];
@@ -110,11 +116,8 @@ export function createReadableEncodeStream(
           data = chunk;
         }
 
-        // 비트 정렬: bitLength와 8의 LCM 단위로 처리해야 푸터 없이 깔끔하게 인코딩 가능
-        // 6비트 charset의 경우 LCM(6,8) = 24비트 = 3바이트 단위
-        const bitLength = info.bitLength;
-        const lcmBytes = lcm(bitLength, 8) / 8; // 바이트 단위 정렬 크기
-        const alignedLen = Math.floor(data.length / lcmBytes) * lcmBytes;
+        // bitLength와 8의 최소공배수 단위로 잘라야 중간 청크에 footer가 필요하지 않습니다.
+        const alignedLen = Math.floor(data.length / alignedByteLength) * alignedByteLength;
 
         if (alignedLen > 0) {
           const alignedData = data.subarray(0, alignedLen);
@@ -308,30 +311,4 @@ export function createReadableDecodeStream(
       }
     },
   });
-}
-
-// ─── 유틸리티 ────────────────────────────────────────────────────────────────
-
-/** 청크 단위 스트리밍을 안전하게 사용할 수 있는지 판별합니다. */
-function canUseChunkStreaming(
-  info: CharSetInfo,
-  state: { compressed: boolean; encrypted: boolean; checksum: boolean },
-): boolean {
-  // 비-2의 제곱수 charset은 논리 심볼 하나가 문자 2개로 표현될 수 있어 전체 payload 단위로 처리합니다.
-  return info.usePowerOfTwo && !state.compressed && !state.encrypted && !state.checksum;
-}
-
-/** 두 양의 정수의 최소공배수 */
-function lcm(a: number, b: number): number {
-  return (a * b) / gcd(a, b);
-}
-
-/** 두 양의 정수의 최대공약수 (유클리드 알고리즘) */
-function gcd(a: number, b: number): number {
-  while (b !== 0) {
-    const t = b;
-    b = a % b;
-    a = t;
-  }
-  return a;
 }

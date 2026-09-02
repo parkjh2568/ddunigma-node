@@ -187,25 +187,21 @@ export class CharsetBuilder {
    * 셔플이 되며, 이 역시 비밀이 아니라 재현성 용도입니다.
    */
   shuffle(seed?: number): CharsetBuilder {
-    const random = seed !== undefined ? this.seededRandom(seed) : Math.random;
+    let random = Math.random;
+    if (seed !== undefined) {
+      let state = seed | 0 || 1;
+      random = () => {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        return (state >>> 0) / 0x100000000;
+      };
+    }
     for (let i = this.chars.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));
       [this.chars[i], this.chars[j]] = [this.chars[j], this.chars[i]];
     }
     return this;
-  }
-
-  /**
-   * 시드 기반 난수 생성기 (xorshift32)
-   */
-  private seededRandom(seed: number): () => number {
-    let s = seed | 0 || 1; // 0 방지
-    return () => {
-      s ^= s << 13;
-      s ^= s >> 17;
-      s ^= s << 5;
-      return (s >>> 0) / 0x100000000;
-    };
   }
 
   /**
@@ -276,7 +272,7 @@ export class CharsetBuilder {
     const charset = [...this.chars];
     let padding = paddingChar;
 
-    if (!padding) {
+    if (padding === undefined) {
       // 패딩 문자로 사용할 수 있는 문자 찾기
       const commonPaddings = ["=", ".", "_", "-", "~", "!"];
       for (const p of commonPaddings) {

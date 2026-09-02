@@ -7,6 +7,9 @@ const cwd = process.cwd();
 const packageJson = JSON.parse(readFileSync(join(cwd, "package.json"), "utf-8"));
 const cacheDir = mkdtempSync(join(tmpdir(), "ddunigma-pack-"));
 const tscBin = join(cwd, "node_modules", ".bin", process.platform === "win32" ? "tsc.cmd" : "tsc");
+const MAX_PACK_ENTRIES = 70;
+const MAX_PACKED_SIZE = 110_000;
+const MAX_UNPACKED_SIZE = 390_000;
 
 function fail(message) {
   throw new Error(`[pack:check] ${message}`);
@@ -71,7 +74,29 @@ function runNodeSmoke(packageDir) {
 
       const node = await import("@ddunigma/node");
 
-      // secure 진입점(배터리: 압축/암호화/체크섬) 라운드트립
+      const rootKeyDerivation = {
+        algorithm: "pbkdf2",
+        salt: "pack-smoke-root-salt",
+        iterations: 10_000,
+      };
+      const rootEncoder = new node.Ddu64({
+        compress: true,
+        encryptionKey: "pack-smoke-root-key",
+        keyDerivation: rootKeyDerivation,
+        checksum: true,
+      });
+      const rootDecoder = new node.Ddu64({
+        encryptionKey: "pack-smoke-root-key",
+        keyDerivation: rootKeyDerivation,
+        checksum: true,
+      });
+      const rootInput = "root:lazy-adapter-pack-smoke ".repeat(16);
+      const rootEncoded = await rootEncoder.encodeAsync(rootInput);
+      const rootDecoded = await rootDecoder.decodeAsync(rootEncoded);
+      if (rootDecoded !== rootInput) {
+        throw new Error("root lazy adapter ESM round-trip failed");
+      }
+
       const secure = await import("@ddunigma/node/secure");
       const secureEncoder = new secure.Ddu64({
         compress: true,
@@ -88,11 +113,11 @@ function runNodeSmoke(packageDir) {
       }
 
       const browser = await import("@ddunigma/node/browser");
-      const browserEncoder = new browser.Ddu64();
-      const asyncEncoded = await browserEncoder.encodeAsync("browser:async-pack-smoke");
+      const browserEncoder = new browser.Ddu64({ compress: true });
+      const asyncEncoded = await browserEncoder.encodeAsync("browser:async-pack-smoke".repeat(16));
       const asyncDecoded = await browserEncoder.decodeAsync(asyncEncoded);
-      if (asyncDecoded !== "browser:async-pack-smoke") {
-        throw new Error("Browser entry async round-trip failed");
+      if (asyncDecoded !== "browser:async-pack-smoke".repeat(16)) {
+        throw new Error("browser lazy adapter ESM round-trip failed");
       }
 
       // 미니파이된 published 빌드에서 커스텀 에러 name이 보존되는지 검증합니다.
@@ -115,22 +140,38 @@ function runNodeSmoke(packageDir) {
     packageDir,
     "__pack-smoke.cjs",
     `
-      const cases = [
-        ["@ddunigma/node", "node"],
-        ["@ddunigma/node/browser", "browser"],
-        ["@ddunigma/node/core", "core"],
-      ];
+      async function main() {
+        const cases = [
+          ["@ddunigma/node", "node"],
+          ["@ddunigma/node/browser", "browser"],
+          ["@ddunigma/node/core", "core"],
+        ];
 
-      for (const [specifier, label] of cases) {
-        const mod = require(specifier);
-        const encoder = new mod.Ddu64();
-        const input = label + ":pack-smoke-cjs";
-        const encoded = encoder.encode(input);
-        const decoded = encoder.decode(encoded);
-        if (decoded !== input) {
-          throw new Error(specifier + " CJS round-trip failed");
+        for (const [specifier, label] of cases) {
+          const mod = require(specifier);
+          const encoder = new mod.Ddu64();
+          const input = label + ":pack-smoke-cjs";
+          const encoded = encoder.encode(input);
+          const decoded = encoder.decode(encoded);
+          if (decoded !== input) {
+            throw new Error(specifier + " CJS round-trip failed");
+          }
+        }
+
+        const node = require("@ddunigma/node");
+        const encoder = new node.Ddu64({ compress: true });
+        const input = "root:cjs-lazy-adapter ".repeat(16);
+        const encoded = await encoder.encodeAsync(input);
+        const decoder = new node.Ddu64();
+        if (await decoder.decodeAsync(encoded) !== input) {
+          throw new Error("root lazy adapter CJS round-trip failed");
         }
       }
+
+      main().catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+      });
     `,
   );
 
@@ -145,8 +186,10 @@ async function runBrowserBundleSmoke(packageDir) {
       "__browser-root-bundle-smoke.mjs",
       `
         import { Ddu64 } from "@ddunigma/node";
-        const encoder = new Ddu64();
-        encoder.decode(encoder.encode("browser root bundle smoke"));
+        const encoder = new Ddu64({ compress: true });
+        const input = "browser root bundle smoke".repeat(16);
+        const encoded = await encoder.encodeAsync(input);
+        if (await new Ddu64().decodeAsync(encoded) !== input) throw new Error("root bundle failed");
       `,
     ),
     writeSmokeFile(
@@ -154,8 +197,10 @@ async function runBrowserBundleSmoke(packageDir) {
       "__browser-bundle-smoke.mjs",
       `
         import { Ddu64 } from "@ddunigma/node/browser";
-        const encoder = new Ddu64();
-        encoder.decode(encoder.encode("browser bundle smoke"));
+        const encoder = new Ddu64({ compress: true });
+        const input = "browser bundle smoke".repeat(16);
+        const encoded = await encoder.encodeAsync(input);
+        if (await new Ddu64().decodeAsync(encoded) !== input) throw new Error("browser bundle failed");
       `,
     ),
     writeSmokeFile(
@@ -230,6 +275,9 @@ function runTypeSmoke(packageDir) {
         DduSetSymbol,
         type DduBaseOptions,
         type DduBaseConstructorOptions,
+        type DduConstructorOptions as RootDduConstructorOptions,
+        type DduOptions as RootDduOptions,
+        type PlatformAdapter as RootPlatformAdapter,
       } from "@ddunigma/node";
       import {
         Ddu64 as SecureDdu64,
@@ -242,7 +290,6 @@ function runTypeSmoke(packageDir) {
       import { Ddu64 as BrowserDdu64 } from "@ddunigma/node/browser";
       import { Ddu64 as CoreDdu64, CharsetBuilder } from "@ddunigma/node/core";
 
-      // 기본(lean) 진입점: Base 옵션만 노출
       const baseConstructorOptions: DduBaseConstructorOptions = {
         dduSetSymbol: DduSetSymbol.DDU,
         obfuscate: true,
@@ -254,6 +301,14 @@ function runTypeSmoke(packageDir) {
       const explicitNodeEncoder: Ddu64Node = nodeEncoder;
       const baseEncoded = explicitNodeEncoder.encode("type smoke", baseCallOptions);
       explicitNodeEncoder.decode(baseEncoded, baseCallOptions);
+
+      const rootConstructorOptions: RootDduConstructorOptions = {
+        compress: true,
+        encryptionKey: "root-type-smoke-key",
+      };
+      const rootCallOptions: RootDduOptions = { compress: true, checksum: true };
+      const rootEncoder = new Ddu64(rootConstructorOptions);
+      await rootEncoder.encodeAsync("root secure type smoke", rootCallOptions);
 
       // secure 진입점: 배터리 옵션 + 어댑터 노출
       const secureConstructorOptions: DduConstructorOptions = {
@@ -274,6 +329,8 @@ function runTypeSmoke(packageDir) {
       syncStats.encodedSize satisfies number;
 
       const nodeAdapter: PlatformAdapter = new NodeAdapter();
+      const rootAdapter: RootPlatformAdapter = nodeAdapter;
+      void rootAdapter.runtime;
       nodeAdapter.randomBytes?.(1);
       const browserAdapter: PlatformAdapter = new BrowserAdapter();
       browserAdapter.randomBytes?.(1);
@@ -308,6 +365,16 @@ function runTypeSmoke(packageDir) {
       nodeEncoder.decode(baseEncoded, baseCallOptions);
       const baseStats: node.DduEncodeStats = nodeEncoder.getStats("cjs base type smoke");
       baseStats.encodedSize satisfies number;
+
+      const rootOptions: node.DduOptions = { compress: true, checksum: true };
+      const rootConstructorOptions: node.DduConstructorOptions = {
+        compress: true,
+        encryptionKey: "cjs-root-type-smoke-key",
+      };
+      const rootEncoder = new node.Ddu64(rootConstructorOptions);
+      const rootStats: Promise<node.DduEncodeStats> =
+        rootEncoder.getStatsAsync("cjs root secure type smoke", rootOptions);
+      void rootStats;
 
       const secureCallOptions: secure.DduOptions = { checksum: true, compress: false };
       const secureConstructorOptions: secure.DduConstructorOptions = {
@@ -358,6 +425,7 @@ try {
     "README.md",
     "LICENCE",
     "CHANGELOG.md",
+    "CONTRIBUTING.md",
     "ROADMAP.md",
     "docs/REFERENCE.md",
     "package.json",
@@ -392,6 +460,7 @@ try {
   const forbiddenPatterns = [
     { label: "source map", test: (file) => file.endsWith(".map") },
     { label: "source TypeScript", test: (file) => file.startsWith("src/") },
+    { label: "test source", test: (file) => file.startsWith("test/") },
     { label: "benchmark source", test: (file) => file.startsWith("benchmarks/") },
     { label: "coverage output", test: (file) => file.startsWith("coverage/") },
     { label: "node_modules content", test: (file) => file.startsWith("node_modules/") },
@@ -402,6 +471,16 @@ try {
     if (match) {
       fail(`Unexpected published ${label}: ${match}`);
     }
+  }
+
+  if (manifest.entryCount > MAX_PACK_ENTRIES) {
+    fail(`Published file count ${manifest.entryCount} exceeds ${MAX_PACK_ENTRIES}`);
+  }
+  if (manifest.size > MAX_PACKED_SIZE) {
+    fail(`Packed size ${manifest.size} exceeds ${MAX_PACKED_SIZE} bytes`);
+  }
+  if (manifest.unpackedSize > MAX_UNPACKED_SIZE) {
+    fail(`Unpacked size ${manifest.unpackedSize} exceeds ${MAX_UNPACKED_SIZE} bytes`);
   }
 
   const expectedMain = packageJson.main;

@@ -1,9 +1,9 @@
 /**
- * 브라우저 최적화 기본(lean) 진입점.
+ * 브라우저 최적화 기본 진입점.
  *
- * 인코딩 + 한글 난독화(라이브러리 주목적)를 제공합니다. 압축/암호화/체크섬/Web Streams는
- * secure 진입점(`@ddunigma/node/secure`)으로 이전되었습니다. 어댑터를 주입하지 않으므로
- * WebCrypto/CompressionStream 코드가 기본 브라우저 번들에서 트리셰이킹됩니다.
+ * 인코딩·체크섬·한글 난독화를 동기로 제공합니다. 비동기 압축/암복호화가 실제로
+ * 사용될 때만 BrowserAdapter를 동적 import합니다. Web Streams와 명시적 어댑터는
+ * 브라우저 조건에서 `@ddunigma/node/secure`를 사용하세요.
  *
  * Node.js 내장 모듈을 직접 임포트하지 않습니다.
  *
@@ -57,11 +57,18 @@ export { DduSetSymbol } from "./core/types.js";
 export type {
   DduBaseOptions,
   DduBaseConstructorOptions,
+  DduSecureOptions,
+  DduSecureConstructorOptions,
+  DduOptions,
+  DduConstructorOptions,
   DduEncodeStats,
   DduProgressInfo,
   CharSetConfig,
   CharSetInfo,
   EncodingProfile,
   ObfuscationLayer,
+  PlatformAdapter,
+  KeyDerivationOptions,
+  KeyDerivationAlgorithm,
   DduSetSymbolInput,
 } from "./core/types.js";

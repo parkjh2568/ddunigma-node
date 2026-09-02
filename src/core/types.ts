@@ -78,7 +78,7 @@ export interface CharSetInfo {
   hasEncryptionKey: boolean;
   /** 기본 체크섬 사용 여부 */
   defaultChecksum: boolean;
-  /** 기본 체크섬 계산 범위 (5.0: "output") */
+  /** 기본 체크섬 계산 범위 */
   defaultChecksumScope: "plaintext" | "output";
   /** 기본 난독화 사용 여부 */
   defaultObfuscate: boolean;
@@ -174,7 +174,8 @@ export interface DduBaseOptions {
   /**
    * 최대 디코딩 입력(인코딩 문자열) 길이(문자 수). 청크/개행 제거 등 전처리 이전에
    * 선검사하여 거대한 입력에 의한 한도 우회·대량 할당을 차단합니다. 기본값은
-   * `maxDecodedBytes`에 비례합니다.
+   * `maxDecodedBytes * 4 + 1024`에 비례하며 호출 단위로 `maxDecodedBytes`를 낮추면
+   * 이 값도 함께 낮아집니다. 조밀한 사용자 청킹은 명시적으로 늘릴 수 있습니다.
    */
   maxEncodedChars?: number;
   /** 최대 압축해제 바이트 수 (Zip Bomb 방어) */
@@ -185,14 +186,14 @@ export interface DduBaseOptions {
   chunkSeparator?: string;
   /** 진행률 콜백 */
   onProgress?: (info: DduProgressInfo) => void;
-  /** 한글 난독화 활성화 (6.0: 암호화 키와 무관하게 동작) */
+  /** 한글 난독화 활성화 (암호화 키와 독립적으로 동작) */
   obfuscate?: boolean;
 }
 
 /**
  * Secure 확장 옵션 — `DduBaseOptions`에 압축/암호화/체크섬 부가기능 옵션을 더합니다.
  * `@ddunigma/node`/`@ddunigma/node/browser`는 adapter-backed 옵션을 비동기 메서드에서
- * lazy secure로 처리하고, `@ddunigma/node/secure`는 sync/async secure 표면을 모두 제공합니다.
+ * lazy adapter로 처리하고, `@ddunigma/node/secure`는 sync/async secure 표면을 모두 제공합니다.
  */
 export interface DduSecureOptions extends DduBaseOptions {
   /** 압축 사용 여부 (zlib deflate 또는 brotli) */
@@ -209,7 +210,8 @@ export interface DduSecureOptions extends DduBaseOptions {
    * - `"output"`: 인코딩 파이프라인 최종 바이트(압축/암호화 후, 와이어에 실리는 바이트)의 CRC32.
    *   암호화 시 평문 CRC를 노출하지 않고, 복호화 이전에 전송 손상을 감지합니다.
    *
-   * `checksum`과 마찬가지로 와이어에 자기기술 플래그가 없으므로 인코딩/디코딩에서 동일하게 지정해야 합니다.
+   * `checksum` 사용 여부는 디코딩에서도 지정해야 하지만, scope는 checksum marker에서
+   * 자동 판별되므로 디코딩 옵션에 반복할 필요가 없습니다.
    */
   checksumScope?: "plaintext" | "output";
   /**
@@ -313,6 +315,13 @@ export interface DduSecureConstructorOptions extends DduBaseConstructorOptions, 
    * @internal
    */
   adapterFactory?: () => PlatformAdapter;
+
+  /**
+   * 비동기 플랫폼 어댑터 팩토리. root 진입점이 실제 압축/암복호화 시점에
+   * 런타임 어댑터 모듈을 동적 import하는 데 사용합니다.
+   * @internal
+   */
+  asyncAdapterFactory?: () => Promise<PlatformAdapter>;
 }
 
 /**
@@ -336,8 +345,8 @@ export const dduDefaultConstructorOptions: DduConstructorOptions = {
  * 암호화 및 압축 연산을 제공하는 플랫폼 어댑터 인터페이스.
  * 각 런타임(Node.js, 브라우저, 엣지)이 이 인터페이스를 구현합니다.
  *
- * 동기 메서드(`?`로 표시)는 Node.js에서만 사용 가능합니다.
- * 브라우저/엣지 어댑터는 동기 메서드 호출 시 throw합니다.
+ * 동기 메서드(`?`로 표시)는 선택 사항입니다. 기본 BrowserAdapter는
+ * 비동기 메서드만 구현하며 NodeAdapter는 동기·비동기 양쪽을 지원합니다.
  */
 export interface PlatformAdapter {
   // ─── Crypto ──────────────────────────────────────────────────────────────
@@ -363,6 +372,7 @@ export interface PlatformAdapter {
    * @remarks 코어 인코딩/디코딩 파이프라인은 이 메서드를 호출하지 않습니다(각 어댑터가
    * 암호화 IV를 내부에서 직접 생성). 6.0부터 **선택(optional)** 이므로 커스텀 어댑터는
    * 구현하지 않아도 됩니다. `NodeAdapter`/`BrowserAdapter`는 편의상 계속 제공합니다.
+   * @deprecated 코어 계약에서 사용하지 않습니다. 다음 major 버전에서 제거할 예정입니다.
    */
   randomBytes?(length: number): Uint8Array;
 
@@ -398,13 +408,12 @@ export interface PlatformAdapter {
 
 /**
  * 한글 음절 난독화 레이어 인터페이스.
- * 암호화된 출력을 자연스러운 한국어 음절 블록으로 변환합니다.
+ * charset 출력 문자를 한글 음절 블록으로 가역 변환합니다.
  */
 export interface ObfuscationLayer {
   /**
-   * 암호화된 charset 인코딩 문자열을 자연스러운 한글 음절로 변환합니다.
-   * 모든 출력 문자는 U+AC00–U+D7A3 범위에 있습니다.
-   * 출력 길이 <= 입력 길이의 1.5배.
+   * charset 인코딩 문자열을 한글 음절로 가역 변환합니다.
+   * 이 변환은 시각적 난독화 용도이며 기밀성을 제공하지 않습니다.
    */
   obfuscate(input: string): string;
 

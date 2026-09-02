@@ -4,6 +4,41 @@
 
 ## Unreleased
 
+## 6.1.1 - 2026-09-02
+
+### 정확성·안전성
+
+- `throwOnError:false` fallback에서 padding 충돌 제거 후 charset이 1개가 되면 비트 패킹이
+  종료되지 않던 문제를 수정했습니다. 변형된 charset을 다시 검증하고 유효한 preset으로
+  fallback합니다.
+- 빈 custom charset·빈 padding·빈 coda, 유효 범위 밖 bit length, 잘못된 factory 타입을
+  명시적으로 거부합니다. 생성자 옵션과 호출 옵션을 합친 뒤의 chunk 설정도 다시 검증합니다.
+- `getStats`/`getStatsAsync`와 progress callback의 일반 오류를 공개 `Ddu64Error` 계약에 맞게
+  래핑합니다.
+- BrowserAdapter가 압축과 압축 해제 지원 여부를 각각 감지·캐시하도록 수정했습니다. 한쪽 Web
+  API만 제공하는 런타임에서도 지원되는 방향은 정상 동작합니다.
+
+### 기본 진입점 adapter 통합
+
+- `@ddunigma/node`와 `@ddunigma/node/browser`의 비동기 secure 경로가 별도 secure 인스턴스를
+  만들지 않고 현재 core에 adapter만 동적 import·주입합니다. 첫 동시 호출은 하나의 Promise를
+  공유하며, charset·KDF salt 등 생성자 상태는 생성 시점 snapshot을 유지합니다.
+- 압축된 입력은 wire metadata로 판별하므로 `decodeAsync`에 `compress:true`를 반복하지 않아도
+  lazy adapter가 로드됩니다. 명시적 `adapter`/`adapterFactory`는 자동 adapter보다 우선합니다.
+- root와 browser 진입점이 실제 메서드에서 받는 `DduOptions`/`DduConstructorOptions` 및 adapter·
+  KDF 타입을 동일하게 export합니다. 동기 압축·암호화는 계속 `/secure` 진입점을 사용합니다.
+
+### 유지보수·배포
+
+- 사용되지 않는 sync crypto 중계 모듈, 중복 테스트, 단일 호출 전달 helper와 오래된 작업 주석을
+  제거하고 현재 구조를 기준으로 `CONTRIBUTING.md`, README, API reference를 정비했습니다.
+- format check, production `any` 금지, benchmark lint/typecheck, packed ESM/CJS/browser secure smoke,
+  패키지 크기 상한, Node 22/24/26 및 Bun/Deno smoke를 릴리스 게이트에 추가했습니다.
+- npm OIDC trusted publishing workflow를 추가하고 이미 배포된 `6.1.0`과 충돌하지 않도록 패치
+  버전을 `6.1.1`로 올렸습니다.
+
+## 6.1.0 - 2026-07-09
+
 ### 기본 진입점에 lazy secure 추가 (편의성 개선)
 
 기본 진입점(`@ddunigma/node`, `@ddunigma/node/browser`)에서 secure 옵션(`compress`,
@@ -24,6 +59,10 @@
   lazy 우회 및 동기 가드가 비활성화됩니다.
 - 성능: adapter 판정을 생성 시점 boolean 캐시로 옮겨, async hot-path에서 호출마다 발생하던
   `getCharSetInfo()` 할당(charset 배열 복사 + 정보 객체)을 제거했습니다.
+
+## 6.0.1 - 2026-07-09
+
+- npm package version metadata를 `6.0.1`로 갱신했습니다.
 
 ## 6.0.0
 
@@ -156,8 +195,8 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 
 - 디코드 입력(인코딩 문자열) 길이 상한 `maxEncodedChars` 옵션 추가. 청크/개행 제거 등
   전처리 **이전에** 선검사하여, 개행만 가득한 거대한 입력이 출력 한도(`maxDecodedBytes`)를
-  우회하면서 대량 문자열 복사를 유발하던 문제를 차단합니다. 기본값은 `maxDecodedBytes`에
-  비례(`max(256MiB, maxDecodedBytes×4)` 문자)하여 정상 입력을 깨지 않습니다.
+  우회하면서 대량 문자열 복사를 유발하던 문제를 차단합니다. 자동값은
+  `maxDecodedBytes×4+1024` 문자이며 호출 단위로 출력 한도를 낮추면 함께 낮아집니다.
 
 ### 기타 변경
 

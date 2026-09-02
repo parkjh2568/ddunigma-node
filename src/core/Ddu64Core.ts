@@ -33,7 +33,7 @@ import {
   runDecompressSync,
   runDecryptSync,
   runEncryptSync,
-} from "./internal/SyncCryptoHelpers.js";
+} from "./internal/SyncAdapterGateway.js";
 import type { AdapterGatewayContext } from "./internal/AdapterGatewayContext.js";
 import {
   compressAsyncWithAdapter,
@@ -67,8 +67,6 @@ import { buildEncryptionAAD } from "./wireFormat.js";
 
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
-/** 디코드 입력 문자열 길이 기본 상한(문자 수). maxDecodedBytes*4와 함께 max 적용. */
-const DEFAULT_MAX_ENCODED_CHARS = 256 * 1024 * 1024;
 
 /**
  * AES-GCM 와이어 오버헤드 (IV 12바이트 + authTag 16바이트).
@@ -132,7 +130,7 @@ export class Ddu64Core {
   private encryptionKeyHash: Uint8Array | undefined;
 
   /** 캐시된 어댑터 게이트웨이 컨텍스트 (호출당 재할당 방지, 해시는 getter로 라이브 조회) */
-  private syncGatewayContext: AdapterGatewayContext | undefined;
+  private adapterGatewayContext: AdapterGatewayContext | undefined;
 
   /** 기본 체크섬 활성화 */
   private readonly defaultChecksum: boolean;
@@ -172,6 +170,12 @@ export class Ddu64Core {
 
   /** 어댑터 지연 생성 팩토리 (adapter 미지정 시 첫 암/복호화·압축 시점에 1회 호출) */
   private readonly adapterFactory: (() => PlatformAdapter) | undefined;
+
+  /** 비동기 어댑터 동적 import 팩토리 */
+  private readonly asyncAdapterFactory: (() => Promise<PlatformAdapter>) | undefined;
+
+  /** 동시 첫 호출의 어댑터 로드를 하나로 합치는 Promise */
+  private asyncAdapterPromise: Promise<PlatformAdapter> | undefined;
 
   /** 난독화 레이어 팩토리 (코어-난독화 분리용 주입점) */
   private readonly obfuscationLayerFactory: ((alphabet: string[]) => ObfuscationLayer) | undefined;
@@ -214,14 +218,15 @@ export class Ddu64Core {
     dduOptions = resolved.dduOptions;
     validateRuntimeOptions(dduOptions);
 
-    // 5.0: 초기화 오류 시 기본적으로 throw (기본 3종 등 유효 설정은 영향 없음; 잘못된 charset만 throw).
-    // 레거시 묵시적 fallback이 필요하면 throwOnError: false를 명시.
+    // 잘못된 커스텀 charset은 기본적으로 거부합니다. 레거시 묵시적 fallback이 필요하면
+    // throwOnError: false를 명시합니다.
     const shouldThrow = dduOptions?.throwOnError ?? true;
 
     // 어댑터 해석: 명시적 adapter가 없으면 adapterFactory로 첫 사용 시점에 지연 생성합니다.
     // 순수 인코딩/디코딩만 하면 어댑터는 생성되지 않습니다.
     this.adapter = dduOptions?.adapter;
     this.adapterFactory = dduOptions?.adapterFactory;
+    this.asyncAdapterFactory = dduOptions?.asyncAdapterFactory;
     this.obfuscationLayerFactory = dduOptions?.obfuscationLayerFactory;
 
     // Charset 초기화
@@ -255,13 +260,13 @@ export class Ddu64Core {
     );
     // 디코드 입력(인코딩 문자열) 자체의 상한. 청크/개행 제거 등 전처리 이전에 선검사하여
     // 거대한 입력(예: 개행만 가득한 문자열)이 한도 우회 + 대량 문자열 복사를 유발하지 못하게 합니다.
-    // 기본값은 maxDecodedBytes에 비례해 정상 인코딩(비-2의 제곱수는 바이트당 최대 ~2.67문자 +
-    // 청크 구분자)을 깨지 않도록 충분히 크게 잡습니다.
+    // 기본값은 maxDecodedBytes에 비례하고 footer 등 고정 메타데이터 여유를 포함합니다.
+    // 매우 조밀한 사용자 청킹은 maxEncodedChars를 별도로 늘려야 합니다.
     this.defaultMaxEncodedChars = normalizeLimit(
       dduOptions?.maxEncodedChars,
       this.defaultMaxDecodedBytes === Number.POSITIVE_INFINITY
         ? Number.POSITIVE_INFINITY
-        : Math.max(DEFAULT_MAX_ENCODED_CHARS, this.defaultMaxDecodedBytes * 4),
+        : Math.min(Number.MAX_SAFE_INTEGER, this.defaultMaxDecodedBytes * 4 + 1024),
       shouldThrow,
       "maxEncodedChars",
     );
@@ -289,23 +294,38 @@ export class Ddu64Core {
     this.dduCharCodeLookupOffset = lookupTables.lookupOffset;
     this.dduCharCodes = lookupTables.charCodes;
 
-    this.urlSafe = validateFinalCharsetConfiguration(
-      this.dduChar,
-      this.paddingChar,
-      dduOptions?.urlSafe ?? false,
-      shouldThrow,
-    );
+    try {
+      this.urlSafe =
+        dduOptions?.urlSafe === true
+          ? isUrlSafeCompatible(this.dduChar, this.paddingChar, shouldThrow)
+          : false;
+    } catch (error) {
+      if (isDdu64Error(error)) throw error;
+      throw new Ddu64CharsetError(toErrorMessage(error), error);
+    }
 
     // 암호화 키 (원시 저장, 해시는 첫 암/복호화 시점에 지연 파생 후 캐시)
     // 생성 시점에 즉시 파생하면 암호화를 쓰지 않는 인스턴스나 고비용 PBKDF2 파생에서
     // 불필요한 작업이 발생하므로, SyncAdapterGateway/AsyncAdapterGateway의 지연 파생에 맡깁니다.
     this.encryptionKey = dduOptions?.encryptionKey;
-    this.keyDerivation = dduOptions?.keyDerivation;
+    const keyDerivation = dduOptions?.keyDerivation;
+    this.keyDerivation = keyDerivation
+      ? {
+          ...keyDerivation,
+          ...(keyDerivation.salt !== undefined
+            ? {
+                salt:
+                  typeof keyDerivation.salt === "string"
+                    ? keyDerivation.salt
+                    : new Uint8Array(keyDerivation.salt),
+              }
+            : {}),
+        }
+      : undefined;
 
     // 옵션
     this.defaultChecksum = dduOptions?.checksum ?? false;
-    // 5.0: 기본 체크섬 범위를 "output"으로 전환 (암호화 시 평문 CRC 미노출).
-    // 기본 3종(옵션 미사용)은 체크섬을 쓰지 않으므로 와이어 출력에 영향 없음.
+    // output 범위는 암호화 사용 시 평문 CRC가 노출되는 것을 피합니다.
     this.defaultChecksumScope = dduOptions?.checksumScope ?? "output";
     this.defaultChunkSize = dduOptions?.chunkSize;
     this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
@@ -322,8 +342,7 @@ export class Ddu64Core {
     this.defaultOnProgress = dduOptions?.onProgress;
     this.defaultRequireEncryption =
       dduOptions?.requireEncryption ?? this.encryptionKey !== undefined;
-    // 6.0: 난독화는 암호화와 독립적으로 동작합니다(라이브러리 주목적: 재미 + 시각적 난독화).
-    // 키 없는 난독화도 허용하므로 생성자에서의 암호화 키 강제 제약을 제거했습니다.
+    // 난독화는 암호화 키와 독립적으로 동작합니다.
 
     // BitPack 설정
     this.bitPackConfig = {
@@ -365,7 +384,12 @@ export class Ddu64Core {
     try {
       validateRuntimeOptions(options, "encode");
       validateEncodeInput(input);
-      return this.encodeInternal(input, options).encoded;
+      return runSyncEncodePipeline(input, options, {
+        ...this.buildEncodeBaseContext(options),
+        compress: (data, algorithm, level) =>
+          runCompressSync(this.getAdapter(), data, algorithm, level),
+        encrypt: (data, aad) => runEncryptSync(this.getAdapterGatewayContext(), data, aad),
+      }).encoded;
     } catch (err) {
       throw wrapDdu64Error(err, "encode");
     }
@@ -402,20 +426,16 @@ export class Ddu64Core {
     try {
       validateRuntimeOptions(options, "decode");
       validateDecodeInput(input);
-      return this.decodeToUint8ArrayInternal(input, options);
+      const prep = this.decodePrelude(input, options);
+      return runSyncDecodePipeline(prep, options, {
+        ...this.buildDecodeBaseContext(options),
+        decrypt: (data, aad) => runDecryptSync(this.getAdapterGatewayContext(), data, aad),
+        decompress: (data, algorithm, maxBytes) =>
+          runDecompressSync(this.getAdapter(), data, algorithm, maxBytes),
+      });
     } catch (err) {
       throw wrapDdu64Error(err, "decode");
     }
-  }
-
-  private decodeToUint8ArrayInternal(input: string, options?: DduOptions): Uint8Array {
-    const prep = this.decodePrelude(input, options);
-    return runSyncDecodePipeline(prep, options, {
-      ...this.buildDecodeBaseContext(options),
-      decrypt: (data, aad) => runDecryptSync(this.getSyncGatewayContext(), data, aad),
-      decompress: (data, algorithm, maxBytes) =>
-        runDecompressSync(this.getAdapter(), data, algorithm, maxBytes),
-    });
   }
 
   /**
@@ -427,23 +447,19 @@ export class Ddu64Core {
     try {
       validateRuntimeOptions(options, "encode");
       validateEncodeInput(input);
-      return await this.encodeAsyncInternal(input, options);
+      const result = await runAsyncEncodePipeline(input, options, {
+        ...this.buildEncodeBaseContext(options),
+        compress: async (data, algorithm, level) =>
+          compressAsyncWithAdapter(await this.getAsyncAdapter(), data, algorithm, level),
+        encrypt: async (data, aad) => {
+          await this.getAsyncAdapter();
+          return encryptAsyncWithAdapter(this.getAdapterGatewayContext(), data, aad);
+        },
+      });
+      return result.encoded;
     } catch (err) {
       throw wrapDdu64Error(err, "encode");
     }
-  }
-
-  private async encodeAsyncInternal(
-    input: Uint8Array | string,
-    options?: DduOptions,
-  ): Promise<string> {
-    const result = await runAsyncEncodePipeline(input, options, {
-      ...this.buildEncodeBaseContext(options),
-      compress: (data, algorithm, level) =>
-        compressAsyncWithAdapter(this.getAdapter(), data, algorithm, level),
-      encrypt: (data, aad) => encryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
-    });
-    return result.encoded;
   }
 
   /**
@@ -471,23 +487,19 @@ export class Ddu64Core {
     try {
       validateRuntimeOptions(options, "decode");
       validateDecodeInput(input);
-      return await this.decodeToUint8ArrayAsyncInternal(input, options);
+      const prep = this.decodePrelude(input, options);
+      return await runAsyncDecodePipeline(prep, options, {
+        ...this.buildDecodeBaseContext(options),
+        decrypt: async (data, aad) => {
+          await this.getAsyncAdapter();
+          return decryptAsyncWithAdapter(this.getAdapterGatewayContext(), data, aad);
+        },
+        decompress: async (data, algorithm, maxBytes) =>
+          decompressAsyncWithAdapter(await this.getAsyncAdapter(), data, algorithm, maxBytes),
+      });
     } catch (err) {
       throw wrapDdu64Error(err, "decode");
     }
-  }
-
-  private async decodeToUint8ArrayAsyncInternal(
-    input: string,
-    options?: DduOptions,
-  ): Promise<Uint8Array> {
-    const prep = this.decodePrelude(input, options);
-    return runAsyncDecodePipeline(prep, options, {
-      ...this.buildDecodeBaseContext(options),
-      decrypt: (data, aad) => decryptAsyncWithAdapter(this.getSyncGatewayContext(), data, aad),
-      decompress: (data, algorithm, maxBytes) =>
-        decompressAsyncWithAdapter(this.getAdapter(), data, algorithm, maxBytes),
-    });
   }
 
   /**
@@ -536,13 +548,22 @@ export class Ddu64Core {
    * @group Introspection
    */
   getStats(input: Uint8Array | string, options?: DduOptions): DduEncodeStats {
-    validateRuntimeOptions(options, "encode");
-    validateEncodeInput(input);
-    const originalData = typeof input === "string" ? stringToBytes(input) : input;
-    // 이미 바이트로 변환된 originalData를 재사용해 문자열 입력의 중복 UTF-8 인코딩을 피합니다.
-    // 실제 AES-GCM 연산을 건너뛰는 통계 전용 인코딩으로 와이어 길이만 정확히 산출합니다.
-    const { encoded, compressedSize } = this.encodeStatsInternal(originalData, options);
-    return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
+    try {
+      validateRuntimeOptions(options, "encode");
+      validateEncodeInput(input);
+      const originalData = typeof input === "string" ? stringToBytes(input) : input;
+      // AES-GCM의 고정 overhead만 반영하고 실제 암호화는 생략합니다. 압축은 결과 크기와
+      // 적용 여부에 영향을 주므로 실제 adapter 경로를 사용합니다.
+      const { encoded, compressedSize } = runSyncEncodePipeline(originalData, options, {
+        ...this.buildEncodeBaseContext(options),
+        compress: (data, algorithm, level) =>
+          runCompressSync(this.getAdapter(), data, algorithm, level),
+        encrypt: (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
+      });
+      return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
+    } catch (err) {
+      throw wrapDdu64Error(err, "encode");
+    }
   }
 
   /**
@@ -554,11 +575,20 @@ export class Ddu64Core {
    * @group Introspection
    */
   async getStatsAsync(input: Uint8Array | string, options?: DduOptions): Promise<DduEncodeStats> {
-    validateRuntimeOptions(options, "encode");
-    validateEncodeInput(input);
-    const originalData = typeof input === "string" ? stringToBytes(input) : input;
-    const { encoded, compressedSize } = await this.encodeStatsAsyncInternal(originalData, options);
-    return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
+    try {
+      validateRuntimeOptions(options, "encode");
+      validateEncodeInput(input);
+      const originalData = typeof input === "string" ? stringToBytes(input) : input;
+      const { encoded, compressedSize } = await runAsyncEncodePipeline(originalData, options, {
+        ...this.buildEncodeBaseContext(options),
+        compress: async (data, algorithm, level) =>
+          compressAsyncWithAdapter(await this.getAsyncAdapter(), data, algorithm, level),
+        encrypt: async (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
+      });
+      return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
+    } catch (err) {
+      throw wrapDdu64Error(err, "encode");
+    }
   }
 
   private buildEncodeStats(
@@ -586,55 +616,6 @@ export class Ddu64Core {
   }
 
   // ─── 내부 인코딩/디코딩 ────────────────────────────────────────────────
-
-  /**
-   * 통계를 위한 메타데이터 포함 내부 인코딩.
-   */
-  private encodeInternal(
-    input: Uint8Array | string,
-    options?: DduOptions,
-  ): { encoded: string; compressedSize?: number } {
-    return runSyncEncodePipeline(input, options, {
-      ...this.buildEncodeBaseContext(options),
-      compress: (data, algorithm, level) =>
-        runCompressSync(this.getAdapter(), data, algorithm, level),
-      encrypt: (data, aad) => runEncryptSync(this.getSyncGatewayContext(), data, aad),
-    });
-  }
-
-  /**
-   * getStats 전용 인코딩: 실제 AES-GCM 연산을 생략하고 길이만 정확한 더미 암호화를 사용합니다.
-   *
-   * 암호화 출력 길이는 `평문 + AEAD_OVERHEAD_BYTES`로 결정적이고, 비트팩/푸터/체크섬/난독화/
-   * URL-safe/청킹은 모두 입력 바이트 "길이"에만 의존(바이트 "값"과 무관)하므로, 더미 암호문(0으로 채운
-   * 동일 길이 버퍼)으로 마무리해도 `encoded.length`는 실제 `encode()` 출력과 바이트 단위로 일치합니다.
-   * 압축은 결과 크기와 적용 여부 판단에 필요하므로 실제로 수행합니다.
-   *
-   * 이 등식(통계 길이 === 실제 encode 길이)은 property test로 고정됩니다.
-   */
-  private encodeStatsInternal(
-    input: Uint8Array,
-    options?: DduOptions,
-  ): { encoded: string; compressedSize?: number } {
-    return runSyncEncodePipeline(input, options, {
-      ...this.buildEncodeBaseContext(options),
-      compress: (data, algorithm, level) =>
-        runCompressSync(this.getAdapter(), data, algorithm, level),
-      encrypt: (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
-    });
-  }
-
-  private async encodeStatsAsyncInternal(
-    input: Uint8Array,
-    options?: DduOptions,
-  ): Promise<{ encoded: string; compressedSize?: number }> {
-    return runAsyncEncodePipeline(input, options, {
-      ...this.buildEncodeBaseContext(options),
-      compress: (data, algorithm, level) =>
-        compressAsyncWithAdapter(this.getAdapter(), data, algorithm, level),
-      encrypt: async (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
-    });
-  }
 
   /**
    * 동기/비동기 인코딩 파이프라인이 공유하는 기본 컨텍스트를 구성합니다.
@@ -704,43 +685,11 @@ export class Ddu64Core {
       compressionAlgorithm,
       isEncrypted,
       options,
-      this.getPayloadCodecContext(),
+      this.payloadCodecContext,
     );
 
-    // 후처리 (난독화, 체크섬, URL-safe, 청킹)
-    result = this.applyPostEncoding(
-      result,
-      options,
-      checksum,
-      shouldChecksum,
-      checksumScope,
-      chunkSize,
-      chunkSeparator,
-    );
-
-    this.reportProgress(options, {
-      processedBytes: workingData.length,
-      totalBytes: workingData.length,
-      percent: 100,
-      stage: "done",
-    });
-    return result;
-  }
-
-  /**
-   * 인코딩 후처리: 난독화, 체크섬, URL-safe, 청킹을 적용합니다.
-   */
-  private applyPostEncoding(
-    encoded: string,
-    options: DduOptions | undefined,
-    checksum: string,
-    shouldChecksum: boolean,
-    checksumScope: "plaintext" | "output",
-    chunkSize: number | undefined,
-    chunkSeparator: string,
-  ): string {
-    return applyEncodePostProcessing({
-      encoded,
+    result = applyEncodePostProcessing({
+      encoded: result,
       options,
       checksum,
       shouldChecksum,
@@ -753,6 +702,14 @@ export class Ddu64Core {
       assertSafeChunkSeparator: (value, separator) =>
         this.assertSafeChunkSeparator(value, separator),
     });
+
+    this.reportProgress(options, {
+      processedBytes: workingData.length,
+      totalBytes: workingData.length,
+      percent: 100,
+      stage: "done",
+    });
+    return result;
   }
 
   /**
@@ -779,7 +736,7 @@ export class Ddu64Core {
       shouldObfuscate: (callOptions) => this.shouldObfuscate(callOptions),
       deobfuscate: (value) => this.getObfuscationLayer().deobfuscate(value),
       decodeChars: (cleanedInput, paddingBits) =>
-        decodePayload(cleanedInput, paddingBits, this.getPayloadCodecContext()),
+        decodePayload(cleanedInput, paddingBits, this.payloadCodecContext),
       reportDecodeStart: (totalBytes) => {
         this.reportProgress(options, {
           processedBytes: 0,
@@ -799,18 +756,11 @@ export class Ddu64Core {
     });
   }
 
-  private getPayloadCodecContext(): PayloadCodecContext {
-    return this.payloadCodecContext;
-  }
-
   private reportProgress(options: DduOptions | undefined, info: DduProgressInfo): void {
     (options?.onProgress ?? this.defaultOnProgress)?.(info);
   }
 
-  // ─── 동기 암호화/압축 헬퍼 ───────────────────────────────────────
-  // 동기 암복호/압축 게이트웨이 호출의 에러 타입화는 internal/SyncCryptoHelpers로 분리했습니다
-  // (run{Encrypt,Decrypt,Compress,Decompress}Sync). 거동·에러 매핑은 동일합니다.
-
+  // ─── Adapter 해석 ─────────────────────────────────────────────────────────
   /**
    * 어댑터를 지연 해석합니다. 명시적 adapter가 없고 adapterFactory가 있으면 첫 호출 시
    * 1회 생성·캐시합니다. 순수 인코딩/디코딩 경로에서는 호출되지 않습니다.
@@ -822,11 +772,27 @@ export class Ddu64Core {
     return this.adapter;
   }
 
-  private getSyncGatewayContext(): AdapterGatewayContext {
-    if (!this.syncGatewayContext) {
-      // adapter/encryptionKey/keyDerivation은 생성 후 불변이므로 한 번만 구성합니다.
-      // encryptionKeyHash는 지연 파생되며, 유일한 writer인 setEncryptionKeyHash에서
-      // 인스턴스 필드와 캐시 컨텍스트를 함께 갱신해 일관성을 유지합니다.
+  private async getAsyncAdapter(): Promise<PlatformAdapter | undefined> {
+    const adapter = this.getAdapter();
+    if (adapter !== undefined || this.asyncAdapterFactory === undefined) return adapter;
+
+    if (!this.asyncAdapterPromise) {
+      this.asyncAdapterPromise = this.asyncAdapterFactory()
+        .then((loadedAdapter) => {
+          this.adapter = loadedAdapter;
+          if (this.adapterGatewayContext) this.adapterGatewayContext.adapter = loadedAdapter;
+          return loadedAdapter;
+        })
+        .catch((error: unknown) => {
+          this.asyncAdapterPromise = undefined;
+          throw error;
+        });
+    }
+    return this.asyncAdapterPromise;
+  }
+
+  private getAdapterGatewayContext(): AdapterGatewayContext {
+    if (!this.adapterGatewayContext) {
       const ctx: AdapterGatewayContext = {
         adapter: this.getAdapter(),
         encryptionKey: this.encryptionKey,
@@ -837,9 +803,9 @@ export class Ddu64Core {
           ctx.encryptionKeyHash = hash;
         },
       };
-      this.syncGatewayContext = ctx;
+      this.adapterGatewayContext = ctx;
     }
-    return this.syncGatewayContext;
+    return this.adapterGatewayContext;
   }
 
   // ─── 난독화 헬퍼 ───────────────────────────────────────────────────
@@ -853,7 +819,7 @@ export class Ddu64Core {
       if (!this.obfuscationLayerFactory) {
         throw new Ddu64ObfuscationError(
           "[Ddu64 obfuscation] No obfuscation layer is wired. Use Ddu64Node/Ddu64Browser " +
-            "(batteries-included), or inject `obfuscationLayerFactory` when constructing Ddu64Core directly.",
+            "(preconfigured), or inject `obfuscationLayerFactory` when constructing Ddu64Core directly.",
         );
       }
       this.obfuscationLayer = this.obfuscationLayerFactory(
@@ -866,7 +832,7 @@ export class Ddu64Core {
   /**
    * 주어진 호출에 난독화를 적용해야 하는지 결정합니다.
    * 호출별 옵션이 생성자 기본값을 오버라이드합니다.
-   * 6.0: 난독화는 암호화와 무관하게 적용됩니다(키 비의존). 키 없이도 난독화가 동작합니다.
+   * 난독화는 암호화 키와 무관하게 동작합니다.
    */
   private shouldObfuscate(options?: DduInternalOptions): boolean {
     return options?.obfuscate ?? this.defaultObfuscate;
@@ -875,7 +841,14 @@ export class Ddu64Core {
   // ─── 유틸리티 메서드 ───────────────────────────────────────────────────────
 
   private assertSafeChunkSeparator(encoded: string, separator: string): void {
-    if (separator.length === 0 || this.isLineBreakSeparator(separator)) return;
+    if (
+      separator.length === 0 ||
+      separator === "\n" ||
+      separator === "\r\n" ||
+      separator === "\r"
+    ) {
+      return;
+    }
 
     if (encoded.includes(separator)) {
       throw new Ddu64EncodeError(
@@ -883,23 +856,5 @@ export class Ddu64Core {
           "Use a separator that cannot be produced by the charset, footer, checksum, or URL-safe output.",
       );
     }
-  }
-
-  private isLineBreakSeparator(separator: string): boolean {
-    return separator === "\n" || separator === "\r\n" || separator === "\r";
-  }
-}
-
-function validateFinalCharsetConfiguration(
-  charSet: string[],
-  paddingChar: string,
-  requestUrlSafe: boolean,
-  shouldThrow: boolean,
-): boolean {
-  try {
-    return requestUrlSafe ? isUrlSafeCompatible(charSet, paddingChar, shouldThrow) : false;
-  } catch (error) {
-    if (isDdu64Error(error)) throw error;
-    throw new Ddu64CharsetError(toErrorMessage(error), error);
   }
 }

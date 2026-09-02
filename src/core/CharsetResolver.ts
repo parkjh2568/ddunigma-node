@@ -5,18 +5,9 @@
  */
 
 import { buildCodaCharset, isKnownCodaChar, URL_SAFE_CONFLICT_CHARS } from "./codecUtils.js";
-import type {
-  DduConstructorOptions,
-  CharSetConfig,
-  EncodingProfile,
-  DduSetSymbolInput,
-} from "./types.js";
+import type { DduConstructorOptions, EncodingProfile } from "./types.js";
 import { DduSetSymbol, dduDefaultConstructorOptions } from "./types.js";
 import { getCharSet } from "../presets.js";
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const MAX_CHARSET_SIZE = 65536;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -64,7 +55,10 @@ export function resolveInitialCharSet(
     isPredefined: boolean,
     useRepeatPadding?: boolean,
   ): ResolvedCharSet => {
-    const usePow2 = shouldUsePowerOfTwo(length, dduOptions?.usePowerOfTwo);
+    const usePow2 =
+      dduOptions?.usePowerOfTwo === undefined
+        ? length > 0 && (length & (length - 1)) === 0
+        : dduOptions.usePowerOfTwo && length > 0;
     if (usePow2 && length > 0) {
       const exponent = Math.floor(Math.log2(length));
       const pow2Length = 1 << exponent;
@@ -93,7 +87,7 @@ export function resolveInitialCharSet(
     const finalDduChar = dduChar ?? dduOptions?.dduChar;
     const finalPadding = paddingChar ?? dduOptions?.paddingChar;
 
-    if (finalDduChar) {
+    if (finalDduChar !== undefined) {
       if (!finalPadding) {
         throw new Error(`[Ddu64 Constructor] paddingChar is required when dduChar is provided.`);
       }
@@ -101,8 +95,9 @@ export function resolveInitialCharSet(
       let arr = typeof finalDduChar === "string" ? [...finalDduChar] : [...finalDduChar];
 
       const codaChar = dduOptions?.codaChar;
-      const useRepeatPad = codaChar ? true : (dduOptions?.useRepeatPadding ?? false);
-      if (codaChar && codaChar.length > 0) {
+      const hasCoda = codaChar !== undefined && codaChar.length > 0;
+      const useRepeatPad = hasCoda ? true : (dduOptions?.useRepeatPadding ?? false);
+      if (hasCoda) {
         // 알 수 없는 종성은 combineCoda에서 종성-없음(인덱스 0)으로 접혀 중복 심볼을
         // 만들 수 있으므로, throwOnError일 때 명확한 에러로 알립니다.
         if (shouldThrow) {
@@ -138,7 +133,8 @@ export function resolveInitialCharSet(
 
     const symbol =
       dduOptions?.dduSetSymbol ?? dduDefaultConstructorOptions.dduSetSymbol ?? DduSetSymbol.DDU;
-    const cs = getCharSetOrThrow(symbol);
+    const cs = getCharSet(symbol);
+    if (!cs) throw new Error(`CharSet with symbol ${symbol} not found`);
     const resolvedCharSet = cs.codaChar ? buildCodaCharset(cs.charSet, cs.codaChar) : cs.charSet;
     const result = buildMeta(
       resolvedCharSet,
@@ -210,23 +206,10 @@ export function normalizeCharSet(
       if (requiredLength < 2) {
         throw new Error(`[Ddu64 normalizeCharSet] At least 2 unique characters required.`);
       }
-      if (charSet.length === 0) {
-        throw new Error(`[Ddu64 normalizeCharSet] Empty charset.`);
-      }
-
       const multiCharSymbol = charSet.find((c) => c.length !== 1);
       if (multiCharSymbol) {
         if (shouldThrow) {
           throw new Error(`[Ddu64 normalizeCharSet] Multi-character symbols are not supported.`);
-        }
-        continue;
-      }
-
-      if (charSet.length > MAX_CHARSET_SIZE) {
-        if (shouldThrow) {
-          throw new Error(
-            `[Ddu64 normalizeCharSet] Charset size exceeds maximum supported size of 65536.`,
-          );
         }
         continue;
       }
@@ -243,6 +226,11 @@ export function normalizeCharSet(
           );
         }
         charSet = charSet.filter((c) => c !== state.padding);
+        if (charSet.length < requiredLength || charSet.length < 2) {
+          throw new Error(
+            `[Ddu64 normalizeCharSet] Padding removal left too few characters. Required: ${requiredLength}, Has: ${charSet.length}`,
+          );
+        }
       }
 
       for (const c of charSet) {
@@ -322,17 +310,6 @@ function isLoneSurrogate(symbol: string): boolean {
   if (symbol.length !== 1) return false;
   const code = symbol.charCodeAt(0);
   return code >= 0xd800 && code <= 0xdfff;
-}
-
-function shouldUsePowerOfTwo(length: number, preference?: boolean): boolean {
-  if (preference !== undefined) return preference ? length > 0 : false;
-  return length > 0 && (length & (length - 1)) === 0;
-}
-
-function getCharSetOrThrow(symbol: DduSetSymbolInput): CharSetConfig {
-  const cs = getCharSet(symbol);
-  if (!cs) throw new Error(`CharSet with symbol ${symbol} not found`);
-  return cs;
 }
 
 function getFallbackCharSet(dduOptions?: DduConstructorOptions): ResolvedCharSet {

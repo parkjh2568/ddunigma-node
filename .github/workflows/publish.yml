@@ -1,0 +1,31 @@
+name: Publish Package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          require-lockfile: true
+      - name: Verify release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: node -e "const p = require('./package.json'); if (process.env.RELEASE_TAG !== 'v' + p.version) throw new Error('Release tag must equal v' + p.version)"
+      - name: Verify package
+        run: pnpm verify
+      - name: Verify performance baseline
+        run: pnpm bench:guard
+      - name: Publish package
+        run: npm publish --access public --ignore-scripts

@@ -7,33 +7,63 @@ on:
 permissions:
   contents: read
 
-# 같은 ref에 새 푸시가 오면 진행 중인 실행을 취소(CI 분 절약, 빠른 피드백).
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # 전체 게이트: 로컬 `pnpm verify`와 동일한 단일 명령으로 실행(정의 중복 제거).
-  # 활성 LTS/Current 기준(22=engines 하한, 24=LTS, 26=Current). Node 26은 러너 가용성이
-  # 보장되지 않으므로 continue-on-error로 비차단(가용 전까지 신호만, 가용되면 자동 통과).
   verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
+        with:
+          runtime: node@22
+          cache: true
+          require-lockfile: true
+      - run: pnpm verify
+
+  node-runtimes:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24, 26]
-    continue-on-error: ${{ matrix.node == 26 }}
+        node: [24, 26]
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
         with:
-          version: 11.5.3
+          runtime: node@${{ matrix.node }}
+          cache: true
+          require-lockfile: true
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm smoke
+      - run: pnpm smoke:web
 
-      - uses: actions/setup-node@v4
+  web-runtimes:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [bun, deno]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
         with:
-          node-version: ${{ matrix.node }}
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm verify
+          runtime: node@22
+          cache: true
+          require-lockfile: true
+      - run: pnpm build
+      - uses: oven-sh/setup-bun@v2
+        if: matrix.runtime == 'bun'
+        with:
+          bun-version: latest
+      - uses: denoland/setup-deno@v2
+        if: matrix.runtime == 'deno'
+        with:
+          deno-version: lts
+      - run: bun scripts/runtime-web-smoke.mjs
+        if: matrix.runtime == 'bun'
+      - run: deno run scripts/runtime-web-smoke.mjs
+        if: matrix.runtime == 'deno'

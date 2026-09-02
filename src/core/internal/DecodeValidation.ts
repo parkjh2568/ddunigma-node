@@ -1,12 +1,4 @@
-/**
- * Decode validation and limit helpers.
- *
- * These helpers preserve the existing Ddu64Core error messages because several
- * callers and tests rely on those messages while custom error wrapping adds
- * typed error metadata at the public API boundary.
- *
- * @module core/internal/DecodeValidation
- */
+/** Decode validation and limit helpers. @module core/internal/DecodeValidation */
 
 import { lookupCharIndex } from "./CharsetLookup.js";
 import { Ddu64DecodeError, Ddu64InvalidInputError } from "../errors.js";
@@ -15,7 +7,6 @@ const BYTE_BITS = 8;
 
 /**
  * 디코드 비트 수(`numChunks * bitLength - paddingBits`)를 계산합니다.
- * estimate/assert 양쪽이 동일 공식을 공유하도록 단일 정의로 추출했습니다.
  * 파이프라인에서 입력은 항상 정렬(`assertEncodedInputAligned`)되므로 `Math.ceil`은
  * pow2(chunkSize=1)·정렬된 non-pow2(짝수 길이) 모두에서 정확합니다.
  */

@@ -15,7 +15,7 @@
  */
 
 import { maxValueForBitLength } from "../BitPack.js";
-import { Ddu64DecodeError } from "../errors.js";
+import { Ddu64DecodeError, Ddu64EncodeError } from "../errors.js";
 
 const STRING_CHUNK_SIZE = 8192;
 
@@ -37,6 +37,9 @@ export function packPow2ToString(
   bitLength: number,
   charCodes: Uint16Array,
 ): { payload: string; paddingBits: number } {
+  if (!Number.isInteger(bitLength) || bitLength < 1 || bitLength > 16) {
+    throw new Ddu64EncodeError(`[Ddu64 encode] Invalid bitLength: ${bitLength}`);
+  }
   const inputLen = data.length;
   if (inputLen === 0) return { payload: "", paddingBits: 0 };
 
@@ -181,6 +184,9 @@ export function unpackPow2FromString(
   lookup: Int32Array,
   lookupOffset: number,
 ): Uint8Array {
+  if (!Number.isInteger(bitLength) || bitLength < 1 || bitLength > 16) {
+    throw new Ddu64DecodeError(`[Ddu64 decode] Invalid bitLength: ${bitLength}`);
+  }
   const inputLen = input.length;
   if (inputLen === 0) return new Uint8Array(0);
 
