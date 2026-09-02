@@ -73,8 +73,9 @@ charset 문자와 `paddingChar`는 각각 단일 UTF-16 코드 유닛이어야 �
 
 `@ddunigma/node`와 `@ddunigma/node/browser`는 비동기 파이프라인이 실제 압축·암복호화
 단계에 도달할 때만 플랫폼 adapter를 동적 import해 현재 core에 주입합니다. 동기
-압축/암호화는 `@ddunigma/node/secure`를 사용하세요. `checksum`/`checksumScope`/청킹/
-난독화는 플랫폼 어댑터 없이도 동작합니다.
+압축/암호화가 필요한 Node 사용자는 `await Ddu64.create(options)`로 adapter를 먼저
+준비할 수 있습니다. `checksum`/`checksumScope`/청킹/난독화는 플랫폼 어댑터 없이도
+동작합니다.
 
 Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코딩, 기본 64 MiB)와
 `maxBufferedChars`(디코딩, 기본 64 Mi 문자)를 추가로 지원합니다.
@@ -100,14 +101,29 @@ Web Streams API는 축적 모드 메모리 제한용 `maxBufferedBytes`(인코�
 
 기본 진입점은 비동기 메서드에서 압축/암호화 어댑터를 필요할 때만 불러옵니다.
 
+### 보안 경계
+
+`@ddunigma/node/secure`는 관련 기능과 어댑터를 정적으로 노출하는 진입점 이름입니다.
+인증 프로토콜, 키 교환, 키 저장소 또는 암호문 envelope 전체를 제공하지 않습니다.
+
+- 한글 난독화는 결정론적 가역 치환이며 기밀성을 제공하지 않습니다.
+- CRC32는 우발적 손상 검출용이며 위변조 인증을 제공하지 않습니다.
+- AES-256-GCM의 안전성은 키 entropy, KDF 설정, 키 수명과 애플리케이션 위협 모델에 의존합니다.
+- 비밀 데이터와 공격자가 조절할 수 있는 입력을 같은 payload에서 압축 후 암호화하지 마세요.
+  암호문 길이 차이가 비밀에 대한 정보를 노출할 수 있습니다.
+- KDF 파라미터, 키 식별자, 키 회전과 폐기는 wire format 밖에서 버전 관리하세요.
+
 ```typescript
 import { Ddu64 } from "@ddunigma/node";
+
+const encryptionKey = process.env.DDU64_KEY;
+if (!encryptionKey) throw new Error("DDU64_KEY is required");
 
 const ddu = new Ddu64({
   compress: true,
   compressionAlgorithm: "deflate",
   compressionLevel: 6,
-  encryptionKey: "my-secret-key",
+  encryptionKey,
   keyDerivation: {
     algorithm: "pbkdf2",
     salt: "my-application-salt",
@@ -120,14 +136,33 @@ const encoded = await ddu.encodeAsync("보호할 데이터");
 const decoded = await ddu.decodeAsync(encoded);
 ```
 
-동기 압축/암호화나 Web Streams가 필요하면 `@ddunigma/node/secure`를 사용합니다.
-압축 여부와 알고리즘은 footer에서 판별하므로 decode 쪽에 `compress` 옵션을 반복할
-필요가 없습니다.
+Node의 동기 압축/암호화는 같은 root import의 `Ddu64.create()`로 adapter를 먼저
+준비합니다. 압축 여부와 알고리즘은 footer에서 판별하므로 decode 쪽에 `compress` 옵션을
+반복할 필요가 없습니다.
+
+```typescript
+const eager = await Ddu64.create({
+  compress: true,
+  encryptionKey,
+  keyDerivation: {
+    algorithm: "pbkdf2",
+    salt: "my-application-salt",
+    iterations: 600_000,
+  },
+});
+const syncEncoded = eager.encode("prepared adapter");
+const syncDecoded = eager.decode(syncEncoded);
+```
+
+`new Ddu64(options)`는 초기 리소스를 최소화하고 adapter-backed 기능을 비동기 호출까지
+지연합니다. `Ddu64.create(options)`는 adapter를 생성 전에 준비합니다. 브라우저에서는
+두 생성 방식 모두 압축·암호화를 비동기 메서드로 호출해야 합니다.
 
 복호화에는 인코딩에 사용한 `encryptionKey`와 키 파생 설정(`algorithm`/`salt`/`iterations`)이
 동일하게 필요합니다. 키 파생 파라미터는 wire format에 기록되지 않습니다.
 저엔트로피 비밀번호를 사용하면 application-specific `salt`와 명시적 PBKDF2 iteration을
 설정하세요. 기본 210,000회·고정 fallback salt는 기존 데이터 호환을 위해 유지됩니다.
+새 데이터에는 현재 권고 수준과 애플리케이션 성능 예산을 함께 검토해 명시적으로 설정하세요.
 
 `encryptionKey`가 설정된 인스턴스는 기본적으로 암호화 footer가 없는 payload를 거부합니다.
 레거시 평문을 같은 인스턴스로 읽어야 하면 해당 decode 호출에 `requireEncryption: false`를
@@ -163,12 +198,17 @@ const decoded = ddu.decode(encoded);
 키 없는 난독화는 암호화가 아니며 입력 빈도를 숨기지 않습니다. 기밀성이 필요하면
 `encryptionKey`와 함께 사용하세요.
 
-## 브라우저와 Workers
+## 웹 런타임
 
 기본 브라우저 진입점(`@ddunigma/node/browser`)은 codec·체크섬·난독화를 동기로 제공합니다.
 브라우저에서 압축/암호화가 필요하면 같은 진입점의 비동기 메서드를 쓰면 됩니다.
 해당 연산이 실제로 필요한 시점에만 BrowserAdapter(WebCrypto·CompressionStream 기반)를
 동적 import합니다.
+
+패키지 root는 브라우저, Web Workers, workerd, Bun, Deno에서 browser 호환 빌드를
+선택합니다. Bun과 Deno의 `/secure`는 두 런타임이 제공하는 Node 호환 조건에 따라 Node
+빌드를 선택합니다. Web API 경로를 고정하려면 `/browser`를 명시하세요. 실제 압축·암호화
+지원 범위는 선택된 빌드와 런타임 API 구현으로 결정됩니다.
 
 ```typescript
 import { Ddu64 } from "@ddunigma/node/browser";
@@ -185,8 +225,19 @@ const bytes = await ddu.decodeToUint8ArrayAsync(encoded);
 
 ## Web Streams
 
-`@ddunigma/node/secure`에서 `createReadableEncodeStream`과 `createReadableDecodeStream`을
-제공합니다.
+기본 `Ddu64` 인스턴스는 `createEncodeStream()`과 `createDecodeStream()` 호출 시
+Web Streams 구현을 동적 import합니다.
+
+```typescript
+import { Ddu64 } from "@ddunigma/node";
+
+const ddu = new Ddu64({ checksum: true });
+const encodeStream = await ddu.createEncodeStream({ maxBufferedBytes: 8 * 1024 * 1024 });
+const decodeStream = await ddu.createDecodeStream({ maxBufferedChars: 8 * 1024 * 1024 });
+```
+
+`@ddunigma/node/secure`의 기존 `createReadableEncodeStream`과
+`createReadableDecodeStream` 함수 export도 고급 사용과 하위 호환을 위해 유지합니다.
 
 - 인코딩: 압축/암호화/체크섬 비활성화 + 2의 제곱수 charset에서 청크 단위 출력.
 - 디코딩: footer metadata를 최종 신뢰하기 위해 payload를 축적 후 처리.
@@ -202,17 +253,28 @@ const stats = ddu.getStats("payload");
 const asyncStats = await ddu.getStatsAsync("payload", { compress: true });
 ```
 
-브라우저의 압축 통계는 root의 `getStatsAsync`를 사용합니다. Web Streams는
-`@ddunigma/node/secure`를 사용합니다.
+브라우저의 압축 통계는 root의 `getStatsAsync`를 사용합니다. Web Streams도 root
+인스턴스의 비동기 stream 생성 메서드를 우선 사용합니다.
 
 ## 진입점
 
-| 진입점                   | 노출 `Ddu64`                                       | 기능                                       | 용도                         |
-| ------------------------ | -------------------------------------------------- | ------------------------------------------ | ---------------------------- |
-| `@ddunigma/node`         | `Ddu64Node`                                        | codec/checksum/난독화 + async adapter lazy | Node 기본                    |
-| `@ddunigma/node/browser` | `Ddu64Browser`                                     | codec/checksum/난독화 + async adapter lazy | 브라우저/Workers 기본        |
-| `@ddunigma/node/secure`  | Node: `Ddu64Secure`, browser: `Ddu64SecureBrowser` | sync/async 압축/암호화/체크섬/Web Streams  | 보안·압축 배터리 명시 사용   |
-| `@ddunigma/node/core`    | `Ddu64Core`                                        | 플랫폼 독립 codec/checksum                 | 어댑터/난독 미포함 최소 번들 |
+| 진입점                   | 노출 `Ddu64`                                       | 기능                                            | 용도                         |
+| ------------------------ | -------------------------------------------------- | ----------------------------------------------- | ---------------------------- |
+| `@ddunigma/node`         | `Ddu64Node`                                        | codec + lazy adapter/streams + eager `create()` | 일반 Node 기본               |
+| `@ddunigma/node/browser` | `Ddu64Browser`                                     | codec + lazy adapter/streams                    | 명시적 웹 런타임             |
+| `@ddunigma/node/secure`  | Node: `Ddu64Secure`, browser: `Ddu64SecureBrowser` | adapter·stream 함수 정적 export                 | 고급 제어·기존 API 호환      |
+| `@ddunigma/node/core`    | `Ddu64Core`                                        | 플랫폼 독립 codec/checksum                      | 어댑터/난독 미포함 최소 번들 |
+
+| 실행 환경        | root 선택 | `/secure` 선택 | 압축·암호화 호출 방식            |
+| ---------------- | --------- | -------------- | -------------------------------- |
+| Node.js >= 22    | Node      | Node           | root lazy/eager sync/async       |
+| 브라우저·Workers | Browser   | Browser        | async                            |
+| workerd          | Browser   | Browser        | 지원 Web API 범위에서 async      |
+| Bun·Deno         | Browser   | Node           | root async, `/secure` sync/async |
+
+조건 해석 기준은 [Bun module resolution](https://bun.sh/docs/runtime/module-resolution)과
+[Deno package export conditions](https://docs.deno.com/runtime/fundamentals/node/#control-package-export-conditions)를
+참고하세요.
 
 ```typescript
 import { Ddu64 as NodeDdu64 } from "@ddunigma/node";
@@ -242,7 +304,11 @@ import { Ddu64Core } from "@ddunigma/node/core";
 import { NodeAdapter } from "@ddunigma/node/secure";
 
 const enc = new Ddu64Core({
-  encryptionKey: "secret",
   adapter: new NodeAdapter(),
+  compress: true,
 });
 ```
+
+`/core` 직접 주입은 런타임 경계와 번들 그래프를 호출자가 통제해야 할 때 사용합니다. 일반
+애플리케이션에서는 root의 lazy adapter 또는 `/secure`가 더 단순하며, 직접 주입만으로 별도의
+보안 프로토콜이 만들어지지는 않습니다.

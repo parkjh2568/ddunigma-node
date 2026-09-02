@@ -16,7 +16,7 @@ const runtime =
       ? `Deno ${globalThis.Deno.version.deno}`
       : `Node ${globalThis.process?.version ?? "unknown"}`;
 
-const encoder = new Ddu64({
+const encoder = await Ddu64.create({
   compress: true,
   encryptionKey: "web-runtime-smoke-key",
   keyDerivation: {
@@ -32,6 +32,29 @@ const decoded = await encoder.decodeAsync(encoded);
 
 if (decoded !== input) {
   throw new Error(`${runtime}: browser entry secure round-trip failed`);
+}
+
+const streamReader = new Blob([input])
+  .stream()
+  .pipeThrough(await encoder.createEncodeStream())
+  .getReader();
+let streamEncoded = "";
+for (;;) {
+  const { done, value } = await streamReader.read();
+  if (done) break;
+  streamEncoded += value;
+}
+const streamDecoded = await new Response(
+  new ReadableStream({
+    start(controller) {
+      controller.enqueue(streamEncoded);
+      controller.close();
+    },
+  }).pipeThrough(await encoder.createDecodeStream()),
+).text();
+
+if (streamDecoded !== input) {
+  throw new Error(`${runtime}: browser entry stream round-trip failed`);
 }
 
 console.log(`runtime-web-smoke PASSED on ${runtime}`);

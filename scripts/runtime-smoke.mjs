@@ -51,28 +51,49 @@ async function main() {
     eq(await decoder.decodeAsync(encoded), input, "root lazy compression round-trip");
   }
 
-  // 4) 압축 + 체크섬 (zlib + maxOutputLength 한도 경로) — secure 진입점
+  // 4) 기본 진입점 eager adapter: Node 동기 압축
+  {
+    const ddu = await Ddu64.create({ compress: true, checksum: true });
+    const input = "root eager adapter ".repeat(256);
+    eq(ddu.decode(ddu.encode(input)), input, "root eager sync adapter round-trip");
+  }
+
+  // 5) 압축 + 체크섬 (zlib + maxOutputLength 한도 경로) — secure 진입점
   {
     const ddu = new Ddu64Secure({ compress: true, checksum: true });
     const input = "x".repeat(4096);
     eq(ddu.decode(ddu.encode(input)), input, "compress+checksum round-trip");
   }
 
-  // 5) brotli — secure 진입점
+  // 6) brotli — secure 진입점
   {
     const ddu = new Ddu64Secure({ compress: true, compressionAlgorithm: "brotli" });
     const input = "y".repeat(4096);
     eq(ddu.decode(ddu.encode(input)), input, "brotli round-trip");
   }
 
-  // 6) AES-256-GCM 암호화 (pbkdf2 키 파생) — secure 진입점
+  // 7) AES-256-GCM 암호화 (pbkdf2 키 파생) — secure 진입점
   {
     const ddu = new Ddu64Secure({ encryptionKey: "smoke-secret", checksum: true });
     const input = "보호 대상 데이터";
     eq(ddu.decode(ddu.encode(input)), input, "encrypt round-trip");
   }
 
-  // 7) Web Streams (Node 글로벌 TransformStream) — secure 진입점
+  // 8) 기본 진입점 lazy Web Streams
+  {
+    const ddu = new Ddu64();
+    const input = new TextEncoder().encode("root stream payload ".repeat(1000));
+
+    const encoded = await collectString(
+      streamFrom([input]).pipeThrough(await ddu.createEncodeStream()),
+    );
+    const decoded = await collectBytes(
+      streamFrom([encoded]).pipeThrough(await ddu.createDecodeStream()),
+    );
+    eq(decoded, input, "root lazy web streams round-trip");
+  }
+
+  // 9) Web Streams 함수 export 호환 — secure 진입점
   {
     const ddu = new Ddu64Secure();
     const input = new TextEncoder().encode("stream payload ".repeat(1000));

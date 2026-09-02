@@ -4,6 +4,7 @@
  * 압축(CompressionStream)·암호화(WebCrypto)·체크섬·Web Streams를 포함한 배터리
  * 풀세트를 BrowserAdapter 기반으로 제공합니다. Node.js 내장 모듈(zlib/crypto)을
  * 정적으로 import하지 않으므로 브라우저 번들에 끌려오지 않습니다.
+ * 이 진입점은 기능을 모은 API이며 키 관리나 완결된 보안 프로토콜이 아닙니다.
  *
  * @module secure.browser
  * @packageDocumentation

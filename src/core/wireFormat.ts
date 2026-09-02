@@ -63,7 +63,7 @@ export const CHECKSUM_MARKER = "CHK";
 
 /**
  * 스코프 자기기술 체크섬 마커. 뒤에 scope 문자 `P|O`와 8자리 16진수 CRC32가 따릅니다.
- * (역사적으로 "v5 체크섬"으로 불렸으나, ROADMAP에서 폐기된 "v5 KDF envelope"와는 무관합니다.)
+ * (역사적으로 "v5 체크섬"으로 불렸으나, 설계 결정에서 폐기한 "v5 KDF envelope"와는 무관합니다.)
  */
 export const CHECKSUM_MARKER_SCOPED = "CK";
 

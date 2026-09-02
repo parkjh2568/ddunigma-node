@@ -11,10 +11,12 @@ import { DduSetSymbol } from "../src/core/types.js";
 import type {
   DduOptions as RootDduOptions,
   DduConstructorOptions as RootDduConstructorOptions,
+  DduStreamOptions as RootDduStreamOptions,
 } from "../src/index.js";
 import type {
   DduOptions as BrowserDduOptions,
   DduConstructorOptions as BrowserDduConstructorOptions,
+  DduStreamOptions as BrowserDduStreamOptions,
 } from "../src/browser.js";
 import type {
   DduBaseOptions,
@@ -23,6 +25,7 @@ import type {
   DduBaseConstructorOptions,
   DduSecureConstructorOptions,
   DduConstructorOptions,
+  DduStreamOptions,
 } from "../src/core/types.js";
 
 // ─── 타입 단언 헬퍼 ──────────────────────────────────────────────────────────
@@ -70,6 +73,8 @@ type _BrowserOptions = Expect<Equal<BrowserDduOptions, DduOptions>>;
 type _BrowserConstructorOptions = Expect<
   Equal<BrowserDduConstructorOptions, DduConstructorOptions>
 >;
+type _RootStreamOptions = Expect<Equal<RootDduStreamOptions, DduStreamOptions>>;
+type _BrowserStreamOptions = Expect<Equal<BrowserDduStreamOptions, DduStreamOptions>>;
 
 // 타입 별칭이 사용되었음을 명시(컴파일 타임 단언 보존).
 export type __OptionTypeAssertions = [
@@ -88,6 +93,8 @@ export type __OptionTypeAssertions = [
   _RootConstructorOptions,
   _BrowserOptions,
   _BrowserConstructorOptions,
+  _RootStreamOptions,
+  _BrowserStreamOptions,
 ];
 
 describe("옵션 타입 2계층 분리", () => {

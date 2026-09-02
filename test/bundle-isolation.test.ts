@@ -3,7 +3,7 @@
  *
  * 빌드 산출물(dist)의 진입점별 정적 import 그래프를 추적하여 번들 격리를 검증한다:
  * - 기본 진입점 `dist/index.js`/`dist/browser.js`의 정적 그래프는 Node 내장 암호화/압축
- *   (node:crypto / node:zlib 어댑터 코드)을 포함하지 않는다.
+ *   (node:crypto / node:zlib 어댑터 코드)와 Web Streams 구현을 포함하지 않는다.
  * - secure 진입점(`dist/secure.js`)은 Node crypto/zlib를 포함한다.
  * - secure 브라우저(`dist/secure.browser.js`)는 WebCrypto/CompressionStream을 포함하되
  *   Node 내장 모듈은 포함하지 않는다.
@@ -58,6 +58,7 @@ function collectGraph(entry: string): string {
 const NODE_CRYPTO = /from\s*['"](?:node:)?crypto['"]|createCipheriv|createDecipheriv/;
 const NODE_ZLIB = /from\s*['"](?:node:)?zlib['"]|deflateRawSync|inflateRawSync/;
 const WEB_COMPRESSION = /CompressionStream|DecompressionStream/;
+const WEB_STREAMS_IMPLEMENTATION = /Buffered input exceeds limit|Invalid DDS1 stream header/;
 
 describe.skipIf(!entriesExist)("번들 격리 정적 스캔", () => {
   describe("기본 진입점 정적 그래프", () => {
@@ -65,6 +66,7 @@ describe.skipIf(!entriesExist)("번들 격리 정적 스캔", () => {
       const g = collectGraph("index.js");
       expect(NODE_CRYPTO.test(g)).toBe(false);
       expect(NODE_ZLIB.test(g)).toBe(false);
+      expect(WEB_STREAMS_IMPLEMENTATION.test(g)).toBe(false);
     });
 
     it("dist/browser.js 그래프에 Node crypto/zlib 및 WebCrypto 압축 코드가 없다", () => {
@@ -72,6 +74,7 @@ describe.skipIf(!entriesExist)("번들 격리 정적 스캔", () => {
       expect(NODE_CRYPTO.test(g)).toBe(false);
       expect(NODE_ZLIB.test(g)).toBe(false);
       expect(WEB_COMPRESSION.test(g)).toBe(false);
+      expect(WEB_STREAMS_IMPLEMENTATION.test(g)).toBe(false);
     });
   });
 

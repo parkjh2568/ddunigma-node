@@ -8,8 +8,11 @@
  * - Node.js Buffer를 반환하는 `decodeToBuffer` 및 `decodeToBufferAsync` 제공
  * - encode()에 Buffer 입력 허용 (Buffer는 Uint8Array를 확장)
  *
- * 기본 진입점도 비동기 secure 작업을 lazy adapter로 처리합니다. 이 진입점은 NodeAdapter를
- * 정적으로 포함해 동기 압축·암복호화와 Web Streams까지 명시적으로 사용하는 경로입니다.
+ * 기본 진입점도 비동기 secure 작업과 Web Streams를 lazy 모듈로 처리하고,
+ * `Ddu64.create()`로 동기 adapter를 준비할 수 있습니다. 이 진입점은 NodeAdapter와
+ * Web Streams 함수 export를 정적으로 포함해야 하는 고급·호환 경로입니다.
+ * 이름의 secure는 기능 묶음을 뜻하며 키 관리나 완결된 보안 프로토콜을 제공한다는 의미가
+ * 아닙니다.
  *
  * @module Ddu64Secure
  */
@@ -30,7 +33,7 @@ import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
  * ```ts
  * import { Ddu64Secure } from '@ddunigma/node/secure';
  *
- * const encoder = new Ddu64Secure(undefined, undefined, { encryptionKey: 'key' });
+ * const encoder = new Ddu64Secure({ compress: true });
  * const encoded = encoder.encode(Buffer.from('Hello'), { compress: true });
  * const decoded = encoder.decodeToBuffer(encoded); // Buffer 반환
  * ```

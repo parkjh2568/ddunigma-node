@@ -3,8 +3,9 @@
  *
  * 4개 진입점(`.`/`./browser`/`./secure`/`./core`)의 공개 표면을 검증한다:
  * - 각 진입점에서 `Ddu64`가 노출되고 obfuscate 옵션이 동작
- * - 기본/브라우저 진입점에서 secure 옵션 타입은 받되, 어댑터/WebStreams는 노출하지 않음
+ * - 기본/브라우저 진입점은 저수준 adapter와 독립 Web Streams 함수 export를 노출하지 않음
  * - 기본 진입점 비동기 메서드는 현재 core에 runtime adapter만 지연 주입
+ * - 기본 진입점의 `create()`는 adapter를 미리 준비하고 Web Streams 메서드는 구현을 지연 로드
  * - secure 진입점에서 압축/암호화/체크섬과 어댑터/WebStreams 함수가 노출
  * - package.json exports['./secure'] 조건부 매핑이 올바른 빌드를 가리킴
  */
@@ -30,7 +31,7 @@ describe("진입점 import 스모크", () => {
       expect(ddu.decode(encoded, { obfuscate: true })).toBe("기본 진입점 난독화");
     });
 
-    it("어댑터/WebStreams는 /secure에서만 노출한다", () => {
+    it("저수준 adapter와 독립 Web Streams 함수는 /secure에서만 노출한다", () => {
       const keys = Object.keys(nodeEntry);
       expect(keys).not.toContain("NodeAdapter");
       expect(keys).not.toContain("BrowserAdapter");
@@ -126,6 +127,51 @@ describe("진입점 import 스모크", () => {
       expect(await ddu.decodeAsync(encoded)).toBe(input);
       expect(factoryCalls).toBe(2);
     });
+
+    it("create()는 adapter를 준비해 Node 동기 secure 호출을 지원한다", async () => {
+      const ddu = await nodeEntry.Ddu64.create({
+        compress: true,
+        encryptionKey: "root-create-key",
+        keyDerivation: {
+          algorithm: "pbkdf2",
+          salt: "root-create-salt",
+          iterations: 10_000,
+        },
+      });
+      const input = "root eager adapter ".repeat(20);
+      const encoded = ddu.encode(input);
+
+      expect(ddu.decode(encoded)).toBe(input);
+    });
+
+    it("create()의 외부 adapter 초기화 오류를 공개 에러로 래핑한다", async () => {
+      await expect(
+        nodeEntry.Ddu64.create({
+          asyncAdapterFactory: async () => {
+            throw new Error("adapter init failed");
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: nodeEntry.Ddu64ErrorCode.AdapterUnavailable,
+        operation: "adapter",
+      });
+    });
+
+    it("create()도 생성자와 같은 런타임 옵션 검증 계약을 유지한다", async () => {
+      await expect(
+        nodeEntry.Ddu64.create({ adapterFactory: "invalid" } as never),
+      ).rejects.toMatchObject({
+        code: nodeEntry.Ddu64ErrorCode.InvalidInput,
+        operation: "construct",
+      });
+    });
+
+    it("Web Streams 메서드를 root 인스턴스에서 지연 생성한다", async () => {
+      const ddu = new nodeEntry.Ddu64();
+
+      expect(await ddu.createEncodeStream()).toBeInstanceOf(TransformStream);
+      expect(await ddu.createDecodeStream()).toBeInstanceOf(TransformStream);
+    });
   });
 
   describe("브라우저 진입점 (./browser)", () => {
@@ -135,7 +181,7 @@ describe("진입점 import 스모크", () => {
       expect(ddu.decode(encoded, { obfuscate: true })).toBe("브라우저 난독화");
     });
 
-    it("어댑터/WebStreams는 /secure에서만 노출한다", () => {
+    it("저수준 adapter와 독립 Web Streams 함수는 /secure에서만 노출한다", () => {
       const keys = Object.keys(browserEntry);
       expect(keys).not.toContain("BrowserAdapter");
       expect(keys).not.toContain("createReadableEncodeStream");
@@ -155,6 +201,16 @@ describe("진입점 import 스모크", () => {
       expect(await ddu.decodeAsync(encoded, { checksum: true })).toBe(input);
       const stats = await ddu.getStatsAsync(input, { compress: true });
       expect(typeof stats.compressedSize).toBe("number");
+    });
+
+    it("create()와 Web Streams 메서드를 브라우저 표면에서도 제공한다", async () => {
+      const ddu = await browserEntry.Ddu64.create({ compress: true });
+      const input = "browser eager adapter ".repeat(20);
+      const encoded = await ddu.encodeAsync(input);
+
+      expect(await ddu.decodeAsync(encoded)).toBe(input);
+      expect(await ddu.createEncodeStream()).toBeInstanceOf(TransformStream);
+      expect(await ddu.createDecodeStream()).toBeInstanceOf(TransformStream);
     });
   });
 

@@ -7,20 +7,63 @@
  * 기본 경로는 BrowserAdapter를 정적 import하지 않습니다. 비동기 압축/암복호화가 실제로
  * 실행될 때 어댑터만 동적 import해 현재 core 인스턴스에 주입합니다.
  * Node.js 내장 모듈도, WebCrypto/CompressionStream 어댑터도 정적 import하지 않습니다.
+ * Web Streams 구현도 해당 인스턴스 메서드가 호출될 때만 불러옵니다.
  *
  * @module Ddu64Browser
  */
 
 import { Ddu64Core } from "./core/Ddu64Core.js";
 import { HangulObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
-import { Ddu64AdapterError, type Ddu64Operation } from "./core/errors.js";
-import type { DduEncodeStats, DduOptions, DduSecureConstructorOptions } from "./core/types.js";
+import {
+  Ddu64AdapterError,
+  isDdu64Error,
+  wrapDdu64Error,
+  type Ddu64Operation,
+} from "./core/errors.js";
+import type {
+  DduEncodeStats,
+  DduOptions,
+  DduSecureConstructorOptions,
+  DduStreamOptions,
+  PlatformAdapter,
+} from "./core/types.js";
 import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
+import { validateRuntimeOptions } from "./core/internal/OptionValidation.js";
 
 export class Ddu64Browser extends Ddu64Core {
   readonly #defaultCompress: boolean;
   readonly #hasEncryptionKey: boolean;
   readonly #hasExplicitAdapter: boolean;
+
+  /**
+   * BrowserAdapter를 먼저 준비한 인스턴스를 생성합니다.
+   * 브라우저 압축·암호화는 adapter 준비 후에도 비동기 메서드로 실행합니다.
+   */
+  static async create(options: DduSecureConstructorOptions = {}): Promise<Ddu64Browser> {
+    try {
+      validateRuntimeOptions(options);
+      if (options.adapter !== undefined) return new Ddu64Browser(options);
+
+      const { adapterFactory, asyncAdapterFactory, ...constructorOptions } = options;
+      let adapter: PlatformAdapter;
+      if (adapterFactory !== undefined) {
+        adapter = adapterFactory();
+      } else if (asyncAdapterFactory !== undefined) {
+        adapter = await asyncAdapterFactory();
+      } else {
+        const { BrowserAdapter } = await import("./adapters/BrowserAdapter.js");
+        adapter = new BrowserAdapter();
+      }
+      return new Ddu64Browser({ ...constructorOptions, adapter });
+    } catch (error) {
+      if (isDdu64Error(error)) throw error;
+      throw new Ddu64AdapterError(
+        "[Ddu64 create] Failed to initialize the browser runtime adapter.",
+        "adapter",
+        error,
+      );
+    }
+  }
 
   constructor(
     dduChar?: string[] | string | DduSecureConstructorOptions,
@@ -72,6 +115,30 @@ export class Ddu64Browser extends Ddu64Core {
   override getStats(input: Uint8Array | string, options?: DduOptions): DduEncodeStats {
     this.#assertSync("encode", options, false);
     return super.getStats(input, options);
+  }
+
+  /** Web Streams 인코딩 변환기를 필요한 시점에 불러와 생성합니다. */
+  async createEncodeStream(
+    options?: DduStreamOptions,
+  ): Promise<TransformStream<Uint8Array, string>> {
+    try {
+      const { createReadableEncodeStream } = await import("./streams/WebStreams.js");
+      return createReadableEncodeStream(this, options);
+    } catch (error) {
+      throw wrapDdu64Error(error, "stream");
+    }
+  }
+
+  /** Web Streams 디코딩 변환기를 필요한 시점에 불러와 생성합니다. */
+  async createDecodeStream(
+    options?: DduStreamOptions,
+  ): Promise<TransformStream<string, Uint8Array>> {
+    try {
+      const { createReadableDecodeStream } = await import("./streams/WebStreams.js");
+      return createReadableDecodeStream(this, options);
+    } catch (error) {
+      throw wrapDdu64Error(error, "stream");
+    }
   }
 
   #assertSync(operation: Ddu64Operation, options?: DduOptions, includeEncryption = true): void {

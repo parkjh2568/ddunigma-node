@@ -23,7 +23,7 @@
     "verify": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm knip && pnpm build && pnpm test:coverage && pnpm size && pnpm pack:check && pnpm smoke && pnpm smoke:web",
     "prepublishOnly": "pnpm verify",
     "knip": "knip",
-    "size": "size-limit",
+    "size": "size-limit && node scripts/verify-initial-bundle-size.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -132,8 +132,7 @@
   },
   "files": [
     "CHANGELOG.md",
-    "CONTRIBUTING.md",
-    "ROADMAP.md",
+    "docs/DECISIONS.md",
     "docs/REFERENCE.md",
     "dist",
     "!dist/**/*.map"
@@ -151,7 +150,7 @@
   },
   "author": "parkjh2568",
   "license": "BSD-2-Clause",
-  "description": "Zero-dependency custom-charset codec with reversible Hangul obfuscation and optional compression and encryption",
+  "description": "Zero-dependency Hangul and custom-charset codec with optional compression and AES-GCM adapters",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@size-limit/preset-small-lib": "^12.1.0",

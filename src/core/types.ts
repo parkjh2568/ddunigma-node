@@ -193,16 +193,22 @@ export interface DduBaseOptions {
 /**
  * Secure 확장 옵션 — `DduBaseOptions`에 압축/암호화/체크섬 부가기능 옵션을 더합니다.
  * `@ddunigma/node`/`@ddunigma/node/browser`는 adapter-backed 옵션을 비동기 메서드에서
- * lazy adapter로 처리하고, `@ddunigma/node/secure`는 sync/async secure 표면을 모두 제공합니다.
+ * lazy adapter로 처리합니다. Node root의 `Ddu64.create()`와 `@ddunigma/node/secure`는
+ * 동기 adapter를 미리 준비하는 경로도 제공합니다.
+ * 여기서 secure는 기능 묶음의 이름이며 키 관리나 완결된 보안 프로토콜을 의미하지 않습니다.
  */
 export interface DduSecureOptions extends DduBaseOptions {
-  /** 압축 사용 여부 (zlib deflate 또는 brotli) */
+  /**
+   * 압축 사용 여부 (zlib deflate 또는 brotli).
+   * 비밀 데이터와 공격자가 조절할 수 있는 입력을 같은 payload에서 압축 후 암호화하면
+   * 암호문 길이를 통한 정보 노출이 생길 수 있습니다.
+   */
   compress?: boolean;
   /** 압축 알고리즘 (기본값: "deflate") */
   compressionAlgorithm?: "deflate" | "brotli";
   /** 압축 레벨 (deflate 기본값: 6, brotli도 기본값 6을 사용하며 전달값은 0~11 범위로 보정) */
   compressionLevel?: number;
-  /** 체크섬 추가 여부 (CRC32) */
+  /** 체크섬 추가 여부 (CRC32). 우발적 손상 검출용이며 위변조 인증을 제공하지 않습니다. */
   checksum?: boolean;
   /**
    * 체크섬 계산 범위 (기본값: "output").
@@ -298,9 +304,12 @@ export interface DduBaseConstructorOptions extends DduBaseOptions {
  * 코어와 공개 래퍼가 사용하는 전 기능 생성자 표면입니다.
  */
 export interface DduSecureConstructorOptions extends DduBaseConstructorOptions, DduSecureOptions {
-  /** 암호화 키 (AES-256-GCM) */
+  /**
+   * 암호화 키 (AES-256-GCM). 충분한 entropy의 키를 사용하고 저장·교환·회전은
+   * 애플리케이션의 키 관리 체계에서 처리하세요.
+   */
   encryptionKey?: string;
-  /** 암호화 키 파생 옵션 */
+  /** 암호화 키 파생 옵션. 파라미터는 wire format에 기록되지 않으므로 별도로 버전 관리합니다. */
   keyDerivation?: KeyDerivationOptions;
 
   /** 명시적 플랫폼 어댑터 (자동 감지 대신 사용) */

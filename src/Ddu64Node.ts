@@ -9,16 +9,30 @@
  *
  * 기본 경로는 어댑터(zlib/crypto)를 정적 import하지 않습니다. 비동기 압축/암복호화가
  * 실제로 실행될 때 NodeAdapter만 동적 import해 현재 core 인스턴스에 주입합니다.
- * 동기 secure 작업이 필요하면 `@ddunigma/node/secure`를 사용하세요.
+ * `Ddu64.create()`를 사용하면 같은 root 진입점에서 adapter를 미리 준비해 동기
+ * 압축·암호화를 사용할 수 있습니다. Web Streams 구현은 해당 인스턴스 메서드 호출 시
+ * 동적으로 불러옵니다.
  *
  * @module Ddu64Node
  */
 
 import { Ddu64Core } from "./core/Ddu64Core.js";
 import { HangulObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
-import { Ddu64AdapterError, type Ddu64Operation } from "./core/errors.js";
-import type { DduEncodeStats, DduOptions, DduSecureConstructorOptions } from "./core/types.js";
+import {
+  Ddu64AdapterError,
+  isDdu64Error,
+  wrapDdu64Error,
+  type Ddu64Operation,
+} from "./core/errors.js";
+import type {
+  DduEncodeStats,
+  DduOptions,
+  DduSecureConstructorOptions,
+  DduStreamOptions,
+  PlatformAdapter,
+} from "./core/types.js";
 import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
+import { validateRuntimeOptions } from "./core/internal/OptionValidation.js";
 
 /**
  * Node.js 전용 기본 Ddu64 인코더/디코더.
@@ -39,6 +53,37 @@ export class Ddu64Node extends Ddu64Core {
   readonly #defaultCompress: boolean;
   readonly #hasEncryptionKey: boolean;
   readonly #hasExplicitAdapter: boolean;
+
+  /**
+   * 런타임 adapter를 먼저 준비한 Node.js 인스턴스를 생성합니다.
+   * `new Ddu64()`는 adapter를 첫 비동기 연산까지 지연하고, 이 팩토리는 동기
+   * 압축·암호화를 바로 사용할 수 있도록 생성 전에 adapter를 불러옵니다.
+   */
+  static async create(options: DduSecureConstructorOptions = {}): Promise<Ddu64Node> {
+    try {
+      validateRuntimeOptions(options);
+      if (options.adapter !== undefined) return new Ddu64Node(options);
+
+      const { adapterFactory, asyncAdapterFactory, ...constructorOptions } = options;
+      let adapter: PlatformAdapter;
+      if (adapterFactory !== undefined) {
+        adapter = adapterFactory();
+      } else if (asyncAdapterFactory !== undefined) {
+        adapter = await asyncAdapterFactory();
+      } else {
+        const { NodeAdapter } = await import("./adapters/NodeAdapter.js");
+        adapter = new NodeAdapter();
+      }
+      return new Ddu64Node({ ...constructorOptions, adapter });
+    } catch (error) {
+      if (isDdu64Error(error)) throw error;
+      throw new Ddu64AdapterError(
+        "[Ddu64 create] Failed to initialize the Node.js runtime adapter.",
+        "adapter",
+        error,
+      );
+    }
+  }
 
   constructor(
     dduChar?: string[] | string | DduSecureConstructorOptions,
@@ -119,6 +164,30 @@ export class Ddu64Node extends Ddu64Core {
     return Buffer.from(uint8.buffer, uint8.byteOffset, uint8.byteLength);
   }
 
+  /** Web Streams 인코딩 변환기를 필요한 시점에 불러와 생성합니다. */
+  async createEncodeStream(
+    options?: DduStreamOptions,
+  ): Promise<TransformStream<Uint8Array, string>> {
+    try {
+      const { createReadableEncodeStream } = await import("./streams/WebStreams.js");
+      return createReadableEncodeStream(this, options);
+    } catch (error) {
+      throw wrapDdu64Error(error, "stream");
+    }
+  }
+
+  /** Web Streams 디코딩 변환기를 필요한 시점에 불러와 생성합니다. */
+  async createDecodeStream(
+    options?: DduStreamOptions,
+  ): Promise<TransformStream<string, Uint8Array>> {
+    try {
+      const { createReadableDecodeStream } = await import("./streams/WebStreams.js");
+      return createReadableDecodeStream(this, options);
+    } catch (error) {
+      throw wrapDdu64Error(error, "stream");
+    }
+  }
+
   #assertSync(operation: Ddu64Operation, options?: DduOptions, includeEncryption = true): void {
     if (this.#hasExplicitAdapter) return;
     if (
@@ -126,7 +195,7 @@ export class Ddu64Node extends Ddu64Core {
       (includeEncryption && this.#hasEncryptionKey)
     ) {
       throw new Ddu64AdapterError(
-        "@ddunigma/node: use encodeAsync/decodeAsync/getStatsAsync, or @ddunigma/node/secure for sync secure options.",
+        "@ddunigma/node: use encodeAsync/decodeAsync/getStatsAsync, await Ddu64.create() before sync secure calls, or use @ddunigma/node/secure.",
         operation,
       );
     }

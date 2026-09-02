@@ -2,8 +2,9 @@
  * 전체 Node.js 기본 진입점.
  *
  * 인코딩·체크섬·한글 난독화를 동기로 제공합니다. 비동기 압축/암복호화가 실제로
- * 사용될 때만 NodeAdapter를 동적 import합니다. Web Streams와 명시적 어댑터,
- * 동기 secure API는 `@ddunigma/node/secure`에서 제공합니다.
+ * 사용될 때만 NodeAdapter를 동적 import하며, Web Streams 구현도 인스턴스 메서드
+ * 호출 시점에 불러옵니다. `Ddu64.create()`는 NodeAdapter를 미리 준비해 동기 secure
+ * API를 활성화합니다. 명시적 어댑터 export는 `@ddunigma/node/secure`에서 제공합니다.
  *
  * @module index
  * @packageDocumentation
@@ -25,6 +26,7 @@ export type {
   DduSecureConstructorOptions,
   DduOptions,
   DduConstructorOptions,
+  DduStreamOptions,
   DduEncodeStats,
   DduProgressInfo,
   CharSetConfig,

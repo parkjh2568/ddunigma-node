@@ -4,6 +4,7 @@
  * 압축(deflate/brotli)·암호화(AES-256-GCM)·체크섬(CRC32)·Web Streams를 포함한
  * 배터리 풀세트를 제공합니다. NodeAdapter(zlib/crypto)를 주입하므로 Node.js 내장
  * 모듈에 의존합니다. 브라우저 빌드는 `secure.browser.ts`(조건부 매핑)가 담당합니다.
+ * 이 진입점은 기능을 모은 API이며 키 관리나 완결된 보안 프로토콜이 아닙니다.
  *
  * @module secure
  * @packageDocumentation

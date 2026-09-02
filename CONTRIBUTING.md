@@ -15,12 +15,12 @@
 
 ## 진입점 역할
 
-| 진입점                   | 역할                                                                       | 정적 import 제약                                  |
-| ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------- |
-| `@ddunigma/node`         | Node 기본 API. 동기 codec/checksum/난독화, 비동기 secure adapter lazy load | `node:crypto`, `node:zlib`, `NodeAdapter` 금지    |
-| `@ddunigma/node/browser` | 브라우저 기본 API. 비동기 secure adapter lazy load                         | Node 내장 모듈, `BrowserAdapter` 정적 import 금지 |
-| `@ddunigma/node/core`    | 플랫폼 독립 core. 필요한 구현은 사용자가 주입                              | 구체 adapter와 난독화 구현 import 금지            |
-| `@ddunigma/node/secure`  | adapter, Web Streams, 동기 Node secure API를 포함한 전체 표면              | 조건부 export의 Node/browser 경계 유지            |
+| 진입점                   | 역할                                                          | 정적 import 제약                                  |
+| ------------------------ | ------------------------------------------------------------- | ------------------------------------------------- |
+| `@ddunigma/node`         | Node 기본 API. lazy adapter/streams, eager `create()`         | `node:crypto`, `node:zlib`, `NodeAdapter` 금지    |
+| `@ddunigma/node/browser` | 브라우저 기본 API. lazy adapter/streams                       | Node 내장 모듈, `BrowserAdapter` 정적 import 금지 |
+| `@ddunigma/node/core`    | 플랫폼 독립 core. 필요한 구현은 사용자가 주입                 | 구체 adapter와 난독화 구현 import 금지            |
+| `@ddunigma/node/secure`  | adapter, Web Streams, 동기 Node secure API를 포함한 전체 표면 | 조건부 export의 Node/browser 경계 유지            |
 
 `package.json#exports`는 공개 API 계약입니다. 진입점을 추가하거나 제거할 때는 ESM, CJS,
 browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은 구체적인 항목에서
@@ -70,10 +70,13 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
 
 - root의 평문 codec, checksum, 난독화 호출은 adapter chunk를 불러오지 않습니다.
 - 비동기 압축·암복호화 파이프라인이 해당 단계에 도달했을 때만 adapter를 import합니다.
+- Web Streams 구현은 `createEncodeStream`/`createDecodeStream` 호출 시점에만 import합니다.
 - lazy 활성화는 별도 core 인스턴스를 만들지 않고 현재 인스턴스에 adapter만 주입합니다.
 - 첫 동시 호출은 Promise를 캐시해 import와 adapter 생성을 한 번만 수행합니다.
 - 디코딩은 호출 옵션보다 wire metadata를 권위 있는 정보로 사용합니다.
 - 사용자가 `adapter` 또는 `adapterFactory`를 주입하면 자동 adapter보다 우선합니다.
+- `Ddu64.create()`는 별도 import 없이 adapter를 먼저 준비하는 명시적 eager 경로입니다.
+  Node에서는 준비 후 동기 secure 호출을 허용하고 브라우저는 계속 비동기 호출만 지원합니다.
 
 ## 에러 계약
 
@@ -88,8 +91,8 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
 - 주석은 코드가 보여주지 못하는 불변식, wire 호환성, 보안 경계, 성능 근거를 설명합니다.
 - 코드를 그대로 반복하는 주석, 완료된 Task/요구사항 번호, 리팩터링 과정 기록은 남기지 않습니다.
 - 난독화를 암호화, 무작위화, 자연어 생성으로 표현하지 않습니다.
-- README는 첫 사용과 안전한 기본 경로, REFERENCE는 전체 계약, CHANGELOG는 사용자 관점의
-  변경을 담당합니다.
+- README는 첫 사용과 적용 여부 판단, REFERENCE는 전체 계약, `docs/DECISIONS.md`는 범위와
+  제외 결정을 담당합니다. CHANGELOG에는 사용자 관점의 변경만 기록합니다.
 - 구현이 바뀌면 같은 변경에서 JSDoc, README, REFERENCE, CHANGELOG을 갱신합니다.
 
 ## 테스트
@@ -101,6 +104,7 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
 - 사용자 입력 공간이 넓은 codec은 property test로 라운드트립·길이·에러 타입을 검증합니다.
 - 와이어 호환성은 fixture/vector를 유지하고 이유 없이 재생성하지 않습니다.
 - 진입점 변경은 소스 테스트와 packed ESM/CJS/browser smoke를 모두 추가합니다.
+- lazy 모듈을 root에 연결할 때는 초기 정적 그래프에 구현 코드가 포함되지 않는지 검증합니다.
 - 비정상 종료 위험은 유효한 상태로 진입하지 못하게 테스트하고, 필요하면 자식 프로세스
   timeout으로 검증합니다.
 - 테스트 제목과 주석은 현재 구현 용어를 사용하고 제거된 API의 부재를 계속 테스트하지 않습니다.
@@ -115,6 +119,13 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
   추가합니다.
 - 난독화는 보안 경계가 아닙니다. 기밀성이 필요하면 AES-GCM과 충분한 entropy의 키를 사용합니다.
 - 비밀번호를 키로 사용하면 PBKDF2, application-specific salt, 명시적 iteration을 사용합니다.
+- 비밀 데이터와 공격자가 조절할 수 있는 입력을 같은 payload에서 압축 후 암호화하는 예제나
+  권장 경로를 추가하지 않습니다. 길이 기반 정보 노출 가능성을 사용자 문서와 공개 타입에
+  함께 명시합니다.
+- `/secure`는 기능 묶음의 진입점이며 인증 프로토콜이나 키 관리 체계로 표현하지 않습니다.
+- size-limit 변경 전 동일 lockfile과 지원 Node 버전에서 세 번 이상 측정합니다. 변동이 1% 이내면
+  기존 예산을 유지하고, 도구 변동으로 지속 실패할 때만 3-5% 범위의 근거 있는 여유를 둡니다.
+- root의 선택 기능이 늘어날 때는 전체 lazy 그래프와 초기 정적 그래프 예산을 각각 검증합니다.
 
 ## 호환성·릴리스
 
@@ -124,6 +135,10 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
 - `pnpm verify`는 typecheck, lint, format, dead-code, build, coverage, size, pack, runtime smoke를 모두 포함합니다.
 - npm 배포는 긴 수명의 write token 대신 GitHub Actions OIDC trusted publishing을 사용합니다.
 - CHANGELOG의 `Unreleased`는 다음 배포 변경만 포함하고, 태그된 변경은 버전·날짜 섹션으로 이동합니다.
+- npm package에는 실행 파일·타입과 사용자용 README/CHANGELOG/API reference/설계 결정만 포함합니다.
+  `CONTRIBUTING.md`, 테스트, benchmark, source map은 저장소에만 둡니다.
+- 최소 Node 버전, 기본 검증 LTS, 호환 matrix는 함께 검토합니다. Bun과 Deno는 root의 browser
+  조건과 `/secure`의 Node 호환 조건을 각각 검증합니다.
 
 npm package 설정의 Trusted Publisher는 GitHub 저장소 `parkjh2568/ddunigma-node`, workflow
 `publish.yml`, environment `npm`, 허용 작업 `npm publish`와 정확히 일치시킵니다. GitHub Release

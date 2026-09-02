@@ -7,6 +7,8 @@
  *
  * Node.js 내장 모듈을 정적으로 import하지 않으므로 브라우저 번들에 crypto/zlib가
  * 끌려오지 않습니다.
+ * 이름의 secure는 기능 묶음을 뜻하며 키 관리나 완결된 보안 프로토콜을 제공한다는 의미가
+ * 아닙니다.
  *
  * @module Ddu64SecureBrowser
  */
@@ -29,7 +31,7 @@ import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
  * ```ts
  * import { Ddu64SecureBrowser } from '@ddunigma/node/secure';
  *
- * const encoder = new Ddu64SecureBrowser(undefined, undefined, { encryptionKey: 'key' });
+ * const encoder = new Ddu64SecureBrowser({ compress: true });
  * const encoded = await encoder.encodeAsync('Hello', { compress: true });
  * const decoded = await encoder.decodeAsync(encoded);
  * ```

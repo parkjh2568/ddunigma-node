@@ -97,6 +97,16 @@ function runNodeSmoke(packageDir) {
         throw new Error("root lazy adapter ESM round-trip failed");
       }
 
+      const eagerRoot = await node.Ddu64.create({ compress: true });
+      if (eagerRoot.decode(eagerRoot.encode(rootInput)) !== rootInput) {
+        throw new Error("root eager adapter ESM round-trip failed");
+      }
+
+      const rootStream = await new node.Ddu64().createEncodeStream();
+      if (!(rootStream instanceof TransformStream)) {
+        throw new Error("root lazy encode stream creation failed");
+      }
+
       const secure = await import("@ddunigma/node/secure");
       const secureEncoder = new secure.Ddu64({
         compress: true,
@@ -166,6 +176,14 @@ function runNodeSmoke(packageDir) {
         if (await decoder.decodeAsync(encoded) !== input) {
           throw new Error("root lazy adapter CJS round-trip failed");
         }
+
+        const eager = await node.Ddu64.create({ compress: true });
+        if (eager.decode(eager.encode(input)) !== input) {
+          throw new Error("root eager adapter CJS round-trip failed");
+        }
+        if (!((await eager.createDecodeStream()) instanceof TransformStream)) {
+          throw new Error("root lazy decode stream CJS creation failed");
+        }
       }
 
       main().catch((error) => {
@@ -190,6 +208,9 @@ async function runBrowserBundleSmoke(packageDir) {
         const input = "browser root bundle smoke".repeat(16);
         const encoded = await encoder.encodeAsync(input);
         if (await new Ddu64().decodeAsync(encoded) !== input) throw new Error("root bundle failed");
+        if (!((await encoder.createEncodeStream()) instanceof TransformStream)) {
+          throw new Error("root stream bundle failed");
+        }
       `,
     ),
     writeSmokeFile(
@@ -201,6 +222,9 @@ async function runBrowserBundleSmoke(packageDir) {
         const input = "browser bundle smoke".repeat(16);
         const encoded = await encoder.encodeAsync(input);
         if (await new Ddu64().decodeAsync(encoded) !== input) throw new Error("browser bundle failed");
+        if (!((await encoder.createDecodeStream()) instanceof TransformStream)) {
+          throw new Error("browser stream bundle failed");
+        }
       `,
     ),
     writeSmokeFile(
@@ -277,6 +301,7 @@ function runTypeSmoke(packageDir) {
         type DduBaseConstructorOptions,
         type DduConstructorOptions as RootDduConstructorOptions,
         type DduOptions as RootDduOptions,
+        type DduStreamOptions as RootDduStreamOptions,
         type PlatformAdapter as RootPlatformAdapter,
       } from "@ddunigma/node";
       import {
@@ -309,6 +334,16 @@ function runTypeSmoke(packageDir) {
       const rootCallOptions: RootDduOptions = { compress: true, checksum: true };
       const rootEncoder = new Ddu64(rootConstructorOptions);
       await rootEncoder.encodeAsync("root secure type smoke", rootCallOptions);
+      const rootStreamOptions: RootDduStreamOptions = { maxBufferedBytes: 1024 };
+      const rootEncodeStream: TransformStream<Uint8Array, string> =
+        await rootEncoder.createEncodeStream(rootStreamOptions);
+      const rootDecodeStream: TransformStream<string, Uint8Array> =
+        await rootEncoder.createDecodeStream();
+      void rootEncodeStream;
+      void rootDecodeStream;
+
+      const eagerRoot: Ddu64Node = await Ddu64.create(rootConstructorOptions);
+      eagerRoot.encode("eager root type smoke");
 
       // secure 진입점: 배터리 옵션 + 어댑터 노출
       const secureConstructorOptions: DduConstructorOptions = {
@@ -338,6 +373,9 @@ function runTypeSmoke(packageDir) {
       const browserEncoder = new BrowserDdu64();
       await browserEncoder.encodeAsync("browser type smoke");
       await browserEncoder.getStatsAsync("browser type smoke");
+      await BrowserDdu64.create();
+      await browserEncoder.createEncodeStream();
+      await browserEncoder.createDecodeStream();
 
       const coreEncoder: Ddu64Core = new CoreDdu64();
       coreEncoder.decode(coreEncoder.encode("core type smoke"));
@@ -374,7 +412,12 @@ function runTypeSmoke(packageDir) {
       const rootEncoder = new node.Ddu64(rootConstructorOptions);
       const rootStats: Promise<node.DduEncodeStats> =
         rootEncoder.getStatsAsync("cjs root secure type smoke", rootOptions);
+      const eagerRoot: Promise<node.Ddu64Node> = node.Ddu64.create(rootConstructorOptions);
+      const rootEncodeStream: Promise<TransformStream<Uint8Array, string>> =
+        rootEncoder.createEncodeStream();
       void rootStats;
+      void eagerRoot;
+      void rootEncodeStream;
 
       const secureCallOptions: secure.DduOptions = { checksum: true, compress: false };
       const secureConstructorOptions: secure.DduConstructorOptions = {
@@ -425,8 +468,7 @@ try {
     "README.md",
     "LICENCE",
     "CHANGELOG.md",
-    "CONTRIBUTING.md",
-    "ROADMAP.md",
+    "docs/DECISIONS.md",
     "docs/REFERENCE.md",
     "package.json",
     "dist/index.js",
@@ -464,6 +506,8 @@ try {
     { label: "benchmark source", test: (file) => file.startsWith("benchmarks/") },
     { label: "coverage output", test: (file) => file.startsWith("coverage/") },
     { label: "node_modules content", test: (file) => file.startsWith("node_modules/") },
+    { label: "contributor guide", test: (file) => file === "CONTRIBUTING.md" },
+    { label: "obsolete roadmap", test: (file) => file === "ROADMAP.md" },
   ];
 
   for (const { label, test } of forbiddenPatterns) {

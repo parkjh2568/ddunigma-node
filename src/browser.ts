@@ -2,8 +2,8 @@
  * 브라우저 최적화 기본 진입점.
  *
  * 인코딩·체크섬·한글 난독화를 동기로 제공합니다. 비동기 압축/암복호화가 실제로
- * 사용될 때만 BrowserAdapter를 동적 import합니다. Web Streams와 명시적 어댑터는
- * 브라우저 조건에서 `@ddunigma/node/secure`를 사용하세요.
+ * 사용될 때만 BrowserAdapter를 동적 import합니다. Web Streams 구현도 인스턴스 메서드가
+ * 호출될 때만 불러옵니다. 명시적 어댑터 export는 `@ddunigma/node/secure`에서 제공합니다.
  *
  * Node.js 내장 모듈을 직접 임포트하지 않습니다.
  *
@@ -61,6 +61,7 @@ export type {
   DduSecureConstructorOptions,
   DduOptions,
   DduConstructorOptions,
+  DduStreamOptions,
   DduEncodeStats,
   DduProgressInfo,
   CharSetConfig,

@@ -4,6 +4,28 @@
 
 ## Unreleased
 
+### 단일 root 기능 활성화
+
+- `@ddunigma/node`와 `/browser`의 `Ddu64`에 `createEncodeStream()`과
+  `createDecodeStream()`을 추가했습니다. Web Streams 구현은 메서드 호출 시점에만 동적
+  import되며, 기존 `/secure` 함수 export는 그대로 유지됩니다.
+- `Ddu64.create(options)` 비동기 팩토리를 추가했습니다. Node root는 adapter를 미리 준비해
+  별도 `/secure` import 없이 동기 압축·암호화를 사용할 수 있고, 브라우저는 준비된 adapter로
+  비동기 연산을 수행합니다.
+- root와 browser에서 `DduStreamOptions`를 export합니다. 기존 생성자, 메서드, subpath와 wire
+  format은 변경되지 않습니다.
+
+### 문서·패키징
+
+- 이 라이브러리가 적합한 사용 사례와 표준 Base64·보안 프로토콜·대용량 스트리밍이 더 적합한
+  경계를 README와 API reference에 명시했습니다.
+- `/secure`를 기능 묶음으로 정의하고, 난독화·CRC32의 한계, 압축 후 암호화의 길이 기반 정보
+  노출 위험, 애플리케이션 키 관리 책임을 문서와 공개 타입 JSDoc에 보강했습니다.
+- 브라우저, Workers, workerd, Bun, Deno의 조건부 진입점 선택을 문서화하고, 범위 기록을
+  `docs/DECISIONS.md`로 정리했습니다.
+- npm 배포물에서 개발자 전용 `CONTRIBUTING.md`를 제외하고 사용자용 reference와 결정 기록만
+  유지하도록 pack 검증을 갱신했습니다. 공개 API와 wire format은 변경되지 않습니다.
+
 ## 6.1.1 - 2026-09-02
 
 ### 정확성·안전성
@@ -188,7 +210,7 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 - 본 라이브러리의 AES-256-GCM 암호화는 **부가 기능**이며 단독 보안 솔루션이 아님을
   README에 명시했습니다. 기본 PBKDF2 210k + 고정 기본 salt는 저엔트로피 키에 충분치
   않으므로(OWASP는 PBKDF2-HMAC-SHA256 ≥600k 권고) 애플리케이션 고유 `salt`와 높은
-  `iterations` 지정을 권장합니다. 자기기술 KDF envelope는 ROADMAP에서 범위 밖으로
+  `iterations` 지정을 권장합니다. 자기기술 KDF envelope는 설계 결정 기록에서 범위 밖으로
   결정(현행 암호화·포맷 불변).
 
 ### 입력 크기 한도 추가 (보안 강화)
