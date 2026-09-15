@@ -53,7 +53,8 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
 - 반복 코드를 제거하면서도 인자 수와 제어 흐름이 더 단순해짐
 
 헬퍼를 추가할 때는 이름만으로 역할이 드러나야 하며, 미사용 인자를 `_`로 숨겨
-두지 않습니다. 인자가 필요 없으면 시그니처와 호출부에서 제거합니다.
+두지 않습니다. 인자가 필요 없으면 시그니처와 호출부에서 제거합니다. 단, 공개 adapter의
+인터페이스 호환을 위한 미지원 옵션(예: BrowserAdapter의 `_level`)은 시그니처를 유지합니다.
 
 ## 옵션·상태 규칙
 
@@ -80,7 +81,8 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
 
 ## 에러 계약
 
-- 모든 공개 API는 실패 시 `Ddu64Error` 하위 타입만 throw/reject합니다.
+- `Ddu64` codec 공개 경계는 실패 시 `Ddu64Error` 하위 타입만 throw/reject합니다.
+  `CharsetBuilder` 및 저수준 adapter 직접 호출은 각 API의 기존 오류 타입을 유지합니다.
 - 내부 모듈은 가능하면 발생 지점에서 charset, encode, decode, adapter, limit 에러를 분류합니다.
 - 사용자 callback과 플랫폼 API의 plain `Error`는 공개 경계에서 원인을 보존해 래핑합니다.
 - 이미 `Ddu64Error`인 오류는 중복 래핑하지 않습니다.
@@ -105,6 +107,10 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
 - 와이어 호환성은 fixture/vector를 유지하고 이유 없이 재생성하지 않습니다.
 - 진입점 변경은 소스 테스트와 packed ESM/CJS/browser smoke를 모두 추가합니다.
 - lazy 모듈을 root에 연결할 때는 초기 정적 그래프에 구현 코드가 포함되지 않는지 검증합니다.
+- 브라우저 빌드 변경은 `pnpm exec playwright install chromium firefox webkit` 후 `pnpm build`와
+  `pnpm smoke:browser`로 실제 엔진에서 확인합니다. `pnpm smoke:browser firefox`처럼 엔진을
+  지정할 수 있습니다. 이 검증은 CI·배포 workflow의 별도 단계이며 일반 `pnpm verify`에
+  브라우저 다운로드를 암묵적으로 추가하지 않습니다. [Playwright browser 설치](https://playwright.dev/docs/browsers)
 - 비정상 종료 위험은 유효한 상태로 진입하지 못하게 테스트하고, 필요하면 자식 프로세스
   timeout으로 검증합니다.
 - 테스트 제목과 주석은 현재 구현 용어를 사용하고 제거된 API의 부재를 계속 테스트하지 않습니다.
@@ -113,6 +119,10 @@ browser, worker, types 조건과 pack smoke를 함께 갱신합니다. 조건은
 
 - hot path에서 전체 크기 임시 배열, 불필요한 문자열 복사, 반복 lookup 객체 생성을 피합니다.
 - 최적화는 benchmark 수치와 동치성 테스트를 함께 제공해야 합니다.
+- `pnpm bench`는 3표본 중앙값의 호출당 시간과 원문 바이트 기준 왕복 MiB/s를 표시합니다.
+  일반 문자열 길이와 UTF-8 출력 크기를 구분하고, 직접 플랫폼 Base64·압축 가능한 텍스트·결정론적
+  난수·이미 압축된 입력을 비교합니다. 첫 KDF 측정은 새 인스턴스 기준이며 프로세스 시작 비용은
+  포함하지 않습니다. `bench:guard`의 ASCII unpack만 인코딩 문자 수를 분모로 사용합니다.
 - 모든 디코딩·압축 해제·스트림 버퍼는 명시적 크기 상한을 유지합니다.
 - 크기 제한은 각 진입점의 최소 사용 경로와 adapter 활성화 경로를 따로 검증합니다.
 - 새 runtime dependency는 표준 API로 해결할 수 없고 크기·유지보수·공급망 비용을 정량화한 경우에만

@@ -10,9 +10,10 @@
  * - Error signaling on invalid input
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Ddu64Core } from "../src/core/Ddu64Core.js";
 import { Ddu64Node as Ddu64 } from "../src/Ddu64Node.js";
+import { Ddu64Browser } from "../src/Ddu64Browser.js";
 import { NodeAdapter } from "../src/adapters/NodeAdapter.js";
 import {
   createReadableEncodeStream,
@@ -41,7 +42,97 @@ import {
   isDdu64Error,
 } from "../src/core/errors.js";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+describe.each([
+  { name: "Node", Codec: Ddu64 },
+  { name: "Browser", Codec: Ddu64Browser },
+])("stream option and ownership contracts: $name", ({ Codec }) => {
+  it.each([false, true])("snapshots stream options with lazy factory=%s", async (lazy) => {
+    for (const checksum of [false, true]) {
+      const encoder = new Codec();
+      const input = new TextEncoder().encode("stream options");
+      const options = { obfuscate: true, checksum };
+      const pending = lazy
+        ? encoder.createEncodeStream(options)
+        : createReadableEncodeStream(encoder, options);
+      options.obfuscate = false;
+      options.checksum = !checksum;
+      const stream = await pending;
+      let encoded = "";
+      const drained = stream.readable.pipeTo(
+        new WritableStream<string>({
+          write(chunk) {
+            encoded += chunk;
+          },
+        }),
+      );
+      const writer = stream.writable.getWriter();
+      await writer.write(input);
+      await writer.close();
+      await drained;
+      expect(await decodeViaStream(encoder, encoded, { obfuscate: true, checksum })).toEqual(input);
+
+      const limits = { obfuscate: true, checksum, maxDecodedBytes: 1 };
+      const pendingDecode = lazy
+        ? encoder.createDecodeStream(limits)
+        : createReadableDecodeStream(encoder, limits);
+      limits.maxDecodedBytes = 1024;
+      const decoded = new ReadableStream<string>({
+        start(controller) {
+          controller.enqueue(encoded);
+          controller.close();
+        },
+      }).pipeThrough(await pendingDecode);
+      await expect(decoded.getReader().read()).rejects.toThrow(Ddu64LimitError);
+    }
+  });
+
+  it.each([false, true])("preserves call overrides with checksum=%s", async (checksum) => {
+    for (const defaultObfuscate of [false, true]) {
+      for (const obfuscate of [false, true]) {
+        for (const length of [1, 6, 7]) {
+          const encoder = new Codec({ obfuscate: defaultObfuscate });
+          const input = new TextEncoder().encode("abcdefg".slice(0, length));
+          const onProgress = vi.fn();
+          const options = { obfuscate, checksum, onProgress };
+          const encoded = await encodeViaStream(encoder, input, options);
+          expect(onProgress).toHaveBeenCalled();
+          expect(await decodeViaStream(encoder, encoded, { obfuscate, checksum })).toEqual(input);
+        }
+      }
+    }
+  });
+
+  it.each([false, true])("owns reused input buffers with checksum=%s", async (checksum) => {
+    for (const useBuffer of [false, true]) {
+      for (const length of [1, 3, 4]) {
+        const encoder = new Codec();
+        const stream = await encoder.createEncodeStream({ checksum, maxBufferedBytes: 8 });
+        let encoded = "";
+        const drained = stream.readable.pipeTo(
+          new WritableStream<string>({
+            write(chunk) {
+              encoded += chunk;
+            },
+          }),
+        );
+        const writer = stream.writable.getWriter();
+        const backing = useBuffer ? Buffer.alloc(1024) : new Uint8Array(1024);
+        const bytes = backing.subarray(100, 100 + length);
+        bytes.fill(65);
+        await writer.write(bytes);
+        bytes.fill(66);
+        await writer.write(bytes);
+        bytes.fill(67);
+        await writer.write(new Uint8Array());
+        await writer.close();
+        await drained;
+        expect(await decodeViaStream(encoder, encoded, { checksum })).toEqual(
+          new Uint8Array([...Array<number>(length).fill(65), ...Array<number>(length).fill(66)]),
+        );
+      }
+    }
+  });
+});
 
 function createEncoder(opts: DduConstructorOptions = {}) {
   return new Ddu64Core(undefined, undefined, {

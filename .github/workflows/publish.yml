@@ -27,5 +27,9 @@ jobs:
         run: pnpm verify
       - name: Verify performance baseline
         run: pnpm bench:guard
+      - name: Install browser engines
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Verify browser interoperability
+        run: pnpm smoke:browser
       - name: Publish package
         run: npm publish --access public --ignore-scripts

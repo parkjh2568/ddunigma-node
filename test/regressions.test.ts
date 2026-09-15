@@ -12,7 +12,12 @@ import {
   Ddu64LimitError,
 } from "../src/core/errors.js";
 import { packPow2ToString, unpackPow2FromString } from "../src/core/internal/IndexStringMapper.js";
-import type { DduInternalOptions, KeyDerivationOptions } from "../src/core/types.js";
+import {
+  DduSetSymbol,
+  type DduInternalOptions,
+  type KeyDerivationOptions,
+} from "../src/core/types.js";
+import footerCollisionVectors from "./fixtures/footer-collision-vectors.json";
 
 function createEncoder(options: Record<string, unknown> = {}) {
   return new Ddu64Core(undefined, undefined, {
@@ -32,6 +37,87 @@ class CountingKeyAdapter extends NodeAdapter {
 }
 
 describe("security and resource regressions", () => {
+  it("validates string decode inputs before dispatching to a subclass", async () => {
+    let calls = 0;
+    class CustomDecoder extends Ddu64Core {
+      override decodeToUint8Array(): Uint8Array {
+        calls++;
+        return new TextEncoder().encode("custom decoded");
+      }
+      override async decodeToUint8ArrayAsync(): Promise<Uint8Array> {
+        calls++;
+        return new TextEncoder().encode("custom decoded async");
+      }
+    }
+    const decoder = new CustomDecoder();
+    expect(() => decoder.decode(null as never)).toThrow(Ddu64InvalidInputError);
+    expect(() => decoder.decode("input", { checksum: "yes" } as never)).toThrow(
+      Ddu64InvalidInputError,
+    );
+    await expect(decoder.decodeAsync(null as never)).rejects.toThrow(Ddu64InvalidInputError);
+    await expect(decoder.decodeAsync("input", { checksum: "yes" } as never)).rejects.toThrow(
+      Ddu64InvalidInputError,
+    );
+    expect(calls).toBe(0);
+    expect(decoder.decode("input")).toBe("custom decoded");
+    expect(await decoder.decodeAsync("input")).toBe("custom decoded async");
+    expect(calls).toBe(2);
+  });
+
+  it.each([
+    ["", "a"],
+    ["a", ""],
+    ["", "a", "bb", "c"],
+  ])("rejects empty charset symbols: %j", (...dduChar) => {
+    expect(() => new Ddu64Core({ dduChar, paddingChar: "=" })).toThrow(Ddu64CharsetError);
+  });
+
+  it.each(Object.values(DduSetSymbol))(
+    "retains the final fallback profile for %s",
+    (dduSetSymbol) => {
+      const stable = new Ddu64Core({ dduSetSymbol });
+      for (const dduChar of [["a", "\n"], ["", "a"], ["a"]]) {
+        const fallback = new Ddu64Core({
+          dduChar,
+          paddingChar: "=",
+          dduSetSymbol,
+          throwOnError: false,
+        });
+        expect(fallback.getCharSetInfo()).toEqual(stable.getCharSetInfo());
+        for (const input of ["A", "AB", "ABC", "ABCD"]) {
+          expect(fallback.encode(input)).toBe(stable.encode(input));
+          expect(stable.decode(fallback.encode(input))).toBe(input);
+          expect(fallback.decode(stable.encode(input))).toBe(input);
+        }
+      }
+    },
+  );
+
+  it.each(["|\n|", "|\r|", "|\r\n|", "\n", "\r", "\r\n", "||", "|\n|\n|"])(
+    "removes intact chunk separators: %j",
+    async (chunkSeparator) => {
+      const encoder = createEncoder();
+      const options = { chunkSize: 2, chunkSeparator };
+      const encoded = encoder.encode("abcdef", options);
+      expect(encoder.decode(encoded, options)).toBe("abcdef");
+      expect(await encoder.decodeAsync(encoded, options)).toBe("abcdef");
+    },
+  );
+
+  it.each(["\uFEFFABC", "A\uFEFFBC", "\uFEFF\uFEFFABC", "\uFEFF"])(
+    "preserves every UTF-8 BOM in %j",
+    async (input) => {
+      const encoder = createEncoder();
+      const encoded = encoder.encode(input);
+      expect(encoder.decode(encoded)).toBe(input);
+      expect(await encoder.decodeAsync(await encoder.encodeAsync(input))).toBe(input);
+      expect(encoder.decodeToUint8Array(encoded)).toEqual(new TextEncoder().encode(input));
+      expect(await encoder.decodeToUint8ArrayAsync(encoded)).toEqual(
+        new TextEncoder().encode(input),
+      );
+    },
+  );
+
   it("rejects encrypted payloads whose authenticated footer was removed", () => {
     const encoder = createEncoder({
       encryptionKey: "footer-downgrade-key",
@@ -231,6 +317,92 @@ describe("security and resource regressions", () => {
   it("round-trips with a numeric padding character", () => {
     const encoder = new Ddu64Core({ dduChar: "abcdefgh", paddingChar: "1" });
     expect(encoder.decode(encoder.encode("numeric padding"))).toBe("numeric padding");
+  });
+
+  it.each([true, false])("disambiguates numeric padding with pow2=%s", (usePowerOfTwo) => {
+    for (const size of [8, 64, 1024, 2048, 4096, 8192, 32768]) {
+      const dduChar = Array.from({ length: size }, (_, i) => String.fromCharCode(0x4000 + i));
+      for (const paddingChar of "0123456789") {
+        const encoder = new Ddu64Core({
+          dduChar,
+          paddingChar,
+          usePowerOfTwo,
+          useRepeatPadding: true,
+        });
+        const numericFooter = new Ddu64Core({ dduChar, paddingChar, usePowerOfTwo });
+        for (const length of [1, 2, 4, 5, 7]) {
+          const bytes = new Uint8Array(length).fill(65);
+          const encoded = encoder.encode(bytes);
+          expect(encoder.decodeToUint8Array(encoded)).toEqual(bytes);
+          expect(numericFooter.decodeToUint8Array(encoded)).toEqual(bytes);
+          expect(encoder.decodeToUint8Array(numericFooter.encode(bytes))).toEqual(bytes);
+        }
+      }
+    }
+  });
+
+  it.each([
+    ["3", "XV"],
+    ["4", "XV"],
+    ["C", "EN"],
+    ["A", "XELYSI"],
+    ["O", "XGRISE"],
+  ])("keeps payload text that resembles a footer with padding=%s", (paddingChar, payload) => {
+    const base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const alphabet = [...base64.replace(paddingChar, "!")];
+    const lastIndex = alphabet.indexOf(payload.at(-1)!);
+    // 마지막 심볼의 하위 4비트가 0인 유효한 payload를 구성합니다.
+    [alphabet[16], alphabet[lastIndex]] = [alphabet[lastIndex], alphabet[16]];
+    const bytes = new Uint8Array(
+      Buffer.from([...payload].map((char) => base64[alphabet.indexOf(char)]).join(""), "base64"),
+    );
+    for (const useRepeatPadding of [false, true]) {
+      const encoder = new Ddu64Core({ dduChar: alphabet, paddingChar, useRepeatPadding });
+      const encoded = encoder.encode(bytes);
+      expect(encoded).toBe(
+        payload + (useRepeatPadding ? paddingChar.repeat(2) : paddingChar + "4"),
+      );
+      expect(encoder.decodeToUint8Array(encoded)).toEqual(bytes);
+    }
+  });
+
+  it.each(footerCollisionVectors.vectors)(
+    "decodes authenticated footer collisions with padding=$paddingChar",
+    async ({ dduChar, paddingChar, encoded }) => {
+      const encoder = createEncoder({
+        dduChar,
+        paddingChar,
+        encryptionKey: footerCollisionVectors.encryptionKey,
+        keyDerivation: { algorithm: "sha256" },
+      });
+      expect(encoder.decode(encoded)).toBe(footerCollisionVectors.plaintext);
+      expect(await encoder.decodeAsync(encoded)).toBe(footerCollisionVectors.plaintext);
+      const tampered = encoded.slice(0, -7) + paddingChar + "ELYSIAENCV42";
+      expect(() => encoder.decode(tampered)).toThrow(Ddu64DecryptionError);
+      await expect(encoder.decodeAsync(tampered)).rejects.toThrow(Ddu64DecryptionError);
+    },
+  );
+
+  it.each([false, true])("reports monotonic decode progress with async=%s", async (async) => {
+    for (const checksumScope of ["plaintext", "output"] as const) {
+      const encoder = createEncoder({
+        compress: true,
+        checksum: true,
+        checksumScope,
+        encryptionKey: "progress-key",
+        keyDerivation: { algorithm: "sha256" },
+      });
+      const input = "progress payload ".repeat(100);
+      const encoded = encoder.encode(input);
+      const progress: number[] = [];
+      const options = { onProgress: ({ percent }: { percent: number }) => progress.push(percent) };
+      expect(
+        async ? await encoder.decodeAsync(encoded, options) : encoder.decode(encoded, options),
+      ).toBe(input);
+      expect(progress[0]).toBe(0);
+      expect(progress.at(-1)).toBe(100);
+      expect(progress).toEqual([...progress].sort((a, b) => a - b));
+    }
   });
 
   it("wraps URL-safe charset conflicts as charset errors", () => {

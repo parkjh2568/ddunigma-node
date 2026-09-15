@@ -41,25 +41,19 @@ const brotliCompressAsync = promisify(zlibBrotliCompress);
 const brotliDecompressAsync = promisify(zlibBrotliDecompress);
 const pbkdf2Async = promisify(pbkdf2);
 
-/** zlib/brotli의 "출력 버퍼 초과" 계열 에러인지 판별합니다. */
-function isBufferTooLargeError(e: unknown): boolean {
-  const err = e as { message?: string; code?: string };
-  const msg = String(err?.message ?? "").toLowerCase();
-  const code = String(err?.code ?? "");
-  return (
-    code === "ERR_BUFFER_TOO_LARGE" ||
-    msg.includes("output length") ||
-    msg.includes("buffer too large") ||
-    msg.includes("cannot create a buffer larger")
-  );
-}
-
 /**
  * 압축 해제 중 발생한 에러가 출력 크기 제한 초과면 표준 메시지로 다시 던지고,
  * 그 외에는 원본 에러를 그대로 전파합니다.
  */
 function rethrowDecompressLimitError(e: unknown, maxBytes: number, label: string): never {
-  if (isBufferTooLargeError(e)) {
+  const err = e as { message?: string; code?: string };
+  const msg = String(err?.message ?? "").toLowerCase();
+  if (
+    err?.code === "ERR_BUFFER_TOO_LARGE" ||
+    msg.includes("output length") ||
+    msg.includes("buffer too large") ||
+    msg.includes("cannot create a buffer larger")
+  ) {
     throw new Error(`[Ddu64 ${label}] Decompressed data exceeds limit. Limit: ${maxBytes} bytes`, {
       cause: e,
     });
@@ -135,13 +129,15 @@ export class NodeAdapter implements PlatformAdapter {
     if (aad && aad.length > 0) {
       cipher.setAAD(toBufferView(aad));
     }
-    const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
+    const encrypted = cipher.update(data);
+    const final = cipher.final();
     const authTag = cipher.getAuthTag();
     // 와이어 포맷: IV(12) + authTag(16) + 암호문
-    const result = new Uint8Array(12 + 16 + encrypted.length);
+    const result = new Uint8Array(12 + 16 + encrypted.length + final.length);
     result.set(iv, 0);
     result.set(authTag, 12);
     result.set(encrypted, 28);
+    result.set(final, 28 + encrypted.length);
     return result;
   }
 
@@ -161,8 +157,13 @@ export class NodeAdapter implements PlatformAdapter {
       decipher.setAAD(toBufferView(aad));
     }
     decipher.setAuthTag(authTag);
-    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-    return toOwnedUint8Array(decrypted);
+    const decrypted = decipher.update(encrypted);
+    // final의 인증 검증이 성공한 뒤에만 공개 결과 버퍼를 구성합니다.
+    const final = decipher.final();
+    const result = new Uint8Array(decrypted.length + final.length);
+    result.set(decrypted);
+    result.set(final, decrypted.length);
+    return result;
   }
 
   randomBytes(length: number): Uint8Array {

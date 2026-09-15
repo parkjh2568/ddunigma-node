@@ -98,11 +98,11 @@ export interface CharSetInfo {
 
 /** 진행률 콜백 정보 */
 export interface DduProgressInfo {
-  /** 현재 처리된 바이트 수 (근사값) */
+  /** 현재 단계의 처리량. decode의 start/decode 단계는 UTF-16 코드 유닛, 그 외는 바이트입니다. */
   processedBytes: number;
-  /** 전체 바이트 수 */
+  /** 현재 단계의 전체 크기. processedBytes와 같은 단위이며 단계 사이에 크기가 달라질 수 있습니다. */
   totalBytes: number;
-  /** 진행률 (0-100, 단계별 근사값) */
+  /** 진행률 (0-100, 단일 codec 호출 안에서 감소하지 않는 단계별 근사값) */
   percent: number;
   /** 현재 처리 단계 */
   stage?:
@@ -121,13 +121,13 @@ export interface DduProgressInfo {
 export interface DduEncodeStats {
   /** 원본 데이터 크기 (바이트) */
   originalSize: number;
-  /** 인코딩된 문자열 길이 */
+  /** 인코딩 계산 결과의 UTF-16 코드 유닛 수(String.length). UTF-8 전송 바이트 수가 아닙니다. */
   encodedSize: number;
-  /** 압축된 크기 (압축 사용시) */
+  /** 실제 압축을 적용한 경우의 바이트 수 (압축 결과가 더 크면 미지정) */
   compressedSize?: number;
   /** 압축률 (0-1, 낮을수록 효율적) */
   compressionRatio?: number;
-  /** 인코딩 확장 비율 */
+  /** encodedSize / originalSize (코드 유닛/바이트). 빈 입력은 0입니다. */
   expansionRatio: number;
   /** 사용된 charset 크기 */
   charsetSize: number;
@@ -339,15 +339,6 @@ export interface DduSecureConstructorOptions extends DduBaseConstructorOptions, 
  */
 export type DduConstructorOptions = DduSecureConstructorOptions;
 
-export const dduDefaultConstructorOptions: DduConstructorOptions = {
-  /** 기본 charset: DDU (한글 종성 결합 64개) */
-  dduSetSymbol: DduSetSymbol.DDU,
-  /** 2의 제곱수 강제 */
-  usePowerOfTwo: true,
-  /** 필요 문자 수: 64개 */
-  requiredLength: 64,
-};
-
 // ─── Platform Adapter ────────────────────────────────────────────────────────
 
 /**
@@ -397,12 +388,12 @@ export interface PlatformAdapter {
   /** 동기적으로 deflate 데이터를 압축 해제 (Node.js 전용) */
   inflateSync?(data: Uint8Array, maxBytes?: number): Uint8Array;
 
-  /** brotli 알고리즘으로 데이터를 압축 (Node.js 전용) */
+  /** brotli 알고리즘으로 데이터를 압축 (브라우저는 해당 CompressionStream 지원 시 가능) */
   brotliCompress?(data: Uint8Array, level?: number): Promise<Uint8Array>;
   /** 동기적으로 brotli 압축 (Node.js 전용) */
   brotliCompressSync?(data: Uint8Array, level?: number): Uint8Array;
 
-  /** brotli 데이터를 압축 해제 (Node.js 전용) */
+  /** brotli 데이터를 압축 해제 (브라우저는 해당 DecompressionStream 지원 시 가능) */
   brotliDecompress?(data: Uint8Array, maxBytes?: number): Promise<Uint8Array>;
   /** 동기적으로 brotli 데이터를 압축 해제 (Node.js 전용) */
   brotliDecompressSync?(data: Uint8Array, maxBytes?: number): Uint8Array;

@@ -26,6 +26,50 @@ function createObfuscationLayer(charSet: string[], paddingChar: string): HangulO
   return new HangulObfuscationLayer([...new Set([...charSet, paddingChar])]);
 }
 
+it("owns the alphabet used by both mapping directions", () => {
+  const alphabet = ["a", "b"];
+  const layer = new HangulObfuscationLayer(alphabet);
+  const encoded = layer.obfuscate("abba");
+  alphabet.reverse();
+  alphabet[0] = "x";
+  alphabet.push("c");
+  expect(layer.deobfuscate(encoded)).toBe("abba");
+  expect(layer.obfuscate("abba")).toBe(encoded);
+});
+
+it("preserves the positional mapping across string batch boundaries", () => {
+  for (const alphabet of [
+    ["a", "b"],
+    [..."가나다라마바사"],
+    [..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="],
+  ]) {
+    const layer = new HangulObfuscationLayer(alphabet);
+    const syllablesPerChar = Math.floor(HANGUL_SYLLABLE_COUNT / alphabet.length);
+    for (const length of [0, 1, 8191, 8192, 8193, 16384, 16385]) {
+      const input = alphabet
+        .join("")
+        .repeat(Math.ceil(length / alphabet.length))
+        .slice(0, length);
+      const expected = [...input]
+        .map((char, i) =>
+          String.fromCharCode(
+            HANGUL_SYLLABLE_START +
+              alphabet.indexOf(char) * syllablesPerChar +
+              (i % syllablesPerChar),
+          ),
+        )
+        .join("");
+      expect(layer.obfuscate(input)).toBe(expected);
+      expect(layer.deobfuscate(expected)).toBe(input);
+    }
+    for (const position of [8191, 8192, 8193]) {
+      expect(() => layer.obfuscate(alphabet[0].repeat(position) + "!")).toThrow(
+        /U\+0021.*not found/,
+      );
+    }
+  }
+});
+
 // ─── Test Data ───────────────────────────────────────────────────────────────
 
 // DDU charset (8 base × 8 coda = 64 characters)

@@ -60,6 +60,7 @@ export function createReadableEncodeStream(
   options?: DduStreamOptions,
 ): TransformStream<Uint8Array, string> {
   validateRuntimeOptions(options, "stream");
+  if (options) options = { ...options };
   const info = encoder.getCharSetInfo();
   const shouldCompress = options?.compress ?? info.defaultCompress;
   const shouldEncrypt = info.hasEncryptionKey;
@@ -123,6 +124,7 @@ export function createReadableEncodeStream(
           const alignedData = data.subarray(0, alignedLen);
           // 푸터 없이 인코딩 (중간 청크)
           const encoded = await encoder.encodeAsync(alignedData, {
+            ...options,
             compress: false,
             encrypt: false,
             checksum: false,
@@ -135,13 +137,15 @@ export function createReadableEncodeStream(
 
         // 잔여 바이트 저장
         if (alignedLen < data.length) {
-          residualBytes = data.slice(alignedLen);
+          residualBytes = new Uint8Array(data.subarray(alignedLen));
         } else {
           residualBytes = null;
         }
       } else {
         // 축적 모드: 압축/암호화/체크섬 또는 비-2의 제곱수 charset은 전체 데이터 필요
         if (totalLength + chunk.length > maxBufferedBytes) {
+          chunks = [];
+          totalLength = 0;
           controller.error(
             new Ddu64LimitError(
               `[WebStreams encode] Buffered input exceeds limit. Limit: ${maxBufferedBytes} bytes`,
@@ -150,7 +154,8 @@ export function createReadableEncodeStream(
           );
           return;
         }
-        chunks.push(chunk);
+        // write 완료 후 producer가 Buffer/subarray를 재사용해도 입력을 보존합니다.
+        if (chunk.length > 0) chunks.push(new Uint8Array(chunk));
         totalLength += chunk.length;
       }
     },
@@ -169,6 +174,7 @@ export function createReadableEncodeStream(
 
           if (residualBytes && residualBytes.length > 0) {
             const encoded = await encoder.encodeAsync(residualBytes, {
+              ...options,
               compress: false,
               encrypt: false,
               checksum: false,
@@ -192,6 +198,9 @@ export function createReadableEncodeStream(
             combined.set(chunk, offset);
             offset += chunk.length;
           }
+          // 연속 버퍼로 옮긴 청크를 비동기 압축·암호화가 끝날 때까지 보유하지 않습니다.
+          chunks = [];
+          totalLength = 0;
 
           const encoded = await encoder.encodeAsync(combined, {
             ...options,
@@ -204,12 +213,13 @@ export function createReadableEncodeStream(
           if (encoded.length > 0) {
             controller.enqueue(encoded);
           }
-
-          chunks = [];
-          totalLength = 0;
         }
       } catch (err) {
         controller.error(wrapDdu64Error(err, "stream"));
+      } finally {
+        residualBytes = null;
+        chunks = [];
+        totalLength = 0;
       }
     },
   });
@@ -233,6 +243,7 @@ export function createReadableDecodeStream(
   options?: DduStreamOptions,
 ): TransformStream<string, Uint8Array> {
   validateRuntimeOptions(options, "stream");
+  if (options) options = { ...options };
   const info = encoder.getCharSetInfo();
   const paddingChar = info.paddingChar;
   const headerLength = getStreamHeaderLength(paddingChar);
@@ -249,17 +260,16 @@ export function createReadableDecodeStream(
   let headerMeta: StreamHeaderMeta | null = null;
 
   return new TransformStream<string, Uint8Array>({
-    async transform(chunk, controller) {
+    transform(chunk, controller) {
       try {
-        textBuffer += chunk;
-        if (textBuffer.length > maxBufferedChars) {
+        if (textBuffer.length + chunk.length > maxBufferedChars) {
           throw new Ddu64LimitError(
             `[WebStreams decode] Buffered encoded input exceeds limit. Limit: ${maxBufferedChars} characters`,
             "stream",
           );
         }
+        textBuffer += chunk;
 
-        // 헤더가 아직 파싱되지 않았으면 시도
         if (!headerParsed && textBuffer.length >= headerLength) {
           if (!textBuffer.startsWith(paddingChar)) {
             throw new Error("[WebStreams decode] Invalid or missing stream header");
@@ -276,10 +286,10 @@ export function createReadableDecodeStream(
 
           headerParsed = true;
 
-          // 헤더 제거
           textBuffer = textBuffer.slice(headerLength);
         }
       } catch (err) {
+        textBuffer = "";
         controller.error(wrapDdu64Error(err, "stream"));
       }
     },
@@ -291,23 +301,24 @@ export function createReadableDecodeStream(
           throw new Error("[WebStreams decode] Incomplete stream header");
         }
 
-        const detectedCompression = headerMeta!.compressionAlgorithm;
-
-        const decoded = await encoder.decodeToUint8ArrayAsync(textBuffer, {
+        const pendingDecode = encoder.decodeToUint8ArrayAsync(textBuffer, {
           ...options,
           compress: options?.compress,
-          compressionAlgorithm: detectedCompression,
+          compressionAlgorithm: headerMeta!.compressionAlgorithm,
           checksum: shouldChecksum,
           chunkSize: undefined,
           chunkSeparator: undefined,
         });
+        textBuffer = "";
+        const decoded = await pendingDecode;
 
         if (decoded.length > 0) {
           controller.enqueue(decoded);
         }
-        textBuffer = "";
       } catch (err) {
         controller.error(wrapDdu64Error(err, "stream"));
+      } finally {
+        textBuffer = "";
       }
     },
   });

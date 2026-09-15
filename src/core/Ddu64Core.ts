@@ -6,7 +6,7 @@
  */
 
 import { calculateBitLength, isPowerOfTwo, type BitPackConfig } from "./BitPack.js";
-import { normalizeCompressionLevel, stringToBytes, bytesToString } from "./codecUtils.js";
+import { normalizeCompressionLevel, bytesToString } from "./codecUtils.js";
 import { resolveInitialCharSet, normalizeCharSet, isUrlSafeCompatible } from "./CharsetResolver.js";
 import type {
   PlatformAdapter,
@@ -129,7 +129,7 @@ export class Ddu64Core {
   /** 캐시된 암호화 키 해시 */
   private encryptionKeyHash: Uint8Array | undefined;
 
-  /** 캐시된 어댑터 게이트웨이 컨텍스트 (호출당 재할당 방지, 해시는 getter로 라이브 조회) */
+  /** 캐시된 어댑터 게이트웨이 컨텍스트 (키 파생 시 setter에서 해시를 함께 갱신) */
   private adapterGatewayContext: AdapterGatewayContext | undefined;
 
   /** 기본 체크섬 활성화 */
@@ -230,10 +230,9 @@ export class Ddu64Core {
     this.obfuscationLayerFactory = dduOptions?.obfuscationLayerFactory;
 
     // Charset 초기화
-    let initial: ReturnType<typeof resolveInitialCharSet>;
     let normalized: ReturnType<typeof normalizeCharSet>;
     try {
-      initial = resolveInitialCharSet(dduChar, paddingChar, dduOptions, shouldThrow);
+      const initial = resolveInitialCharSet(dduChar, paddingChar, dduOptions, shouldThrow);
       normalized = normalizeCharSet(initial, shouldThrow, dduOptions);
     } catch (error) {
       if (isDdu64Error(error)) throw error;
@@ -277,16 +276,18 @@ export class Ddu64Core {
     // preset 인코딩 프로필은 레거시 와이어 포맷을 고정하므로 사용자 옵션보다 우선합니다.
     // 단, dduOptions.usePowerOfTwo=true여도 charset 크기가 2의 제곱수가 아니면 무시.
     const requestedPow2 = dduOptions?.usePowerOfTwo;
-    const encodingProfile = initial.encodingProfile;
+    const encodingProfile = normalized.encodingProfile;
     this.usePowerOfTwo =
       encodingProfile?.usePowerOfTwo ??
-      initial.usePowerOfTwo ??
+      normalized.usePowerOfTwo ??
       (requestedPow2 !== undefined ? requestedPow2 && autoIsPow2 : autoIsPow2);
 
     // DDU_V1은 8개 심볼로 6비트 값을 두 글자 쌍으로 표현하는 Origin 호환 프로필입니다.
     const presetBitLength =
       encodingProfile?.bitLength ??
-      (initial.isPredefined && initial.usePowerOfTwo !== undefined ? initial.bitLength : undefined);
+      (normalized.isPredefined && normalized.usePowerOfTwo !== undefined
+        ? normalized.bitLength
+        : undefined);
     this.bitLength = presetBitLength ?? calculateBitLength(dduLength, this.usePowerOfTwo);
 
     const lookupTables = buildCharsetLookupTables(this.dduChar, isPredefinedCharSet);
@@ -334,8 +335,8 @@ export class Ddu64Core {
       dduOptions?.compressionLevel,
       this.defaultCompressionAlgorithm,
     );
-    this.useRepeatPadding = dduOptions?.useRepeatPadding ?? initial.useRepeatPadding ?? false;
-    this.bitsPerPadChar = encodingProfile?.bitsPerPadChar ?? initial.bitsPerPadChar ?? 2;
+    this.useRepeatPadding = dduOptions?.useRepeatPadding ?? normalized.useRepeatPadding ?? false;
+    this.bitsPerPadChar = encodingProfile?.bitsPerPadChar ?? normalized.bitsPerPadChar ?? 2;
 
     // 난독화
     this.defaultObfuscate = dduOptions?.obfuscate ?? false;
@@ -365,7 +366,6 @@ export class Ddu64Core {
       paddingChar: this.paddingChar,
       useRepeatPadding: this.useRepeatPadding,
       bitsPerPadChar: this.bitsPerPadChar,
-      encryptedPipelineVersion: 4,
     };
   }
 
@@ -440,6 +440,7 @@ export class Ddu64Core {
 
   /**
    * 비동기 인코딩 - 브라우저를 포함한 모든 런타임에서 동작합니다.
+   * await 경계를 넘겨 사용하는 입력 바이트와 호출 옵션은 첫 await 전에 보존합니다.
    *
    * @group Async
    */
@@ -447,6 +448,7 @@ export class Ddu64Core {
     try {
       validateRuntimeOptions(options, "encode");
       validateEncodeInput(input);
+      if (options) options = { ...options };
       const result = await runAsyncEncodePipeline(input, options, {
         ...this.buildEncodeBaseContext(options),
         compress: async (data, algorithm, level) =>
@@ -487,6 +489,7 @@ export class Ddu64Core {
     try {
       validateRuntimeOptions(options, "decode");
       validateDecodeInput(input);
+      if (options) options = { ...options };
       const prep = this.decodePrelude(input, options);
       return await runAsyncDecodePipeline(prep, options, {
         ...this.buildDecodeBaseContext(options),
@@ -544,6 +547,8 @@ export class Ddu64Core {
 
   /**
    * 인코딩 통계를 가져옵니다.
+   * 압축과 문자열 생성은 실제로 수행하고 암호화는 같은 길이의 자리표시 바이트로 대신합니다.
+   * encodedSize는 String.length이며 실제 전송 바이트 수는 반환하지 않습니다.
    *
    * @group Introspection
    */
@@ -551,16 +556,15 @@ export class Ddu64Core {
     try {
       validateRuntimeOptions(options, "encode");
       validateEncodeInput(input);
-      const originalData = typeof input === "string" ? stringToBytes(input) : input;
       // AES-GCM의 고정 overhead만 반영하고 실제 암호화는 생략합니다. 압축은 결과 크기와
       // 적용 여부에 영향을 주므로 실제 adapter 경로를 사용합니다.
-      const { encoded, compressedSize } = runSyncEncodePipeline(originalData, options, {
+      const { originalSize, encoded, compressedSize } = runSyncEncodePipeline(input, options, {
         ...this.buildEncodeBaseContext(options),
         compress: (data, algorithm, level) =>
           runCompressSync(this.getAdapter(), data, algorithm, level),
         encrypt: (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
       });
-      return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
+      return this.buildEncodeStats(originalSize, encoded.length, compressedSize, options);
     } catch (err) {
       throw wrapDdu64Error(err, "encode");
     }
@@ -571,6 +575,7 @@ export class Ddu64Core {
    *
    * 브라우저/Workers처럼 압축이 비동기 API로만 제공되는 런타임에서는 `compress: true`
    * 통계 계산에 이 메서드를 사용하세요.
+   * 입력·옵션 보존과 크기 단위는 encodeAsync/getStats와 같습니다.
    *
    * @group Introspection
    */
@@ -578,14 +583,18 @@ export class Ddu64Core {
     try {
       validateRuntimeOptions(options, "encode");
       validateEncodeInput(input);
-      const originalData = typeof input === "string" ? stringToBytes(input) : input;
-      const { encoded, compressedSize } = await runAsyncEncodePipeline(originalData, options, {
-        ...this.buildEncodeBaseContext(options),
-        compress: async (data, algorithm, level) =>
-          compressAsyncWithAdapter(await this.getAsyncAdapter(), data, algorithm, level),
-        encrypt: async (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
-      });
-      return this.buildEncodeStats(originalData.length, encoded.length, compressedSize, options);
+      if (options) options = { ...options };
+      const { originalSize, encoded, compressedSize } = await runAsyncEncodePipeline(
+        input,
+        options,
+        {
+          ...this.buildEncodeBaseContext(options),
+          compress: async (data, algorithm, level) =>
+            compressAsyncWithAdapter(await this.getAsyncAdapter(), data, algorithm, level),
+          encrypt: async (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
+        },
+      );
+      return this.buildEncodeStats(originalSize, encoded.length, compressedSize, options);
     } catch (err) {
       throw wrapDdu64Error(err, "encode");
     }

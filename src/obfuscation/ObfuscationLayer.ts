@@ -57,26 +57,27 @@ export class HangulObfuscationLayer implements ObfuscationLayer {
   obfuscate(input: string): string {
     if (input.length === 0) return "";
 
-    const result = new Array<string>(input.length);
-
-    for (let i = 0; i < input.length; i++) {
-      const char = input[i];
-      const charIndex = this.config.charToIndex.get(char);
-
-      if (charIndex === undefined) {
-        throw new Ddu64ObfuscationError(
-          `[Ddu64 obfuscation] Character "${char}" (U+${char.charCodeAt(0).toString(16).padStart(4, "0").toUpperCase()}) not found in obfuscation alphabet.`,
-        );
+    const codes = new Uint16Array(Math.min(input.length, 8192));
+    const chunks: string[] = [];
+    const { charToIndex, syllablesPerChar } = this.config;
+    for (let offset = 0; offset < input.length; offset += codes.length) {
+      const length = Math.min(codes.length, input.length - offset);
+      for (let i = 0; i < length; i++) {
+        const char = input[offset + i];
+        const charIndex = charToIndex.get(char);
+        if (charIndex === undefined) {
+          throw new Ddu64ObfuscationError(
+            `[Ddu64 obfuscation] Character "${char}" (U+${char.charCodeAt(0).toString(16).padStart(4, "0").toUpperCase()}) not found in obfuscation alphabet.`,
+          );
+        }
+        // 배치 경계에서도 전체 문자열 위치를 유지해야 기존 wire와 동일합니다.
+        codes[i] =
+          HANGUL_SYLLABLE_START + charIndex * syllablesPerChar + ((offset + i) % syllablesPerChar);
       }
-
-      const syllableCode =
-        HANGUL_SYLLABLE_START +
-        charIndex * this.config.syllablesPerChar +
-        (i % this.config.syllablesPerChar);
-      result[i] = String.fromCharCode(syllableCode);
+      const batch = length === codes.length ? codes : codes.subarray(0, length);
+      chunks.push(String.fromCharCode.apply(null, batch as unknown as number[]));
     }
-
-    return result.join("");
+    return chunks.length === 1 ? chunks[0] : chunks.join("");
   }
 
   /**

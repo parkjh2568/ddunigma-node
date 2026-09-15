@@ -1,5 +1,5 @@
 /**
- * Encode footer and post-processing helpers.
+ * Encode post-processing.
  *
  * The ordering is part of the wire compatibility contract:
  * obfuscation -> checksum -> URL-safe -> chunking.
@@ -8,24 +8,8 @@
  */
 
 import { splitIntoChunks, toUrlSafe } from "../codecUtils.js";
-import {
-  buildFooter,
-  CHECKSUM_MARKER_SCOPED,
-  type ChecksumScope,
-  type PipelineVersion,
-} from "../wireFormat.js";
+import { CHECKSUM_MARKER_SCOPED, type ChecksumScope } from "../wireFormat.js";
 import type { DduOptions, ObfuscationLayer } from "../types.js";
-
-export interface BuildEncodeFooterOptions {
-  paddingBits: number;
-  compressionAlgorithm?: "deflate" | "brotli";
-  isEncrypted: boolean;
-  paddingChar: string;
-  useRepeatPadding: boolean;
-  bitsPerPadChar: number;
-  pipelineVersion: PipelineVersion;
-  omitFooter?: boolean;
-}
 
 export interface ApplyPostEncodingOptions {
   encoded: string;
@@ -40,21 +24,6 @@ export interface ApplyPostEncodingOptions {
   shouldObfuscate(options?: DduOptions): boolean;
   getObfuscationLayer(): ObfuscationLayer;
   assertSafeChunkSeparator(encoded: string, separator: string): void;
-}
-
-export function buildEncodeFooter(options: BuildEncodeFooterOptions): string {
-  if (options.omitFooter) return "";
-
-  return buildFooter({
-    paddingBits: options.paddingBits,
-    compressionAlgorithm: options.compressionAlgorithm,
-    isEncrypted: options.isEncrypted,
-    paddingChar: options.paddingChar,
-    useRepeatPadding:
-      options.useRepeatPadding && !options.compressionAlgorithm && !options.isEncrypted,
-    bitsPerPadChar: options.bitsPerPadChar,
-    pipelineVersion: options.isEncrypted ? options.pipelineVersion : 2,
-  });
 }
 
 export function applyPostEncoding(options: ApplyPostEncodingOptions): string {

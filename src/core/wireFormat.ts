@@ -8,8 +8,9 @@
  *
  * ### 단일 페이로드 푸터
  * ```
- * [encoded_chars] [pad] [ELYSIA|GRISEO|∅] [ENC|∅] [V3|V4|∅] [0-7]
+ * [encoded_chars] [pad] [ELYSIA|GRISEO|∅] [ENC|∅] [V3|V4|∅] [paddingBits]
  *                  ↑패딩 ↑압축 마커         ↑암호화 ↑파이프 ↑비트
+ * paddingBits: 0 ~ effectiveBitLength-1 (십진수, 비트폭에 따라 두 자리 가능)
  *
  * 선택: CK[P|O][8 hex] (스코프 자기기술 CRC32; 레거시 CHK[8 hex]도 디코드 호환)
  * ```
@@ -115,6 +116,7 @@ export interface FooterParseResult {
  * @param paddingChar - 인코더가 사용하는 패딩 문자
  * @param effectiveBitLength - charset의 유효 비트 길이 (charset 크기의 log2)
  * @param bitsPerPadChar - 반복 패딩 시 패딩 문자 1개가 나타내는 비트 수 (기본값: 2)
+ * @param usePowerOfTwo - 논리 심볼을 문자 1개로 표현하는지 여부 (false이면 문자 2개)
  * @returns 파싱된 푸터 정보
  */
 export function parseFooter(
@@ -122,6 +124,7 @@ export function parseFooter(
   paddingChar: string,
   effectiveBitLength: number,
   bitsPerPadChar: number = 2,
+  usePowerOfTwo: boolean = true,
 ): FooterParseResult {
   const inputLen = input.length;
   const padLen = paddingChar.length;
@@ -173,11 +176,13 @@ export function parseFooter(
       pipelineVersion = 3;
       pos -= PIPELINE_V3_MARKER.length;
     }
+    const versionStart = pos;
 
     if (pos >= ENCRYPT_MARKER.length && endsWithAt(input, ENCRYPT_MARKER, pos)) {
       isEncrypted = true;
       pos -= ENCRYPT_MARKER.length;
     }
+    const encryptionStart = pos;
 
     if (pos >= COMPRESS_MARKER.length && endsWithAt(input, COMPRESS_MARKER, pos)) {
       compressionAlgorithm = "deflate";
@@ -187,9 +192,38 @@ export function parseFooter(
       pos -= BROTLI_MARKER.length;
     }
 
+    // 본문 끝과 padding이 선택 마커처럼 보일 수 있습니다(예: …ELYSI|A|ENC|V4).
+    // 마지막 마커부터 되돌려 이미 읽은 ENC/V4와 유효한 padding 경계를 보존합니다.
+    if (pos !== digitsStart && !endsWithAt(input, paddingChar, pos)) {
+      compressionAlgorithm = undefined;
+      pos = encryptionStart;
+      if (!endsWithAt(input, paddingChar, pos)) {
+        isEncrypted = false;
+        pos = versionStart;
+        if (!endsWithAt(input, paddingChar, pos)) {
+          pipelineVersion = 2;
+          pos = digitsStart;
+        }
+      }
+    }
+
     // 마커 앞의 패딩 문자 확인
     const padStart = pos - padLen;
     if (padStart >= 0 && endsWithAt(input, paddingChar, pos)) {
+      // 숫자 패딩의 반복 접미사는 숫자 footer와 겹칠 수 있습니다(예: QQ11).
+      // 마커 없는 후보는 payload 경계와 바이트 정렬이 맞을 때만 숫자 footer입니다.
+      if (padLen === 1 && paddingChar >= "0" && paddingChar <= "9" && pos === digitsStart) {
+        const symbolCount = padStart / (usePowerOfTwo ? 1 : 2);
+        const decodedBits = symbolCount * effectiveBitLength - paddingBits;
+        if (
+          endsWithAt(input, paddingChar, padStart) ||
+          !Number.isInteger(symbolCount) ||
+          decodedBits < 0 ||
+          decodedBits % 8 !== 0
+        ) {
+          continue;
+        }
+      }
       return {
         cleanedInput: input.substring(0, padStart),
         paddingBits,
@@ -245,11 +279,11 @@ export interface ChecksumExtractResult {
  * 체크섬 형식: `CHK` 뒤에 정확히 8자리 소문자 16진수 문자.
  * 체크섬은 인코딩 파이프라인에 들어가기 전의 원본 바이트에 대해 계산됩니다.
  *
- * ⚠️ 모호성 주의(레거시 `CHK` 한정): `lastIndexOf("CHK")` 기반이라, charset에 `C`/`H`/`K`가
+ * 모호성 주의: `lastIndexOf("CHK")` 기반이라, charset에 `C`/`H`/`K`가
  * 포함되고(예: `ONECHARSET`) 페이로드가 우연히 `…CHK########`(8 hex) 형태로 끝나면 오검출이
  * 가능합니다. 이 함수는 체크섬이 기대될 때만(`extractScopedChecksum`의 fallback) 호출되어 노출이
- * 제한적이고, 손상은 후속 디코드/패딩 검증에서 드러납니다. 신규 스코프 마커(`CK[P|O]########`,
- * 문자열 끝 고정 11자 검증)는 이 모호성이 없으므로 신규 인코딩은 `CHECKSUM_MARKER_SCOPED`를 씁니다.
+ * 제한적입니다. 신규 스코프 마커(`CK[P|O]########`)도 유효한 payload 접미사와 충돌할 수 있어
+ * 체크섬을 요청한 경로에서만 해석합니다. suffix 검출 자체가 체크섬의 존재를 보증하지 않습니다.
  *
  * @param input - 체크섬 접미사를 포함할 수 있는 인코딩된 문자열
  * @returns 체크섬 없는 데이터와 추출된 체크섬 (또는 null)

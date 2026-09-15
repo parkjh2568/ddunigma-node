@@ -44,6 +44,7 @@ export interface AsyncEncodePipelineContext extends EncodePipelineBaseContext {
 }
 
 export interface EncodePipelineResult {
+  originalSize: number;
   encoded: string;
   compressedSize?: number;
 }
@@ -55,7 +56,8 @@ export function runSyncEncodePipeline(
 ): EncodePipelineResult {
   const settings = resolveEncodeSettings(options, context);
   let workingData = typeof input === "string" ? stringToBytes(input) : input;
-  reportStart(context, workingData.length);
+  const originalSize = workingData.length;
+  reportStart(context, originalSize);
 
   let checksum = "";
   if (settings.shouldChecksum && settings.checksumScope === "plaintext") {
@@ -88,6 +90,7 @@ export function runSyncEncodePipeline(
   }
 
   return {
+    originalSize,
     encoded: context.finalize(
       workingData,
       compressionAlgorithm,
@@ -108,8 +111,15 @@ export async function runAsyncEncodePipeline(
   context: AsyncEncodePipelineContext,
 ): Promise<EncodePipelineResult> {
   const settings = resolveEncodeSettings(options, context);
-  let workingData = typeof input === "string" ? stringToBytes(input) : input;
-  reportStart(context, workingData.length);
+  // await를 넘겨 사용하는 바이트만 소유권을 확보합니다. Buffer도 공유 view 없이 복사합니다.
+  let workingData =
+    typeof input === "string"
+      ? stringToBytes(input)
+      : settings.shouldCompress || settings.shouldEncrypt
+        ? new Uint8Array(input)
+        : input;
+  const originalSize = workingData.length;
+  reportStart(context, originalSize);
 
   let checksum = "";
   if (settings.shouldChecksum && settings.checksumScope === "plaintext") {
@@ -145,6 +155,7 @@ export async function runAsyncEncodePipeline(
   }
 
   return {
+    originalSize,
     encoded: context.finalize(
       workingData,
       compressionAlgorithm,

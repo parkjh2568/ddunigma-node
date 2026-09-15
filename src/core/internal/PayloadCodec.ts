@@ -13,7 +13,7 @@ import {
   unpackPow2FromString,
   unpackNonPow2FromString,
 } from "./IndexStringMapper.js";
-import { buildEncodeFooter } from "./EncodeFinalize.js";
+import { buildFooter } from "../wireFormat.js";
 import { lookupCharIndex } from "./CharsetLookup.js";
 
 type CompressionAlgorithm = "deflate" | "brotli";
@@ -27,8 +27,6 @@ export interface PayloadCodecContext {
   paddingChar: string;
   useRepeatPadding: boolean;
   bitsPerPadChar: number;
-  /** 암호화 페이로드 파이프라인 버전. 인코더는 항상 V4를 생성합니다(V3 읽기는 parseFooter의 레거시 호환). */
-  encryptedPipelineVersion: 4;
 }
 
 export function encodePayload(
@@ -64,15 +62,16 @@ export function encodePayload(
     payload = fused.payload;
   }
 
-  const footer = buildEncodeFooter({
+  if (options?.omitFooter) return payload;
+
+  const footer = buildFooter({
     paddingBits,
     compressionAlgorithm,
     isEncrypted,
     paddingChar: context.paddingChar,
     useRepeatPadding: context.useRepeatPadding,
     bitsPerPadChar: context.bitsPerPadChar,
-    pipelineVersion: context.encryptedPipelineVersion,
-    omitFooter: options?.omitFooter,
+    pipelineVersion: isEncrypted ? 4 : 2,
   });
 
   return payload + footer;

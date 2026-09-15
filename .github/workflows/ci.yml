@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/setup@v2
         with:
-          runtime: node@22
+          runtime: node@24
           cache: true
           require-lockfile: true
       - run: pnpm verify
@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [24, 26]
+        node: [22, 26]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/setup@v2
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/setup@v2
         with:
-          runtime: node@22
+          runtime: node@24
           cache: true
           require-lockfile: true
       - run: pnpm build
@@ -67,3 +67,21 @@ jobs:
         if: matrix.runtime == 'bun'
       - run: deno run scripts/runtime-web-smoke.mjs
         if: matrix.runtime == 'deno'
+
+  browser-engines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+          require-lockfile: true
+      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - run: pnpm build
+      - run: pnpm smoke:browser ${{ matrix.browser }}

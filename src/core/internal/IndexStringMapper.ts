@@ -343,7 +343,8 @@ export function packNonPow2ToString(
   if (inputLen === 0) return { payload: "", paddingBits: 0 };
 
   const chunks: string[] = [];
-  const buf = new Uint16Array(STRING_CHUNK_SIZE);
+  const bufSize = Math.min(Math.ceil((inputLen * 8) / bitLength) * 2, STRING_CHUNK_SIZE);
+  const buf = new Uint16Array(bufSize);
   let bufIdx = 0;
   let accumulator = 0;
   let accumulatorBits = 0;
@@ -351,7 +352,7 @@ export function packNonPow2ToString(
 
   const pushCode = (code: number): void => {
     buf[bufIdx++] = code;
-    if (bufIdx === STRING_CHUNK_SIZE) {
+    if (bufIdx === bufSize) {
       chunks.push(String.fromCharCode.apply(null, buf as unknown as number[]));
       bufIdx = 0;
     }

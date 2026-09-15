@@ -46,7 +46,7 @@ import { validateRuntimeOptions } from "./core/internal/OptionValidation.js";
  *
  * const encoder = new Ddu64();
  * const encoded = encoder.encode(Buffer.from('Hello'), { obfuscate: true });
- * const decoded = encoder.decodeToBuffer(encoded); // Buffer 반환
+ * const decoded = encoder.decodeToBuffer(encoded, { obfuscate: true }); // Buffer 반환
  * ```
  */
 export class Ddu64Node extends Ddu64Core {
@@ -65,6 +65,19 @@ export class Ddu64Node extends Ddu64Core {
       if (options.adapter !== undefined) return new Ddu64Node(options);
 
       const { adapterFactory, asyncAdapterFactory, ...constructorOptions } = options;
+      // adapter 초기화를 기다리는 동안 호출자가 변경할 수 있는 설정을 보존합니다.
+      if (Array.isArray(constructorOptions.dduChar)) {
+        constructorOptions.dduChar = [...constructorOptions.dduChar];
+      }
+      if (constructorOptions.codaChar)
+        constructorOptions.codaChar = [...constructorOptions.codaChar];
+      if (constructorOptions.keyDerivation) {
+        const { salt } = constructorOptions.keyDerivation;
+        constructorOptions.keyDerivation = { ...constructorOptions.keyDerivation };
+        if (salt !== undefined && typeof salt !== "string") {
+          constructorOptions.keyDerivation.salt = new Uint8Array(salt);
+        }
+      }
       let adapter: PlatformAdapter;
       if (adapterFactory !== undefined) {
         adapter = adapterFactory();
@@ -169,6 +182,8 @@ export class Ddu64Node extends Ddu64Core {
     options?: DduStreamOptions,
   ): Promise<TransformStream<Uint8Array, string>> {
     try {
+      validateRuntimeOptions(options, "stream");
+      if (options) options = { ...options };
       const { createReadableEncodeStream } = await import("./streams/WebStreams.js");
       return createReadableEncodeStream(this, options);
     } catch (error) {
@@ -181,6 +196,8 @@ export class Ddu64Node extends Ddu64Core {
     options?: DduStreamOptions,
   ): Promise<TransformStream<string, Uint8Array>> {
     try {
+      validateRuntimeOptions(options, "stream");
+      if (options) options = { ...options };
       const { createReadableDecodeStream } = await import("./streams/WebStreams.js");
       return createReadableDecodeStream(this, options);
     } catch (error) {

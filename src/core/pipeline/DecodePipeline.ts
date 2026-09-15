@@ -141,7 +141,7 @@ function shouldDecompress(
 function verifyWireChecksum(prep: DecodePreludeResult, context: DecodePipelineContext): void {
   if (!prep.extractedChecksum) return;
   // "output" 범위: 디코딩된 와이어 바이트(복호화/압축해제 이전)에 대해 검증합니다.
-  reportStage(context, prep.decoded.length, 85, "checksum");
+  reportStage(context, prep.decoded.length, 40, "checksum");
   const calculatedChecksum = calculateCRC32(prep.decoded);
   if (!constantTimeEquals(calculatedChecksum, prep.extractedChecksum)) {
     throw new Ddu64ChecksumError(

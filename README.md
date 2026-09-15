@@ -24,6 +24,10 @@ Bun과 Deno에서 root는 명시적인 `bun`/`deno` 조건으로 browser 빌드�
 고정하려면 `/browser`를 사용하세요. 브라우저 계열의 실제 지원 알고리즘은 WebCrypto와
 `CompressionStream`/`DecompressionStream` 구현에 따라 달라집니다.
 
+CI는 Node 24에서 전체 검증, Node 22·26과 Bun·Deno에서 런타임 호환을 확인합니다.
+별도 Playwright 작업은 Chromium·Firefox·WebKit에서 브라우저 빌드와 Node 간 데이터 호환을
+실행합니다. Node에서 `/browser`를 import하는 smoke와 실제 브라우저 엔진 검증은 별개입니다.
+
 ## Install
 
 ```bash
@@ -55,13 +59,20 @@ npm install @ddunigma/node
 import { Ddu64, DduSetSymbol } from "@ddunigma/node";
 
 const ddu = new Ddu64();
-const encoded = ddu.encode("안녕하세요");
-ddu.decode(encoded); // "안녕하세요"
+const encoded = ddu.encode("abc"); // "우잇땩얃"
+ddu.decode(encoded); // "abc"
+const hidden = ddu.encode("abc", { obfuscate: true }); // "렀뜁낂붃"
+ddu.decode(hidden, { obfuscate: true }); // "abc"
 
 // 구버전 8문자 쌍 형식 호환
 const legacy = new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
 legacy.decode(legacy.encode("legacy"));
 ```
+
+게임의 퍼즐 힌트나 커뮤니티 메시지처럼 출력의 모습 자체가 필요한 곳에 적용할 수 있습니다.
+위 `abc`는 원문 3바이트, DDU 출력 4문자·UTF-8 12바이트입니다. 난독화는 같은 설정과 입력에
+항상 같은 결과를 내며, 출력이 지나는 저장소·복사 경로는 Unicode 코드포인트를 보존해야 합니다.
+정규화(NFD 등)로 한글 음절을 분해하면 복원할 수 없습니다.
 
 ## 진입점
 
@@ -120,6 +131,10 @@ const encoded = await ddu.encodeAsync("보호할 데이터");
 const decoded = await ddu.decodeAsync(encoded);
 ```
 
+비동기 메서드가 반환한 뒤 입력 `Uint8Array`/`Buffer`와 호출 옵션을 재사용해도 진행 중인
+작업의 입력은 유지됩니다. 첫 암호화 호출에는 키 파생 비용이 포함되며, 같은 설정으로 반복
+처리할 때 인스턴스를 재사용하면 파생된 키를 다시 사용할 수 있습니다.
+
 압축 여부는 wire metadata에서 판별하므로 decode에 `compress:true`를 반복할 필요가 없습니다.
 Node에서 동기 압축·암호화가 필요하면 같은 import의 비동기 팩토리를 사용하세요.
 
@@ -166,6 +181,10 @@ const ddu = new Ddu64({ checksum: true });
 const encodeStream = await ddu.createEncodeStream();
 const decodeStream = await ddu.createDecodeStream();
 ```
+
+압축·암호화·체크섬을 사용한 인코딩과 모든 디코딩은 입력을 축적합니다. 기본 64MiB 제한은
+입력 버퍼 상한이고, 결과 문자열·작업 버퍼·동시 호출을 포함한 프로세스 메모리 상한은 아닙니다.
+입력 크기와 동시 처리 수에 맞춰 한도를 낮추세요. [상세 계약과 크기 측정](docs/REFERENCE.md#web-streams)
 
 생성자 옵션은 인스턴스 기본값이고 호출 옵션의 `compress:false`, `checksum:false`,
 `obfuscate:false`로 해당 호출에서 기능을 끌 수 있습니다. 암호화 키가 있는 인스턴스에서

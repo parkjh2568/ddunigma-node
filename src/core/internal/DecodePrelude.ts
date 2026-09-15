@@ -126,7 +126,13 @@ export function runDecodePrelude(
   }
 
   const { cleanedInput, paddingBits, compressionAlgorithm, isEncrypted, pipelineVersion } =
-    parseFooter(workingInput, context.paddingChar, context.bitLength, context.bitsPerPadChar);
+    parseFooter(
+      workingInput,
+      context.paddingChar,
+      context.bitLength,
+      context.bitsPerPadChar,
+      context.usePowerOfTwo,
+    );
 
   const requireEncryption = options?.requireEncryption ?? context.defaultRequireEncryption;
   if (requireEncryption && allowInternalDecrypt && !isEncrypted) {

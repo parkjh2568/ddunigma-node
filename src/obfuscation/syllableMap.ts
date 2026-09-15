@@ -57,6 +57,7 @@ export function buildSyllableMap(alphabet: string[]): SyllableMapConfig {
     );
   }
 
+  alphabet = [...alphabet];
   const syllablesPerChar = Math.floor(HANGUL_SYLLABLE_COUNT / alphabet.length);
 
   const charToIndex = new Map<string, number>();

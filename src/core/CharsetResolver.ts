@@ -6,7 +6,7 @@
 
 import { buildCodaCharset, isKnownCodaChar, URL_SAFE_CONFLICT_CHARS } from "./codecUtils.js";
 import type { DduConstructorOptions, EncodingProfile } from "./types.js";
-import { DduSetSymbol, dduDefaultConstructorOptions } from "./types.js";
+import { DduSetSymbol } from "./types.js";
 import { getCharSet } from "../presets.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -22,13 +22,6 @@ export interface ResolvedCharSet {
   bitsPerPadChar?: number;
   usePowerOfTwo?: boolean;
   encodingProfile?: EncodingProfile;
-}
-
-/** charset 정규화 결과 */
-export interface NormalizedCharSet {
-  charSet: string[];
-  padding: string;
-  isPredefined: boolean;
 }
 
 // ─── Charset 해석 ────────────────────────────────────────────────────────────
@@ -116,9 +109,14 @@ export function resolveInitialCharSet(
       if (shouldThrow) {
         const uniqueSize = new Set(arr).size;
         if (uniqueSize !== arr.length) {
-          const duplicates = arr.filter((c, i) => arr.indexOf(c) !== i);
+          const seen = new Set<string>();
+          const duplicates = new Set<string>();
+          for (const char of arr) {
+            if (seen.has(char)) duplicates.add(char);
+            else seen.add(char);
+          }
           throw new Error(
-            `[Ddu64 Constructor] Character set contains duplicate characters: [${[...new Set(duplicates)].join(", ")}]`,
+            `[Ddu64 Constructor] Character set contains duplicate characters: [${[...duplicates].join(", ")}]`,
           );
         }
       }
@@ -131,8 +129,7 @@ export function resolveInitialCharSet(
       return buildMeta(arr, finalPadding, reqLen, false, useRepeatPad);
     }
 
-    const symbol =
-      dduOptions?.dduSetSymbol ?? dduDefaultConstructorOptions.dduSetSymbol ?? DduSetSymbol.DDU;
+    const symbol = dduOptions?.dduSetSymbol ?? DduSetSymbol.DDU;
     const cs = getCharSet(symbol);
     if (!cs) throw new Error(`CharSet with symbol ${symbol} not found`);
     const resolvedCharSet = cs.codaChar ? buildCodaCharset(cs.charSet, cs.codaChar) : cs.charSet;
@@ -177,7 +174,7 @@ export function normalizeCharSet(
   current: ResolvedCharSet,
   shouldThrow: boolean,
   dduOptions?: DduConstructorOptions,
-): NormalizedCharSet {
+): ResolvedCharSet {
   const attempts = [current, null] as const;
 
   for (const attempt of attempts) {
@@ -189,9 +186,14 @@ export function normalizeCharSet(
       const uniqueChars = Array.from(new Set(charSet));
       if (uniqueChars.length !== charSet.length) {
         if (shouldThrow) {
-          const duplicates = charSet.filter((c, i) => charSet.indexOf(c) !== i);
+          const seen = new Set<string>();
+          const duplicates = new Set<string>();
+          for (const char of charSet) {
+            if (seen.has(char)) duplicates.add(char);
+            else seen.add(char);
+          }
           throw new Error(
-            `[Ddu64 normalizeCharSet] Character set contains duplicate characters: [${[...new Set(duplicates)].join(", ")}]`,
+            `[Ddu64 normalizeCharSet] Character set contains duplicate characters: [${[...duplicates].join(", ")}]`,
           );
         }
         charSet = uniqueChars;
@@ -206,8 +208,7 @@ export function normalizeCharSet(
       if (requiredLength < 2) {
         throw new Error(`[Ddu64 normalizeCharSet] At least 2 unique characters required.`);
       }
-      const multiCharSymbol = charSet.find((c) => c.length !== 1);
-      if (multiCharSymbol) {
+      if (charSet.some((c) => c.length !== 1)) {
         if (shouldThrow) {
           throw new Error(`[Ddu64 normalizeCharSet] Multi-character symbols are not supported.`);
         }
@@ -262,7 +263,7 @@ export function normalizeCharSet(
       const finalSet =
         charSet.length === requiredLength ? charSet : charSet.slice(0, requiredLength);
 
-      return { charSet: finalSet, padding: state.padding, isPredefined: state.isPredefined };
+      return { ...state, charSet: finalSet, requiredLength };
     } catch (e: unknown) {
       if (shouldThrow) throw e;
     }
@@ -270,9 +271,8 @@ export function normalizeCharSet(
 
   const fallback = getFallbackCharSet(dduOptions);
   return {
+    ...fallback,
     charSet: fallback.charSet.slice(0, fallback.requiredLength),
-    padding: fallback.padding,
-    isPredefined: true,
   };
 }
 
@@ -313,10 +313,7 @@ function isLoneSurrogate(symbol: string): boolean {
 }
 
 function getFallbackCharSet(dduOptions?: DduConstructorOptions): ResolvedCharSet {
-  const symbol =
-    dduOptions?.dduSetSymbol ??
-    dduDefaultConstructorOptions.dduSetSymbol ??
-    DduSetSymbol.ONECHARSET;
+  const symbol = dduOptions?.dduSetSymbol ?? DduSetSymbol.DDU;
   const cs = getCharSet(symbol) ?? getCharSet(DduSetSymbol.ONECHARSET);
   if (!cs) throw new Error(`Critical: No fallback CharSet available`);
   const charSet = cs.codaChar ? buildCodaCharset(cs.charSet, cs.codaChar) : cs.charSet;

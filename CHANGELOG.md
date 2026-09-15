@@ -4,6 +4,44 @@
 
 ## Unreleased
 
+### 정확성·입력 보존
+
+- 숫자 `paddingChar`와 `useRepeatPadding:true` 조합이 자기 출력을 디코딩하지 못하던 문제를
+  수정했습니다. payload 경계와 바이트 정렬로 숫자 footer와 반복 패딩을 구별합니다.
+- 커스텀 charset의 본문 끝과 padding이 `V3`·`ENC` 같은 마커처럼 보일 때 정상 payload를
+  잘못 제거하던 footer 파싱을 수정했습니다. 압축 마커 충돌에서도 정상 ENC/V3/V4 정보를
+  보존하며, 실제 암호문 고정 벡터로 Node·브라우저 디코딩을 검증합니다.
+- 비동기 codec의 입력 바이트·호출 옵션과 스트림 생성 옵션을 보존해, 호출 후 버퍼·옵션 재사용이
+  출력·checksum·압축 해제 제한을 바꾸지 않도록 했습니다.
+- output checksum을 검증하는 decode의 진행률 역행을 수정했습니다. 검증 순서는 유지합니다.
+- 청크 스트림에서 호출별 `obfuscate`와 `onProgress`가 누락되던 문제를 수정했습니다.
+- 스트림의 buffered 입력과 잔여 바이트를 독립 복사해 `write()` 이후 `Uint8Array`/`Buffer`
+  재사용으로 데이터가 바뀌지 않도록 했습니다.
+- `Ddu64.create()`가 adapter 초기화를 기다리기 전에 charset·coda·KDF 설정과 salt를
+  보존하며, 공개 `HangulObfuscationLayer`도 생성 당시 alphabet을 유지합니다.
+- 빈 charset 심볼을 거부하고, fallback 후 최종 preset의 비트폭·패딩 프로필을 일관되게
+  적용합니다. 줄바꿈이 포함된 커스텀 청크 구분자도 정상 제거합니다.
+- 문자열 디코딩이 선두 `U+FEFF`(UTF-8 BOM)를 제거하던 문제를 수정했습니다. 이제 원문을
+  보존하며, 종전의 BOM 제거가 필요한 사용자는 애플리케이션에서 명시적으로 처리해야 합니다.
+  인코딩 wire format과 바이트 디코딩 결과는 바뀌지 않습니다.
+
+### 성능·검증
+
+- 문자열 통계의 UTF-8 변환과 원문 크기 기록을 인코딩 파이프라인에서 한 번만 처리해
+  `getStatsAsync`의 중복 입력 복사를 제거했습니다. 외부 바이트 입력 보존과 통계 단위는 유지합니다.
+- 스트림 flush에서 합친 버퍼가 준비되면 원래 청크 참조를 해제하고, 실패 시 축적 상태를 정리합니다.
+- Chromium·Firefox·WebKit 엔진 smoke를 추가해 브라우저 조건부 export, Base64 대체 경로,
+  비동기 입력 보존, Web Streams와 Node↔브라우저 압축·암호화 호환을 검증합니다.
+- 기본 CI를 Node 24로 이동하고 Node 22·26 호환 검증을 유지합니다. 벤치마크는 직접 Buffer
+  Base64 기준선, 난수·이미 압축된 입력, UTF-8 출력 크기, 첫 KDF·인스턴스 재사용 비용을 구분하며,
+  전체 DDU·난독화 경로도 성능 가드에 포함합니다.
+- 난독화 문자열 생성을 최대 8,192개 코드 유닛 단위로 처리해 전체 크기의 임시 문자열 배열을
+  제거했습니다. 위치별 매핑과 기존 출력은 유지합니다.
+- Node AES-GCM의 중간 `Buffer.concat` 복사를 제거하고, 작은 non-pow2 입력의 문자열 생성
+  버퍼를 실제 출력 크기로 제한했습니다. 인증 검증과 독립 결과 버퍼 계약은 유지합니다.
+- 벤치마크 출력 소비·MiB/s 단위·측정 분모를 정리하고 크기별 난독화·AES·Node/browser codec
+  측정을 추가했습니다. Bun/Deno smoke는 실제 패키지 root와 `/secure` export도 검증합니다.
+
 ### 단일 root 기능 활성화
 
 - `@ddunigma/node`와 `/browser`의 `Ddu64`에 `createEncodeStream()`과
@@ -17,6 +55,11 @@
 
 ### 문서·패키징
 
+- 크기 통계와 진행률의 단위, 커스텀 charset 기본 길이, URL-safe의 비표준 치환 규칙,
+  Unicode 정규화와 스트림 메모리 한도를 실제 예제로 명확히 했습니다.
+- 불필요한 내부 기본 옵션 객체와 고정 파이프라인 버전 전달을 제거하고, 단일 호출 푸터 중계
+  함수를 호출부에 통합했습니다. 디코딩 스트림의 동기 transform에서도 불필요한 async를 제거했습니다.
+- 저장소 이력에 있던 원작자 저작권 고지를 현재 고지와 함께 LICENCE에 보존했습니다.
 - 이 라이브러리가 적합한 사용 사례와 표준 Base64·보안 프로토콜·대용량 스트리밍이 더 적합한
   경계를 README와 API reference에 명시했습니다.
 - `/secure`를 기능 묶음으로 정의하고, 난독화·CRC32의 한계, 압축 후 암호화의 길이 기반 정보
@@ -25,6 +68,11 @@
   `docs/DECISIONS.md`로 정리했습니다.
 - npm 배포물에서 개발자 전용 `CONTRIBUTING.md`를 제외하고 사용자용 reference와 결정 기록만
   유지하도록 pack 검증을 갱신했습니다. 공개 API와 wire format은 변경되지 않습니다.
+
+## 6.1.2 - 2026-09-02
+
+- `v6.1.2` 태그의 커밋 `533c9a3`에서 npm package version metadata를 `6.1.2`로 갱신했습니다.
+  해당 커밋에는 런타임 코드 변경이 없습니다.
 
 ## 6.1.1 - 2026-09-02
 

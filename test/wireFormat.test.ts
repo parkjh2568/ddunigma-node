@@ -15,7 +15,7 @@ import {
   getStreamHeaderLength,
   buildFooter,
   buildEncryptionAAD,
-} from "../src/core/wireFormat";
+} from "../src/core/wireFormat.js";
 
 describe("wireFormat constants", () => {
   it("exports correct marker values", () => {
@@ -119,6 +119,36 @@ describe("parseFooter", () => {
     expect(result.compressionAlgorithm).toBe("brotli");
     expect(result.isEncrypted).toBe(true);
   });
+
+  it.each([
+    ["A", "XELYSI"],
+    ["O", "XGRISE"],
+    ["C", "EN"],
+    ["3", "XV"],
+    ["4", "XV"],
+  ])(
+    "preserves optional metadata across a payload collision with padding=%s",
+    (paddingChar, payload) => {
+      for (const pipelineVersion of [2, 3, 4] as const) {
+        for (const compressionAlgorithm of [undefined, "deflate", "brotli"] as const) {
+          const footer = buildFooter({
+            paddingBits: 4,
+            paddingChar,
+            isEncrypted: true,
+            pipelineVersion,
+            compressionAlgorithm,
+          });
+          expect(parseFooter(payload + footer, paddingChar, bitLength)).toEqual({
+            cleanedInput: payload,
+            paddingBits: 4,
+            isEncrypted: true,
+            pipelineVersion,
+            compressionAlgorithm,
+          });
+        }
+      }
+    },
+  );
 
   it("parses zero padding bits with markers", () => {
     const input = "ABCDEF" + pad + COMPRESS_MARKER + "0";

@@ -140,13 +140,9 @@ export function removeChunks(input: string, defaultSeparator: string): string {
     return input;
   }
 
-  let result = hasLineBreak ? input.replace(/[\r\n]/g, "") : input;
-
-  if (hasCustomSeparator) {
-    result = result.replaceAll(separator, "");
-  }
-
-  return result;
+  // 구분자 내부의 CR/LF를 먼저 지우면 원래 구분자를 찾을 수 없습니다.
+  const result = hasCustomSeparator ? input.replaceAll(separator, "") : input;
+  return hasLineBreak ? result.replace(/[\r\n]/g, "") : result;
 }
 
 // ─── 한글 종성 Charset ───────────────────────────────────────────────────────
@@ -258,7 +254,7 @@ export function normalizeCompressionLevel(
 const textEncoder = /* @__PURE__ */ new TextEncoder();
 
 /** 공유 TextDecoder 인스턴스 (상태 없음, 재사용 안전) */
-const textDecoder = /* @__PURE__ */ new TextDecoder();
+const textDecoder = /* @__PURE__ */ new TextDecoder("utf-8", { ignoreBOM: true });
 
 /**
  * TextEncoder를 사용하여 문자열을 UTF-8 바이트로 인코딩합니다.

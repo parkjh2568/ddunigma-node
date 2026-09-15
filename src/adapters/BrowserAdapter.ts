@@ -12,7 +12,6 @@
 import type { KeyDerivationOptions, PlatformAdapter } from "../core/types.js";
 import { Ddu64AdapterError } from "../core/errors.js";
 import {
-  normalizePbkdf2HashForWebCrypto,
   normalizePbkdf2Iterations,
   pbkdf2SaltToBytes,
   resolveKeyDerivationAlgorithm,
@@ -70,7 +69,7 @@ function requireCompressionFormat(
 
 /**
  * Web API를 사용하여 PlatformAdapter를 구현하는 BrowserAdapter:
- * - AES-256-GCM 및 SHA-256을 위한 Web Crypto API(SubtleCrypto)
+ * - AES-256-GCM, PBKDF2 및 SHA-256을 위한 Web Crypto API(SubtleCrypto)
  * - 안전한 랜덤 바이트를 위한 crypto.getRandomValues
  * - deflate-raw 압축을 위한 CompressionStream/DecompressionStream
  * - 런타임이 지원하는 경우 Brotli 압축
@@ -85,8 +84,7 @@ export class BrowserAdapter implements PlatformAdapter {
   // ─── Crypto ──────────────────────────────────────────────────────────────
 
   /**
-   * UTF-8 키 문자열에서 SHA-256을 통해 256비트 키를 파생합니다.
-   * UTF-8 인코딩된 키에 SubtleCrypto.digest('SHA-256', ...)를 사용합니다.
+   * UTF-8 키 문자열에서 기본 PBKDF2 또는 명시한 레거시 SHA-256으로 256비트 키를 파생합니다.
    */
   async deriveKey(key: string, options?: KeyDerivationOptions): Promise<Uint8Array> {
     const encoder = new TextEncoder();
@@ -101,7 +99,7 @@ export class BrowserAdapter implements PlatformAdapter {
           name: "PBKDF2",
           salt: pbkdf2SaltToBytes(options?.salt) as BufferSource,
           iterations: normalizePbkdf2Iterations(options?.iterations),
-          hash: normalizePbkdf2HashForWebCrypto(options?.hash),
+          hash: options?.hash ?? "SHA-256",
         },
         keyMaterial,
         256,

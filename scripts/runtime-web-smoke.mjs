@@ -1,13 +1,15 @@
 /**
  * Browser-targeted build smoke test for Web API runtimes.
  *
- * Node, Bun, and Deno execute the same built browser entry. Compression and
- * encryption force the lazy BrowserAdapter chunk to load on the current core.
+ * Tests package export resolution and the explicit browser entry on Node, Bun,
+ * and Deno. Both first lazy activation and eager create() are exercised.
  *
  * Usage: node|bun|deno scripts/runtime-web-smoke.mjs (run `pnpm build` first)
  */
 
-import { Ddu64 } from "../dist/browser.js";
+import { Ddu64 as RootDdu64 } from "@ddunigma/node";
+import { Ddu64 } from "@ddunigma/node/browser";
+import { Ddu64 as SecureDdu64 } from "@ddunigma/node/secure";
 
 const runtime =
   typeof globalThis.Bun !== "undefined"
@@ -16,7 +18,14 @@ const runtime =
       ? `Deno ${globalThis.Deno.version.deno}`
       : `Node ${globalThis.process?.version ?? "unknown"}`;
 
-const encoder = await Ddu64.create({
+if (
+  (typeof globalThis.Bun !== "undefined" || typeof globalThis.Deno !== "undefined") &&
+  RootDdu64 !== Ddu64
+) {
+  throw new Error(`${runtime}: package root did not select the browser entry`);
+}
+
+const options = {
   compress: true,
   encryptionKey: "web-runtime-smoke-key",
   keyDerivation: {
@@ -25,15 +34,25 @@ const encoder = await Ddu64.create({
     iterations: 10_000,
   },
   checksum: true,
-});
+};
 const input = "browser adapter runtime smoke ".repeat(64);
-const encoded = await encoder.encodeAsync(input);
-const decoded = await encoder.decodeAsync(encoded);
-
-if (decoded !== input) {
-  throw new Error(`${runtime}: browser entry secure round-trip failed`);
+for (const Codec of new Set([RootDdu64, Ddu64])) {
+  for (const eager of [false, true]) {
+    const encoder = eager ? await Codec.create(options) : new Codec(options);
+    const encoded = await encoder.encodeAsync(input);
+    if ((await encoder.decodeAsync(encoded)) !== input) {
+      throw new Error(`${runtime}: ${Codec.name} eager=${eager} round-trip failed`);
+    }
+  }
 }
 
+// Node, Bun and Deno all expose the node export condition for /secure.
+const secure = new SecureDdu64(options);
+if (secure.decode(secure.encode(input)) !== input) {
+  throw new Error(`${runtime}: package secure Node-compatible entry failed`);
+}
+
+const encoder = new Ddu64(options);
 const streamReader = new Blob([input])
   .stream()
   .pipeThrough(await encoder.createEncodeStream())

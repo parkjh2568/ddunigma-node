@@ -1,0 +1,16 @@
+{
+  "encryptionKey": "review-only-not-a-real-key",
+  "plaintext": "A",
+  "vectors": [
+    {
+      "dduChar": "ELYSICNX",
+      "paddingChar": "A",
+      "encoded": "YIIEIEYYLXISYXYCISIXCXYEYNXYXNSNXIEXLLCNXXCCYNNSXNCCLLNEXESNNELSNICELSCLNELYSIAENCV42"
+    },
+    {
+      "dduChar": "GRISECNX",
+      "paddingChar": "O",
+      "encoded": "IEEGEGIIRXESIXICESEXCXIGINXIXNSNXEGXRRCNXXCCINNSXNCCRRNGXGSNNGRSNECGRSCRNGRISEOENCV42"
+    }
+  ]
+}

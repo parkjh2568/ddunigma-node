@@ -22,6 +22,19 @@ describe("BrowserAdapter", () => {
   const browserAdapter = new BrowserAdapter();
   const adapter: PlatformAdapter = browserAdapter;
 
+  it("uses the current bytes of a caller-owned AES key on every operation", async () => {
+    const key = new Uint8Array(32).fill(1);
+    const originalKey = new Uint8Array(key);
+    const input = new TextEncoder().encode("mutable raw key");
+    const encrypted = await adapter.encrypt(input, key);
+    key.fill(2);
+    await expect(adapter.decrypt(encrypted, key)).rejects.toThrow();
+    expect(await adapter.decrypt(encrypted, originalKey)).toEqual(input);
+    const nextEncrypted = await adapter.encrypt(input, key);
+    expect(await new BrowserAdapter().decrypt(nextEncrypted, new Uint8Array(key))).toEqual(input);
+    await expect(adapter.decrypt(nextEncrypted, originalKey)).rejects.toThrow();
+  });
+
   describe("capability flags", () => {
     it('reports runtime as "browser"', () => {
       expect(adapter.runtime).toBe("browser");

@@ -23,6 +23,126 @@ import * as coreEntry from "../src/core.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+describe.each([
+  { name: "Node", Codec: nodeEntry.Ddu64 },
+  { name: "Browser", Codec: browserEntry.Ddu64 },
+])("async input and option snapshots: $name", ({ Codec }) => {
+  it.each([false, true])(
+    "snapshots async payloads and options with compress=%s",
+    async (compress) => {
+      const encoder = new Codec({
+        encryptionKey: "payload-snapshot-key",
+        keyDerivation: { algorithm: "sha256" },
+      });
+      for (const checksumScope of ["plaintext", "output"] as const) {
+        const bytes = Buffer.from("ORIGINAL ".repeat(100));
+        const original = bytes.toString();
+        let progressCalls = 0;
+        const options = {
+          compress,
+          obfuscate: true,
+          checksum: true,
+          checksumScope,
+          onProgress: () => {
+            progressCalls++;
+          },
+        };
+        const pending = encoder.encodeAsync(bytes, options);
+        bytes.fill(65);
+        options.obfuscate = false;
+        options.onProgress = () => {
+          throw new Error("mutated callback");
+        };
+        const encoded = await pending;
+        expect(progressCalls).toBeGreaterThan(1);
+        expect(await encoder.decodeAsync(encoded, { obfuscate: true, checksum: true })).toBe(
+          original,
+        );
+      }
+    },
+  );
+
+  it("snapshots async decode limits before key derivation", async () => {
+    const options = {
+      encryptionKey: "limit-snapshot-key",
+      keyDerivation: { algorithm: "sha256" as const },
+    };
+    const encoded = await new Codec(options).encodeAsync("x".repeat(2048), { compress: true });
+    const decoder = new Codec(options);
+    const limits = { maxDecompressedBytes: 16 };
+    const pending = decoder.decodeAsync(encoded, limits);
+    limits.maxDecompressedBytes = 4096;
+    await expect(pending).rejects.toThrow(/limit/i);
+  });
+
+  it("snapshots async statistics options and transferred bytes", async () => {
+    const encoder = new Codec();
+    const bytes = new TextEncoder().encode("statistics payload ".repeat(100));
+    const options = { compress: true, obfuscate: true };
+    const expected = await encoder.getStatsAsync(bytes, options);
+    const pending = encoder.getStatsAsync(bytes, options);
+    bytes.fill(0);
+    structuredClone(bytes.buffer, { transfer: [bytes.buffer] });
+    expect(bytes.byteLength).toBe(0);
+    options.compress = false;
+    options.obfuscate = false;
+    expect(await pending).toEqual(expected);
+  });
+
+  it.each(["default", "async", "sync", "explicit"])(
+    "owns mutable options before %s adapter initialization",
+    async (mode) => {
+      const dduChar = ["가", "나", "다", "라"];
+      const codaChar = ["", "ㄱ"];
+      const keyDerivation: nodeEntry.KeyDerivationOptions = {
+        algorithm: "pbkdf2",
+        salt: Buffer.from([1, 2, 3]),
+        iterations: 10_000,
+        hash: "SHA-256",
+      };
+      const stable = new Codec({
+        dduChar: [...dduChar],
+        codaChar: [...codaChar],
+        paddingChar: "=",
+        encryptionKey: "snapshot-key",
+        keyDerivation: { ...keyDerivation, salt: new Uint8Array([1, 2, 3]) },
+      });
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const adapter = new secureEntry.NodeAdapter();
+      const pending = Codec.create({
+        dduChar,
+        codaChar,
+        paddingChar: "=",
+        encryptionKey: "snapshot-key",
+        keyDerivation,
+        ...(mode === "async"
+          ? {
+              asyncAdapterFactory: async () => {
+                await gate;
+                return adapter;
+              },
+            }
+          : {}),
+        ...(mode === "sync" ? { adapterFactory: () => adapter } : {}),
+        ...(mode === "explicit" ? { adapter } : {}),
+      });
+      dduChar.reverse();
+      codaChar[1] = "ㄴ";
+      (keyDerivation.salt as Uint8Array).fill(9);
+      keyDerivation.iterations = 10_001;
+      keyDerivation.hash = "SHA-512";
+      release();
+      const encoder = await pending;
+      expect(encoder.getCharSetInfo().charSet).toEqual(stable.getCharSetInfo().charSet);
+      const encoded = await encoder.encodeAsync("snapshot input");
+      expect(await stable.decodeAsync(encoded)).toBe("snapshot input");
+    },
+  );
+});
+
 describe("진입점 import 스모크", () => {
   describe("기본 진입점 (.)", () => {
     it("Ddu64를 노출하고 obfuscate 옵션이 라운드트립한다", () => {

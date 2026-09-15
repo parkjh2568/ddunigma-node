@@ -1,5 +1,6 @@
 import { performance } from "node:perf_hooks";
 import { packPow2ToString, unpackPow2FromString } from "../src/core/internal/IndexStringMapper.js";
+import { Ddu64Node } from "../src/Ddu64Node.js";
 
 type GuardCase = {
   name: string;
@@ -90,27 +91,52 @@ function main(): void {
 
   const cases: GuardCase[] = [
     {
-      name: "packPow2ToString 16KB",
+      name: "packPow2ToString 16KiB",
       iterations: 2_000,
       bytes: bytes16k.byteLength,
-      // L2 6/8비트 언롤 융합으로 ~40→~183 MB/s 개선. 측정 기반 보수적 하한
-      // (로컬 median ~183, ~40% 마진). 환경 따라 변동하는 상대 하한이며 절대 단정 아님.
+      // 원시 입력 바이트 기준 고정 절대 하한. 전체 DDU 파이프라인 성능은 별도 측정합니다.
       minMbps: 110,
       fn: () => packPow2ToString(bytes16k, 6, charCodes),
     },
     {
-      name: "unpackPow2FromString 16KB",
+      name: "unpackPow2FromString 16KiB",
       iterations: 2_000,
       bytes: payload16k.length,
-      // L2 대칭 언롤로 영향받는 디코드 경로. 측정 기반 보수적 하한
-      // (로컬 median ~420, 노이즈 최저 ~283 대비에도 여유). 환경 따라 변동하는 상대 하한이며 절대 단정 아님.
+      // 인코딩된 ASCII 바이트 기준 하한이므로 encode 수치와 분모가 다릅니다.
       minMbps: 220,
       fn: () => unpackPow2FromString(payload16k, pad16k, 6, lookup, minCode),
     },
   ];
+  for (const obfuscate of [false, true]) {
+    const codec = new Ddu64Node({ obfuscate });
+    const encoded = codec.encode(bytes16k);
+    const decoded = codec.decodeToUint8Array(encoded);
+    if (decoded.length !== bytes16k.length || decoded.some((byte, i) => byte !== bytes16k[i])) {
+      throw new Error(`DDU guard round-trip failed: obfuscate=${obfuscate}`);
+    }
+    cases.push(
+      {
+        name: `DDU encode${obfuscate ? " obfuscated" : ""}`,
+        iterations: obfuscate ? 200 : 1_000,
+        bytes: bytes16k.byteLength,
+        minMbps: obfuscate ? 8 : 100,
+        fn: () => codec.encode(bytes16k),
+      },
+      {
+        name: `DDU decode${obfuscate ? " obfuscated" : ""}`,
+        iterations: obfuscate ? 200 : 1_000,
+        bytes: bytes16k.byteLength,
+        minMbps: obfuscate ? 16 : 120,
+        fn: () => codec.decodeToUint8Array(encoded),
+      },
+    );
+  }
 
   const results = cases.map(runCase);
-  console.log("case                         MB/s    min    status");
+  console.log(
+    "16KiB source; DDU uses original bytes in both directions, ASCII unpack uses encoded bytes.",
+  );
+  console.log("case                        MiB/s    min    status");
   console.log("----------------------------------------------------");
   for (const result of results) {
     const testCase = cases.find((item) => item.name === result.name)!;

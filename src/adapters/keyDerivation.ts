@@ -32,12 +32,6 @@ export function normalizePbkdf2HashForNode(hash: KeyDerivationOptions["hash"]): 
   return (hash ?? "SHA-256").toLowerCase().replace("-", "");
 }
 
-export function normalizePbkdf2HashForWebCrypto(
-  hash: KeyDerivationOptions["hash"],
-): NonNullable<KeyDerivationOptions["hash"]> {
-  return hash ?? "SHA-256";
-}
-
 export function pbkdf2SaltToBytes(salt: string | Uint8Array | undefined): Uint8Array {
   if (salt === undefined) return new TextEncoder().encode(DEFAULT_PBKDF2_SALT);
   if (typeof salt === "string") return new TextEncoder().encode(salt);

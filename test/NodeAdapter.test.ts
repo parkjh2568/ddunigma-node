@@ -40,6 +40,23 @@ describe("NodeAdapter", () => {
   describe("encrypt/decrypt", () => {
     const keyHash = adapter.deriveKeySync("encryption-key");
 
+    it.each([0, 1, 15, 16, 17, 8192, 1024 * 1024])(
+      "owns AES output and authenticates %i input bytes",
+      async (length) => {
+        const input = new Uint8Array(length).fill(42);
+        const aad = new Uint8Array([1, 2, 3]);
+        const encrypted = adapter.encryptSync(input, keyHash, aad);
+        expectOwnedBytes(encrypted);
+        const decoded = await adapter.decrypt(encrypted, keyHash, aad);
+        expectOwnedBytes(decoded);
+        expect(Buffer.compare(decoded, input)).toBe(0);
+        encrypted[12] ^= 1;
+        expect(() => adapter.decryptSync(encrypted, keyHash, aad)).toThrow();
+        await expect(adapter.decrypt(encrypted, keyHash, aad)).rejects.toThrow();
+        expect(Buffer.compare(decoded, input)).toBe(0);
+      },
+    );
+
     it("round-trip works for sync", () => {
       const plaintext = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
       const encrypted = adapter.encryptSync(plaintext, keyHash);
