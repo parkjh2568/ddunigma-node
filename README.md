@@ -2,13 +2,8 @@
 
 [![npm version](https://badge.fury.io/js/@ddunigma%2Fnode.svg)](https://www.npmjs.com/package/@ddunigma/node)
 
-Zero-dependency 커스텀 charset codec입니다. 한글 종성 조합 charset, 가역 난독화,
-선택적 압축·AES-256-GCM 암호화·CRC32 checksum을 Node.js와 웹 런타임에서 제공합니다.
+한글 종성 조합 charset, 가역 난독화, 선택적 압축·AES-256-GCM 암호화·CRC32 checksum을 Node.js와 웹 런타임에서 제공합니다.
 출력 형식을 직접 관리하는 애플리케이션에서 한글·커스텀 charset 표현이 필요할 때 사용합니다.
-
-> 이 패키지는 표준 Base64 대체 규격이나 완결된 보안 프로토콜이 아닙니다. 난독화와
-> CRC32는 기밀성이나 인증을 제공하지 않으며, 키 관리와 위협 모델은 애플리케이션의
-> 책임입니다.
 
 ## 지원 환경
 
@@ -194,9 +189,9 @@ const decodeStream = await ddu.createDecodeStream();
 
 ## 상세 문서
 
-- [API Reference](docs/REFERENCE.md)
-- [범위·설계 결정](docs/DECISIONS.md)
-- [개발·릴리스 컨벤션](https://github.com/parkjh2568/ddunigma-node/blob/master/CONTRIBUTING.md)
+- [API Reference](docs/REFERENCE.md): 옵션·오류·문자열·스트림·통계의 공개 계약
+- [범위·설계 결정](docs/DECISIONS.md): 제품 전제, 구조 평가, 최적화 현황과 재검토 조건
+- [개발·리뷰·릴리스 컨벤션](https://github.com/parkjh2568/ddunigma-node/blob/master/CONTRIBUTING.md): 코드 배치·함수 분리·입력 소유권·변경별 검증
 
 ## Credits
 
