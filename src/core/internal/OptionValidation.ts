@@ -14,6 +14,11 @@ import type {
 
 type PublicOptions = DduOptions | DduConstructorOptions | DduStreamOptions | DduInternalOptions;
 
+const typedArrayTag = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  Symbol.toStringTag,
+)!.get!;
+
 export function validateRuntimeOptions(
   options: PublicOptions | undefined,
   operation: Ddu64Operation = "construct",
@@ -195,16 +200,33 @@ export function validateRuntimeOptions(
   ) {
     invalid(operation, "keyDerivation.salt must be a string or Uint8Array");
   }
+  if (derivation.salt !== undefined && typeof derivation.salt !== "string") {
+    validateEncodeInput(derivation.salt, operation, false);
+  }
 }
 
 export function validateEncodeInput(
   input: unknown,
   operation: Ddu64Operation = "encode",
+  allowString = true,
 ): asserts input is Uint8Array | string {
-  if (typeof input !== "string" && !isUint8Array(input)) {
+  if (allowString && typeof input === "string") return;
+  if (!isUint8Array(input)) {
     throw new Ddu64InvalidInputError(
-      "[Ddu64 input] Encode input must be a string or Uint8Array.",
+      allowString
+        ? "[Ddu64 input] Encode input must be a string or Uint8Array."
+        : "[Ddu64 input] Expected Uint8Array bytes.",
       operation,
+    );
+  }
+  try {
+    // intrinsic at은 복사 없이 detached/out-of-bounds view를 거부합니다.
+    Uint8Array.prototype.at.call(input, 0);
+  } catch (cause) {
+    throw new Ddu64InvalidInputError(
+      "[Ddu64 input] Detached/out-of-bounds buffer; check the Uint8Array.",
+      operation,
+      cause,
     );
   }
 }
@@ -219,9 +241,7 @@ export function validateDecodeInput(
 }
 
 function isUint8Array(value: unknown): value is Uint8Array {
-  return (
-    ArrayBuffer.isView(value) && Object.prototype.toString.call(value) === "[object Uint8Array]"
-  );
+  return ArrayBuffer.isView(value) && typedArrayTag.call(value) === "Uint8Array";
 }
 
 function validateBoolean(

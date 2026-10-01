@@ -7,8 +7,8 @@
  * Usage: node|bun|deno scripts/runtime-web-smoke.mjs (run `pnpm build` first)
  */
 
-import { Ddu64 as RootDdu64 } from "@ddunigma/node";
-import { Ddu64 } from "@ddunigma/node/browser";
+import { Ddu64 as RootDdu64, createDdu as createRootDdu } from "@ddunigma/node";
+import { Ddu64, createDdu } from "@ddunigma/node/browser";
 import { Ddu64 as SecureDdu64 } from "@ddunigma/node/secure";
 
 const runtime =
@@ -36,6 +36,19 @@ const options = {
   checksum: true,
 };
 const input = "browser adapter runtime smoke ".repeat(64);
+for (const create of new Set([createRootDdu, createDdu])) {
+  const ddu = create(options);
+  if ((await ddu.decode(await ddu.encode(input))) !== input) {
+    throw new Error(`${runtime}: createDdu round-trip failed`);
+  }
+  const binary = create({ output: "bytes" });
+  const bytes = new Uint8Array([0, 255, 128]);
+  const decoded = await binary.decode(await binary.encode(bytes));
+  if (decoded.length !== bytes.length || decoded.some((byte, i) => byte !== bytes[i])) {
+    throw new Error(`${runtime}: binary createDdu failed`);
+  }
+}
+
 for (const Codec of new Set([RootDdu64, Ddu64])) {
   for (const eager of [false, true]) {
     const encoder = eager ? await Codec.create(options) : new Codec(options);

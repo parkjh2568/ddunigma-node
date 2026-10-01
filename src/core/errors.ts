@@ -43,12 +43,16 @@ export interface Ddu64ErrorOptions {
   cause?: unknown;
 }
 
+// ESM/CJS와 다른 realm의 같은 프로토콜 오류를 클래스 identity 없이 식별합니다.
+const ERROR_BRAND = Symbol.for("ddunigma.Ddu64Error.v1");
+
 export class Ddu64Error extends Error {
   readonly code: Ddu64ErrorCode;
   readonly operation: Ddu64Operation;
 
   constructor(message: string, options: Ddu64ErrorOptions) {
     super(message, { cause: options.cause });
+    Object.defineProperty(this, ERROR_BRAND, { value: true });
     this.name = new.target.name;
     this.code = options.code;
     this.operation = options.operation;
@@ -134,20 +138,42 @@ export class Ddu64StreamError extends Ddu64Error {
 }
 
 export function isDdu64Error(error: unknown): error is Ddu64Error {
-  return error instanceof Ddu64Error;
+  try {
+    return (
+      error instanceof Ddu64Error ||
+      (Object.hasOwn(error as object, ERROR_BRAND) &&
+        Object.prototype.toString.call(error) === "[object Error]")
+    );
+  } catch {
+    // revoked Proxy나 속성 getter의 실패가 오류 정규화를 다시 실패시키지 않습니다.
+    return false;
+  }
 }
 
 export function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error);
+  try {
+    const message = error instanceof Error ? error.message : undefined;
+    if (typeof message === "string" && message.length > 0) return message;
+    return String(error);
+  } catch {
+    return "[Ddu64 error] Cannot read error message.";
+  }
 }
 
 export function wrapDdu64Error(
   error: unknown,
-  fallbackOperation: "encode" | "decode" | "stream",
+  fallbackOperation: "construct" | "encode" | "decode" | "stream",
 ): Ddu64Error {
   // 도메인 에러는 발생 지점에서 분류하고, 외부 또는 예기치 못한 에러만 operation 기준으로 감쌉니다.
   if (isDdu64Error(error)) return error;
+
+  if (fallbackOperation === "construct") {
+    return new Ddu64InvalidInputError(
+      "[Ddu64 construct] Invalid options. Check buffers and getters.",
+      "construct",
+      error,
+    );
+  }
 
   const message = toErrorMessage(error);
 

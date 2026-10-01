@@ -44,6 +44,11 @@ const options = {
 const input = "브라우저 엔진과 Node의 호환성 ".repeat(64);
 const codec = new Ddu64(options);
 const vector = { options, input, encoded: await codec.encodeAsync(input) };
+vector.compressionVectors = [];
+for (const algorithm of ["deflate", "brotli"]) {
+  const compressed = new Ddu64({ compress: true, compressionAlgorithm: algorithm });
+  vector.compressionVectors.push({ algorithm, encoded: await compressed.encodeAsync(input) });
+}
 
 try {
   await new Promise((resolve, reject) => {
@@ -71,8 +76,11 @@ try {
       if ((await codec.decodeAsync(result.encoded)) !== input) {
         throw new Error(`${name}: browser to Node interoperability failed`);
       }
+      if ((await codec.decodeAsync(result.simpleEncoded)) !== input) {
+        throw new Error(`${name}: createDdu to Node interoperability failed`);
+      }
       console.log(
-        `browser-smoke PASSED on ${name} ${browser.version()} (native Base64: ${result.nativeBase64})`,
+        `browser-smoke PASSED on ${name} ${browser.version()} (native Base64: ${result.nativeBase64}, compression: ${JSON.stringify(result.compression)})`,
       );
     } finally {
       clearTimeout(timeout);

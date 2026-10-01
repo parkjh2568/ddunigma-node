@@ -153,6 +153,6 @@ function getSyncKeyHash(
     );
   }
   const hash = adapter.deriveKeySync(context.encryptionKey!, context.keyDerivation);
-  context.setEncryptionKeyHash(hash);
+  context.encryptionKeyHash = hash;
   return hash;
 }

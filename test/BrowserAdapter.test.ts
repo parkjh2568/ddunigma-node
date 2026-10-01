@@ -139,6 +139,19 @@ describe("BrowserAdapter", () => {
   });
 
   describe("encrypt / decrypt", () => {
+    it("retains the WebCrypto failure as the decryption error cause", async () => {
+      const cause = new Error("native decrypt failed");
+      const decrypt = vi.spyOn(crypto.subtle, "decrypt").mockRejectedValueOnce(cause);
+      try {
+        const key = await adapter.deriveKey("cause", { algorithm: "sha256" });
+        await expect(adapter.decrypt(new Uint8Array(28), key)).rejects.toMatchObject({
+          message: expect.stringContaining("data tampering or incorrect key"),
+          cause,
+        });
+      } finally {
+        decrypt.mockRestore();
+      }
+    });
     it("round-trips data correctly", async () => {
       const key = await adapter.deriveKey("test-encryption-key");
       const plaintext = new TextEncoder().encode("Hello, World!");

@@ -85,7 +85,7 @@ export function resolveInitialCharSet(
         throw new Error(`[Ddu64 Constructor] paddingChar is required when dduChar is provided.`);
       }
 
-      let arr = typeof finalDduChar === "string" ? [...finalDduChar] : [...finalDduChar];
+      let arr = [...finalDduChar];
 
       const codaChar = dduOptions?.codaChar;
       const hasCoda = codaChar !== undefined && codaChar.length > 0;

@@ -42,6 +42,22 @@ export default [
     limit: "16.9 KB",
   },
   {
+    name: "node entry — createDdu (all lazy chunks)",
+    path: "dist/index.js",
+    import: "{ createDdu }",
+    ignore,
+    modifyEsbuildConfig,
+    limit: "16.9 KB",
+  },
+  {
+    name: "browser entry — createDdu (all lazy chunks)",
+    path: "dist/browser.js",
+    import: "{ createDdu }",
+    ignore,
+    modifyEsbuildConfig,
+    limit: "17.1 KB",
+  },
+  {
     name: "secure entry — Ddu64 (batteries: compress/crypto/checksum)",
     path: "dist/secure.js",
     import: "{ Ddu64 }",

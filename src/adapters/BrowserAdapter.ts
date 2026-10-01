@@ -198,8 +198,10 @@ export class BrowserAdapter implements PlatformAdapter {
       );
 
       return new Uint8Array(decryptedBuffer);
-    } catch {
-      throw new Error("[Ddu64 decrypt] Decryption failed: data tampering or incorrect key.");
+    } catch (cause) {
+      throw new Error("[Ddu64 decrypt] Decryption failed: data tampering or incorrect key.", {
+        cause,
+      });
     }
   }
 

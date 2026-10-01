@@ -17,6 +17,7 @@
 - 검증 범위 선택: [변경별 검증](CONTRIBUTING.md#변경별-검증)
 - 공개 동작·예제: [API 계약](docs/REFERENCE.md), [README](README.md)
 - 구조 선택·최적화 근거: [설계 결정](docs/DECISIONS.md)
+- 간편 API·최적화 작업 실행: [태스크 문서](docs/TASKS.md)
 - 배포 준비: [릴리스 절차](CONTRIBUTING.md#호환성릴리스)
 
 ## 완료 기준

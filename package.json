@@ -1,6 +1,6 @@
 {
   "name": "@ddunigma/node",
-  "version": "6.2.0",
+  "version": "6.3.0",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,7 +32,8 @@
     "lint": "eslint --max-warnings=0 src test scripts benchmarks eslint.config.mjs tsup.config.ts vitest.config.ts",
     "lint:fix": "eslint --max-warnings=0 src test scripts benchmarks eslint.config.mjs tsup.config.ts vitest.config.ts --fix",
     "format": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore",
-    "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore"
+    "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore",
+    "bench:latency": "node --expose-gc --import tsx benchmarks/latency-benchmark.ts"
   },
   "exports": {
     ".": {

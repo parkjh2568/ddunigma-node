@@ -1,6 +1,35 @@
 # ddunigma Node Reference
 
-## 문자열과 바이너리
+## 간편 API
+
+`createDdu`·`DduCreateOptions`·`DduCodec`은 6.3.0 추가 API이며 현재 작업 트리는 미배포 상태다.
+root와 `/browser`에서 같은 이름을 제공한다. 객체 생성은 동기이며 adapter는 첫 필요 연산에서
+지연 로드한다. 생성 오류는 `Ddu64Error`로 즉시 throw하고 encode/decode 오류는 같은 오류 계층으로 reject한다.
+
+```typescript
+import { createDdu } from "@ddunigma/node";
+
+const ddu = createDdu({ compress: true, obfuscate: true, checksum: true });
+const encoded = await ddu.encode("안녕하세요");
+const text = await ddu.decode(encoded); // string
+
+const binary = createDdu({ output: "bytes", compress: true });
+const bytes = new Uint8Array([0, 128, 255]);
+const restored = await binary.decode(await binary.encode(bytes)); // Uint8Array
+```
+
+`encode(string | Uint8Array)`는 항상 `Promise<string>`을 반환한다. `decode(string)`는 기본
+`Promise<string>`, 생성 시 `output: "bytes"`이면 `Promise<Uint8Array>`다. 문자열·바이너리를
+자동 판별하거나 JSON으로 변환하지 않는다. Node Buffer도 Uint8Array 입력으로 받는다.
+
+기존 생성자 옵션과 adapter·난독화 주입을 지원하며 charset·KDF salt 등 가변 설정은 생성 시
+보존한다. 호출별 옵션은 받지 않는다. 서로 다른 처리 정책은 별도 객체로 만들며 통계·스트림·
+호출별 override가 필요하면 기존 `Ddu64`를 사용한다. Promise 반환이 CPU 작업의 별도 스레드
+실행을 의미하지 않으며 큰 payload는 호출 중 이벤트 루프를 점유할 수 있다.
+
+## 기존 Ddu64 API
+
+### 문자열과 바이너리
 
 ```typescript
 import { Ddu64 } from "@ddunigma/node";
@@ -61,21 +90,19 @@ charset 문자와 `paddingChar`는 각각 단일 UTF-16 코드 유닛이어야 �
 
 ### 공통 옵션
 
-| 옵션                   | 타입                              | 기본값            | 용도                                    |
-| ---------------------- | --------------------------------- | ----------------- | --------------------------------------- |
-| `compress`             | `boolean`                         | `false`           | 압축 사용                               |
-| `compressionAlgorithm` | `"deflate" \| "brotli"`           | `"deflate"`       | 압축 알고리즘                           |
-| `compressionLevel`     | `number`                          | `6`               | 압축 레벨                               |
-| `checksum`             | `boolean`                         | `false`           | CRC32 체크섬 추가 및 검증               |
-| `checksumScope`        | `"plaintext" \| "output"`         | `"output"`        | CRC32 계산 범위                         |
-| `chunkSize`            | `number`                          | 미사용            | 출력 문자열 분할 크기                   |
-| `chunkSeparator`       | `string`                          | `"\n"`            | 청크 구분자                             |
-| `maxDecodedBytes`      | `number`                          | `67108864`        | 최대 디코딩 바이트 수                   |
-| `maxEncodedChars`      | `number`                          | 비례 자동 산정    | 최대 디코딩 입력 문자열 길이            |
-| `maxDecompressedBytes` | `number`                          | `67108864`        | 최대 압축 해제 바이트 수                |
-| `obfuscate`            | `boolean`                         | `false`           | 출력을 한글 음절로 난독화               |
-| `requireEncryption`    | `boolean`                         | 키 사용 시 `true` | 키가 있는 decoder에서 평문 payload 거부 |
-| `onProgress`           | `(info: DduProgressInfo) => void` | 미사용            | 처리 진행률 콜백                        |
+- `compress`: `boolean`, 기본값 `false`. 압축 사용.
+- `compressionAlgorithm`: `"deflate" | "brotli"`, 기본값 `"deflate"`. 압축 알고리즘.
+- `compressionLevel`: `number`, 기본값 `6`. 압축 레벨.
+- `checksum`: `boolean`, 기본값 `false`. CRC32 체크섬 추가 및 검증.
+- `checksumScope`: `"plaintext" | "output"`, 기본값 `"output"`. CRC32 계산 범위.
+- `chunkSize`: `number`, 기본값 미사용. 출력 문자열 분할 크기.
+- `chunkSeparator`: `string`, 기본값 `"\n"`. 청크 구분자.
+- `maxDecodedBytes`: `number`, 기본값 `67108864`. 최대 디코딩 바이트 수.
+- `maxEncodedChars`: `number`, 기본값 비례 자동 산정. 최대 디코딩 입력 문자열 길이.
+- `maxDecompressedBytes`: `number`, 기본값 `67108864`. 최대 압축 해제 바이트 수.
+- `obfuscate`: `boolean`, 기본값 `false`. 출력을 한글 음절로 난독화.
+- `requireEncryption`: `boolean`, 기본값 키 사용 시 `true`. 키가 있는 decoder에서 평문 payload 거부.
+- `onProgress`: `(info: DduProgressInfo) => void`, 기본값 미사용. 처리 진행률 콜백.
 
 `maxEncodedChars`의 자동값은 `maxDecodedBytes * 4 + 1024`입니다. 호출 옵션에서
 `maxDecodedBytes`를 더 작게 지정하면 명시적인 `maxEncodedChars`가 없는 한 원시 입력 상한도
@@ -97,22 +124,24 @@ UTF-16 코드 유닛 수, 그 외 단계는 바이트 수입니다. 압축·암�
 있으므로 이 값으로 전체 호출의 전송률을 계산하지 마세요. 스트림은 청크마다 별도 codec 호출이
 발생하므로 진행률이 다시 0에서 시작할 수 있습니다.
 
+`onProgress`는 동기 callback입니다. 동기 throw는 호출의 오류로 전달하며, Promise/thenable을
+반환하면 `DDU64_INVALID_INPUT`으로 실패하고 반환된 rejection도 처리합니다. callback 내부에서
+비동기 작업을 시작하려면 반환하지 말고 그 작업의 오류를 애플리케이션에서 처리하세요.
+
 ### 생성자 전용 옵션
 
-| 옵션               | 타입                         | 기본값                | 용도                                |
-| ------------------ | ---------------------------- | --------------------- | ----------------------------------- |
-| `dduSetSymbol`     | `DduSetSymbol \| "ddu" \| …` | `DDU`                 | 기본 charset 프리셋 선택            |
-| `dduChar`          | `string \| string[]`         | 프리셋 사용           | 커스텀 charset                      |
-| `codaChar`         | `string[]`                   | 미사용                | 기본 문자와 조합할 한글 종성        |
-| `paddingChar`      | `string`                     | 프리셋 사용           | 커스텀 패딩 문자                    |
-| `requiredLength`   | `number`                     | preset 또는 입력 길이 | 필요한 charset 문자 수              |
-| `usePowerOfTwo`    | `boolean`                    | 자동 결정             | 2의 제곱수 charset 직접 인덱스 모드 |
-| `useRepeatPadding` | `boolean`                    | 프리셋 설정           | 반복 패딩 방식 사용                 |
-| `throwOnError`     | `boolean`                    | `true`                | 잘못된 charset 설정에서 예외 발생   |
-| `urlSafe`          | `boolean`                    | `false`               | URL-Safe 출력 변환                  |
-| `encryptionKey`    | `string`                     | 미사용                | AES-256-GCM 암호화 키               |
-| `keyDerivation`    | `KeyDerivationOptions`       | `pbkdf2`              | 암호화 키 파생 방식                 |
-| `adapter`          | `PlatformAdapter`            | 진입점 설정           | 플랫폼 어댑터 직접 주입             |
+- `dduSetSymbol`: `DduSetSymbol | "ddu" | …`, 기본값 `DDU`. 기본 charset 프리셋 선택.
+- `dduChar`: `string | string[]`, 기본값 프리셋 사용. 커스텀 charset.
+- `codaChar`: `string[]`, 기본값 미사용. 기본 문자와 조합할 한글 종성.
+- `paddingChar`: `string`, 기본값 프리셋 사용. 커스텀 패딩 문자.
+- `requiredLength`: `number`, 기본값 preset 또는 입력 길이. 필요한 charset 문자 수.
+- `usePowerOfTwo`: `boolean`, 기본값 자동 결정. 2의 제곱수 charset 직접 인덱스 모드.
+- `useRepeatPadding`: `boolean`, 기본값 프리셋 설정. 반복 패딩 방식 사용.
+- `throwOnError`: `boolean`, 기본값 `true`. 잘못된 charset 설정에서 예외 발생.
+- `urlSafe`: `boolean`, 기본값 `false`. URL-Safe 출력 변환.
+- `encryptionKey`: `string`, 기본값 미사용. AES-256-GCM 암호화 키.
+- `keyDerivation`: `KeyDerivationOptions`, 기본값 `pbkdf2`. 암호화 키 파생 방식.
+- `adapter`: `PlatformAdapter`, 기본값 진입점 설정. 플랫폼 어댑터 직접 주입.
 
 `requiredLength` 미지정 시 프리셋은 프리셋 설정을 사용하고, 커스텀 charset은 종성 결합을 적용한
 alphabet의 길이를 사용합니다(종성 미지정 시 입력 길이). 예를 들어 `new Ddu64("abcd", "=")`는 4문자·2비트 codec입니다. 종성 결합이나
@@ -213,6 +242,9 @@ footer는 `"QQ.4"`, `useRepeatPadding: true`는 `"QQ.."`입니다. 표준 무패
 한글 charset 출력은 `urlSafe`를 켜도 한글이며, URL에 넣는 경계에서 별도 percent-encoding이
 필요할 수 있습니다.
 
+구분자가 출력 본문에 존재하거나 청크 경계와 중첩되어 원문 복원을 바꾸면 encode가 실패합니다.
+charset·footer·checksum에서 나오지 않는 `"|"` 또는 줄바꿈 구분자를 사용하세요.
+
 ## 한글 난독화
 
 난독화는 암호화 키 없이 기본 진입점에서 바로 사용할 수 있습니다. charset payload를
@@ -278,6 +310,10 @@ const decodeStream = await ddu.createDecodeStream({ maxBufferedChars: 8 * 1024 *
 - 호출별 `obfuscate`와 `onProgress`는 청크·buffered 인코딩 모두에 적용됩니다.
 - 스트림 생성 함수·메서드는 생성 호출 시점의 옵션을 보존합니다.
 
+encode 청크는 Buffer를 포함한 접근 가능한 `Uint8Array`, decode 청크는 문자열이어야 합니다.
+배열·DataView·다른 typed array·detached buffer는 형변환하지 않고 거부합니다. transform/flush
+실패는 읽기와 현재 write/close에 같은 오류로 전달됩니다. 두 작업의 Promise를 모두 처리하세요.
+
 `maxBufferedBytes`와 `maxBufferedChars`는 축적 입력의 한도입니다. 합친 바이트 배열, 비동기
 입력 snapshot, 압축·암호화 작업 버퍼, 출력 문자열, 동시 스트림은 별도 메모리를 사용합니다.
 64MiB 설정이 RSS 64MiB를 보장하지 않습니다. flush에서 청크를 합친 뒤 원래 청크 참조를
@@ -295,13 +331,11 @@ const asyncStats = await ddu.getStatsAsync("payload", { compress: true });
 
 브라우저의 압축 통계는 root의 `getStatsAsync`를 사용합니다.
 
-| 필드               | 단위·의미                                                           |
-| ------------------ | ------------------------------------------------------------------- |
-| `originalSize`     | 원문 바이트 수. 문자열은 UTF-8로 변환한 크기                        |
-| `encodedSize`      | 인코딩 계산 결과의 `String.length`(UTF-16 코드 유닛 수)             |
-| `expansionRatio`   | `encodedSize / originalSize`(코드 유닛/바이트), 빈 입력은 0         |
-| `compressedSize`   | 실제 압축을 적용한 경우의 바이트 수. 더 커져 압축을 생략하면 미지정 |
-| `compressionRatio` | `compressedSize / originalSize`                                     |
+- `originalSize`: 원문 바이트 수. 문자열은 UTF-8로 변환한 크기.
+- `encodedSize`: 인코딩 계산 결과의 `String.length`(UTF-16 코드 유닛 수).
+- `expansionRatio`: `encodedSize / originalSize`(코드 유닛/바이트), 빈 입력은 0.
+- `compressedSize`: 실제 압축을 적용한 경우의 바이트 수. 더 커져 압축을 생략하면 미지정.
+- `compressionRatio`: `compressedSize / originalSize`.
 
 통계 계산은 압축과 인코딩 문자열 생성을 실제 수행하므로 입력 크기에 비례하는 시간·메모리가
 필요합니다. 암호화는 실행하지 않고 AES-GCM의 28바이트 overhead를 더한 자리표시 바이트로
@@ -321,6 +355,28 @@ const wireExpansionRatio = encodedUtf8Bytes / originalBytes; // 4
 ```
 
 JSON escaping이나 URL percent-encoding을 적용하면 최종 전송량은 해당 변환 후에 측정하세요.
+
+## 오류 처리
+
+생성자·동기 codec은 throw, async codec은 reject합니다. codec이 만든 실패는 `Ddu64Error`이고,
+`code`·`operation`으로 분기하며 원래 예외는 `cause`에 보존합니다. CharsetBuilder와 adapter
+직접 호출은 기존 native Error 계약을 유지합니다. 외부 스트림 취소 이유는 codec 오류로 바꾸지 않습니다.
+
+- `InvalidInput`: 잘못된 옵션·입력·detached buffer·Promise progress callback.
+- `InvalidCharset`: charset·padding 불변식 위반.
+- `EncodeFailed` / `DecodeFailed`: 인코딩·wire 디코딩 또는 외부 callback 실패.
+- `CompressionFailed` / `DecompressionFailed`: adapter 압축·해제 실패; native 해제 한도 초과도 후자.
+- `EncryptionFailed` / `DecryptionFailed`: KDF·암호화·인증·키/암호화 footer 검증 실패.
+- `ChecksumMismatch`: checksum 누락·불일치.
+- `LimitExceeded`: encoded/decoded·스트림 축적 한도 초과.
+- `AdapterUnavailable`: adapter 미제공·잘못된 초기화 결과·기능 미지원.
+- `ObfuscationFailed`: 난독화 구현·alphabet·음절 검증 실패.
+- `StreamFailed`: DDS1 헤더·외부 스트림 구현 실패.
+
+현재 오류 프로토콜을 공유하는 ESM/CJS 빌드는 `isDdu64Error(error)`로 식별하고 같은 오류
+객체·code를 보존합니다. 두 빌드의 클래스 identity는 다르므로 혼용 시 `instanceof` 대신 이
+함수를 사용하세요. 이전 프로토콜이나 모든 중복 설치 버전의 클래스 일치는 보장하지 않습니다.
+실패한 lazy adapter 초기화는 다음 호출에서 재시도하고, 일반 연산 실패는 준비된 adapter를 폐기하지 않습니다.
 
 ## 진입점
 

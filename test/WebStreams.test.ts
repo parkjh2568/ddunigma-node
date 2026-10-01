@@ -38,6 +38,7 @@ import {
   Ddu64DecryptionError,
   Ddu64ErrorCode,
   Ddu64LimitError,
+  Ddu64InvalidInputError,
   Ddu64StreamError,
   isDdu64Error,
 } from "../src/core/errors.js";
@@ -46,6 +47,79 @@ describe.each([
   { name: "Node", Codec: Ddu64 },
   { name: "Browser", Codec: Ddu64Browser },
 ])("stream option and ownership contracts: $name", ({ Codec }) => {
+  it.each([false, true])("rejects invalid encode chunks with checksum=%s", async (checksum) => {
+    const detached = new Uint8Array(3);
+    structuredClone(detached.buffer, { transfer: [detached.buffer] });
+    const disguised = new Uint16Array(3);
+    Object.defineProperty(disguised, Symbol.toStringTag, { value: "Uint8Array" });
+    for (const chunk of [
+      null,
+      "abc",
+      [1, 2, 3],
+      new DataView(new ArrayBuffer(3)),
+      new Uint16Array(3),
+      detached,
+      disguised,
+    ]) {
+      const encoder = new Codec();
+      const stream = await encoder.createEncodeStream({ checksum, maxBufferedBytes: 1 });
+      const reader = stream.readable.getReader();
+      const drained = (async () => {
+        for (;;) {
+          if ((await reader.read()).done) break;
+        }
+      })();
+      const writer = stream.writable.getWriter();
+      await Promise.all([
+        expect(drained).rejects.toBeInstanceOf(Ddu64InvalidInputError),
+        expect(writer.write(chunk as never)).rejects.toBeInstanceOf(Ddu64InvalidInputError),
+      ]);
+      expect(encoder.decode(encoder.encode("retry"))).toBe("retry");
+    }
+  });
+
+  it("rejects decode chunks before coercion can bypass the character limit", async () => {
+    const encoder = new Codec();
+    const encoded = await encodeViaStream(encoder, new Uint8Array(160));
+    for (const chunk of [[encoded], null, 1, new Uint8Array(1)]) {
+      const stream = await encoder.createDecodeStream({ maxBufferedChars: 1 });
+      const reader = stream.readable.getReader();
+      const writer = stream.writable.getWriter();
+      await Promise.all([
+        expect(reader.read()).rejects.toBeInstanceOf(Ddu64InvalidInputError),
+        expect(writer.write(chunk as never)).rejects.toBeInstanceOf(Ddu64InvalidInputError),
+      ]);
+    }
+  });
+
+  it.each([false, true])(
+    "propagates subclass failures through both stream sides, buffered=%s",
+    async (checksum) => {
+      const cause = Object.create(null);
+      class FailingEncoder extends Ddu64Core {
+        override async encodeAsync(): Promise<string> {
+          throw cause;
+        }
+      }
+      const stream = createReadableEncodeStream(new FailingEncoder(), { checksum });
+      const reader = stream.readable.getReader();
+      const drained = (async () => {
+        for (;;) {
+          if ((await reader.read()).done) break;
+        }
+      })();
+      const writer = stream.writable.getWriter();
+      const written = (async () => {
+        await writer.write(new Uint8Array([1, 2, 3]));
+        await writer.close();
+      })();
+      await Promise.all([
+        expect(drained).rejects.toMatchObject({ cause, code: "DDU64_STREAM_FAILED" }),
+        expect(written).rejects.toMatchObject({ cause, code: "DDU64_STREAM_FAILED" }),
+      ]);
+    },
+  );
+
   it.each([false, true])("snapshots stream options with lazy factory=%s", async (lazy) => {
     for (const checksum of [false, true]) {
       const encoder = new Codec();

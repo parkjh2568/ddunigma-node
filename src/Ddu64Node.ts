@@ -20,11 +20,13 @@ import { Ddu64Core } from "./core/Ddu64Core.js";
 import { HangulObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
 import {
   Ddu64AdapterError,
+  Ddu64InvalidInputError,
   isDdu64Error,
   wrapDdu64Error,
-  type Ddu64Operation,
 } from "./core/errors.js";
 import type {
+  DduCodec,
+  DduCreateOptions,
   DduEncodeStats,
   DduOptions,
   DduSecureConstructorOptions,
@@ -50,7 +52,6 @@ import { validateRuntimeOptions } from "./core/internal/OptionValidation.js";
  * ```
  */
 export class Ddu64Node extends Ddu64Core {
-  readonly #defaultCompress: boolean;
   readonly #hasEncryptionKey: boolean;
   readonly #hasExplicitAdapter: boolean;
 
@@ -60,6 +61,7 @@ export class Ddu64Node extends Ddu64Core {
    * 압축·암호화를 바로 사용할 수 있도록 생성 전에 adapter를 불러옵니다.
    */
   static async create(options: DduSecureConstructorOptions = {}): Promise<Ddu64Node> {
+    let initializingAdapter = false;
     try {
       validateRuntimeOptions(options);
       if (options.adapter !== undefined) return new Ddu64Node(options);
@@ -78,6 +80,7 @@ export class Ddu64Node extends Ddu64Core {
           constructorOptions.keyDerivation.salt = new Uint8Array(salt);
         }
       }
+      initializingAdapter = true;
       let adapter: PlatformAdapter;
       if (adapterFactory !== undefined) {
         adapter = adapterFactory();
@@ -87,11 +90,20 @@ export class Ddu64Node extends Ddu64Core {
         const { NodeAdapter } = await import("./adapters/NodeAdapter.js");
         adapter = new NodeAdapter();
       }
+      if (!adapter || typeof adapter !== "object") {
+        throw new Ddu64AdapterError(
+          "[Ddu64 adapter] Factory must return a PlatformAdapter object.",
+          "adapter",
+        );
+      }
       return new Ddu64Node({ ...constructorOptions, adapter });
     } catch (error) {
       if (isDdu64Error(error)) throw error;
+      if (!initializingAdapter) {
+        throw wrapDdu64Error(error, "construct");
+      }
       throw new Ddu64AdapterError(
-        "[Ddu64 create] Failed to initialize the Node.js runtime adapter.",
+        "[Ddu64 adapter] Initialization failed. Check the adapter factory.",
         "adapter",
         error,
       );
@@ -103,28 +115,32 @@ export class Ddu64Node extends Ddu64Core {
     paddingChar?: string,
     dduOptions?: DduSecureConstructorOptions,
   ) {
-    const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
-    const hasExplicitAdapter =
-      resolved.dduOptions?.adapter !== undefined ||
-      resolved.dduOptions?.adapterFactory !== undefined;
+    try {
+      const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
+      const hasExplicitAdapter =
+        resolved.dduOptions?.adapter !== undefined ||
+        resolved.dduOptions?.adapterFactory !== undefined;
 
-    const options: DduSecureConstructorOptions = {
-      ...resolved.dduOptions,
-      ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
-      ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
-      asyncAdapterFactory:
-        resolved.dduOptions?.asyncAdapterFactory ??
-        (hasExplicitAdapter
-          ? undefined
-          : () => import("./adapters/NodeAdapter.js").then(({ NodeAdapter }) => new NodeAdapter())),
-      obfuscationLayerFactory:
-        resolved.dduOptions?.obfuscationLayerFactory ??
-        ((alphabet) => new HangulObfuscationLayer(alphabet)),
-    };
-    super(options);
-    this.#defaultCompress = options.compress === true;
-    this.#hasEncryptionKey = options.encryptionKey !== undefined;
-    this.#hasExplicitAdapter = hasExplicitAdapter;
+      const options: DduSecureConstructorOptions = {
+        ...resolved.dduOptions,
+        ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
+        ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
+        asyncAdapterFactory:
+          resolved.dduOptions?.asyncAdapterFactory ??
+          (hasExplicitAdapter
+            ? undefined
+            : () =>
+                import("./adapters/NodeAdapter.js").then(({ NodeAdapter }) => new NodeAdapter())),
+        obfuscationLayerFactory:
+          resolved.dduOptions?.obfuscationLayerFactory ??
+          ((alphabet) => new HangulObfuscationLayer(alphabet)),
+      };
+      super(options);
+      this.#hasEncryptionKey = options.encryptionKey !== undefined;
+      this.#hasExplicitAdapter = hasExplicitAdapter;
+    } catch (error) {
+      throw wrapDdu64Error(error, "construct");
+    }
   }
 
   // ─── 공개 표면: adapter가 필요한 기본 진입점 호출은 비동기로 제한 ─────────────
@@ -205,16 +221,53 @@ export class Ddu64Node extends Ddu64Core {
     }
   }
 
-  #assertSync(operation: Ddu64Operation, options?: DduOptions, includeEncryption = true): void {
-    if (this.#hasExplicitAdapter) return;
-    if (
-      (options?.compress ?? this.#defaultCompress) === true ||
-      (includeEncryption && this.#hasEncryptionKey)
-    ) {
-      throw new Ddu64AdapterError(
-        "@ddunigma/node: use encodeAsync/decodeAsync/getStatsAsync, await Ddu64.create() before sync secure calls, or use @ddunigma/node/secure.",
-        operation,
+  #assertSync(
+    operation: "encode" | "decode",
+    options?: DduOptions,
+    includeEncryption = true,
+  ): void {
+    try {
+      if (this.#hasExplicitAdapter) return;
+      if (
+        (options?.compress ?? this.defaultCompress) === true ||
+        (includeEncryption && this.#hasEncryptionKey)
+      ) {
+        throw new Ddu64AdapterError(
+          "@ddunigma/node: use encodeAsync/decodeAsync/getStatsAsync, Ddu64.create() for sync calls, or @ddunigma/node/secure.",
+          operation,
+        );
+      }
+    } catch (error) {
+      throw wrapDdu64Error(error, operation);
+    }
+  }
+}
+
+/** 설정을 한 번 지정하고 encode/decode를 항상 await하는 codec을 생성합니다. */
+export function createDdu(options: DduCreateOptions & { output: "bytes" }): DduCodec<Uint8Array>;
+export function createDdu(options?: DduCreateOptions & { output?: "text" }): DduCodec;
+export function createDdu(options: DduCreateOptions): DduCodec<string | Uint8Array>;
+export function createDdu(options: DduCreateOptions = {}): DduCodec<string | Uint8Array> {
+  try {
+    validateRuntimeOptions(options);
+    const { output = "text", ...codecOptions } = options;
+    if (output !== "text" && output !== "bytes") {
+      throw new Ddu64InvalidInputError(
+        '[createDdu] output must be "text" or "bytes".',
+        "construct",
       );
     }
+    const codec = new Ddu64Node(codecOptions);
+    return {
+      encode(input) {
+        // 먼저 await하지 않아 core의 입력 snapshot 시점을 유지합니다.
+        return codec.encodeAsync(input);
+      },
+      decode(input) {
+        return output === "bytes" ? codec.decodeToUint8ArrayAsync(input) : codec.decodeAsync(input);
+      },
+    };
+  } catch (error) {
+    throw wrapDdu64Error(error, "construct");
   }
 }

@@ -1,7 +1,8 @@
 /**
  * 전체 Node.js 기본 진입점.
  *
- * 인코딩·체크섬·한글 난독화를 동기로 제공합니다. 비동기 압축/암복호화가 실제로
+ * `createDdu()`는 생성 시 정책을 고정하고 encode/decode를 항상 Promise로 반환합니다.
+ * 기존 Ddu64는 인코딩·체크섬·한글 난독화를 동기로 제공합니다. 비동기 압축/암복호화가 실제로
  * 사용될 때만 NodeAdapter를 동적 import하며, Web Streams 구현도 인스턴스 메서드
  * 호출 시점에 불러옵니다. `Ddu64.create()`는 NodeAdapter를 미리 준비해 동기 secure
  * API를 활성화합니다. 명시적 어댑터 export는 `@ddunigma/node/secure`에서 제공합니다.
@@ -13,13 +14,15 @@
 // ─── 메인 인코더 ────────────────────────────────────────────────────────────
 
 export { Ddu64Node as Ddu64 } from "./Ddu64Node.js";
-export { Ddu64Node } from "./Ddu64Node.js";
+export { Ddu64Node, createDdu } from "./Ddu64Node.js";
 export { Ddu64Core } from "./core/Ddu64Core.js";
 
 // ─── 타입 및 열거형 ──────────────────────────────────────────────────────────
 
 export { DduSetSymbol } from "./core/types.js";
 export type {
+  DduCodec,
+  DduCreateOptions,
   DduBaseOptions,
   DduBaseConstructorOptions,
   DduSecureOptions,

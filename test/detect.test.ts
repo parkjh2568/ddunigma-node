@@ -259,11 +259,10 @@ describe("getAdapter", () => {
   });
 
   it("returns a PlatformAdapter for the current Node.js runtime", async () => {
-    // In the test environment (Node.js), getAdapter should resolve
-    // This will attempt to import NodeAdapter.ts which may not exist yet
-    // For now, we just verify detectRuntime works correctly
-    const runtime = detectRuntime();
-    expect(runtime).toBe("node");
+    const adapter = await getAdapter();
+    expect(adapter.runtime).toBe("node");
+    const input = new TextEncoder().encode("adapter selection ".repeat(8));
+    expect(await adapter.inflate(await adapter.deflate(input))).toEqual(input);
   });
 
   it("throws with descriptive error when runtime is unknown", async () => {

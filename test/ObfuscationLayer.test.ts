@@ -72,6 +72,23 @@ it("preserves the positional mapping across string batch boundaries", () => {
 
 // ─── Test Data ───────────────────────────────────────────────────────────────
 
+it("preserves multi-code-unit alphabet entries and global error positions across batches", () => {
+  const alphabet = ["a", "😀", "가나"];
+  const layer = new HangulObfuscationLayer(alphabet);
+  const syllablesPerChar = Math.floor(HANGUL_SYLLABLE_COUNT / alphabet.length);
+  for (const length of [1, 8191, 8192, 8193, 16385]) {
+    let encoded = "";
+    let expected = "";
+    for (let i = 0; i < length; i++) {
+      const index = i % alphabet.length;
+      encoded += String.fromCharCode(HANGUL_SYLLABLE_START + index * syllablesPerChar);
+      expected += alphabet[index];
+    }
+    expect(layer.deobfuscate(encoded)).toBe(expected);
+    expect(() => layer.deobfuscate(encoded + "!")).toThrow(`position ${length}: U+0021`);
+  }
+});
+
 // DDU charset (8 base × 8 coda = 64 characters)
 const DDU_BASE_CHARS = ["뜌", "땨", "이", "우", "야", "듀", "댜", "뎨"];
 const DDU_CODA_CHARS = ["", "ㄱ", "ㄲ", "ㄷ", "ㅈ", "ㅇ", "ㅅ", "ㅆ"];

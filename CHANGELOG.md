@@ -2,7 +2,24 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다.
 
-## Unreleased
+## Unreleased — 6.3.0
+
+- root와 `/browser`에 `createDdu()`를 추가했습니다. 생성 시 옵션을 지정하고 항상
+  `await ddu.encode()`·`await ddu.decode()`를 사용합니다. `output: "bytes"`는 바이너리를
+  반환하며 기존 `Ddu64`의 동기/비동기 API와 저장 형식은 유지됩니다.
+- 브라우저 동기 secure 호출의 오류 안내를 수정하고, 실제 adapter 선택·간편 API의 입력 보존·
+  동시 초기화·packed ESM/CJS·타입·브라우저 검증을 보강했습니다.
+- 역난독화의 문자 매핑용 임시 배열을 최대 8,192개 문자열로 제한했습니다. 여러 코드 유닛으로 된 custom
+  alphabet과 기존 오류 위치·wire 출력을 유지합니다.
+- 청크 구분자의 경계 중첩에 따른 데이터 손상을 거부하고, 스트림 청크 타입·detached buffer를
+  길이 검사 전에 검증합니다. transform/flush 실패는 읽기와 write/close 양쪽에 전달합니다.
+- `onProgress`의 Promise/thenable 반환을 `InvalidInput`으로 거부하며 rejection을 처리합니다.
+  생성·동기 가드·오류 메시지 변환·브라우저 복호화에서 예외 원인을 보존하고 ESM/CJS 오류를 함께 식별합니다.
+- 잘못된 adapter 초기화 결과를 캐시하지 않으며 CharsetBuilder의 큰 입력을 인자 한도 없이 처리합니다.
+
+## 6.2.0 - 2026-09-17
+
+npm에 배포된 `f4eef3d`(`v6.2.0`)의 변경입니다. GitHub Release와 npm 배포 상태는 별개입니다.
 
 ### 정확성·입력 보존
 

@@ -104,6 +104,21 @@ describe("security and resource regressions", () => {
     },
   );
 
+  it("rejects separators that overlap payload at chunk boundaries", async () => {
+    const encoder = createEncoder({
+      dduChar: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      paddingChar: "=",
+    });
+    const input = new Uint8Array([0, 16, 130]); // ABCC
+    const options = { chunkSize: 2, chunkSeparator: "ABA" };
+    expect(() => encoder.encode(input, options)).toThrow(Ddu64EncodeError);
+    await expect(encoder.encodeAsync(input, options)).rejects.toThrow(Ddu64EncodeError);
+    expect(() => encoder.getStats(input, options)).toThrow(Ddu64EncodeError);
+    const safe = { chunkSize: 2, chunkSeparator: "AB|" };
+    expect(encoder.decodeToUint8Array(encoder.encode(input, safe), safe)).toEqual(input);
+    expect(encoder.encode(input)).toBe("ABCC");
+  });
+
   it.each(["\uFEFFABC", "A\uFEFFBC", "\uFEFF\uFEFFABC", "\uFEFF"])(
     "preserves every UTF-8 BOM in %j",
     async (input) => {
@@ -433,12 +448,20 @@ describe("security and resource regressions", () => {
       },
     );
 
-    expect((first as unknown as { dduCharCodeLookup: Int32Array }).dduCharCodeLookup).toBe(
-      (second as unknown as { dduCharCodeLookup: Int32Array }).dduCharCodeLookup,
+    expect(
+      (first as unknown as { payloadCodecContext: { dduCharCodeLookup: Int32Array } })
+        .payloadCodecContext.dduCharCodeLookup,
+    ).toBe(
+      (second as unknown as { payloadCodecContext: { dduCharCodeLookup: Int32Array } })
+        .payloadCodecContext.dduCharCodeLookup,
     );
     expect(
-      (customFirst as unknown as { dduCharCodeLookup: Int32Array }).dduCharCodeLookup,
-    ).not.toBe((customSecond as unknown as { dduCharCodeLookup: Int32Array }).dduCharCodeLookup);
+      (customFirst as unknown as { payloadCodecContext: { dduCharCodeLookup: Int32Array } })
+        .payloadCodecContext.dduCharCodeLookup,
+    ).not.toBe(
+      (customSecond as unknown as { payloadCodecContext: { dduCharCodeLookup: Int32Array } })
+        .payloadCodecContext.dduCharCodeLookup,
+    );
   });
 
   it("deduplicates concurrent async key derivation", async () => {

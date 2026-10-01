@@ -24,6 +24,124 @@ import * as coreEntry from "../src/core.js";
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe.each([
+  nodeEntry.Ddu64,
+  browserEntry.Ddu64,
+  coreEntry.Ddu64,
+  secureEntry.Ddu64,
+  secureBrowserEntry.Ddu64,
+])("exception boundaries: %s", (Codec) => {
+  it("preserves constructor option getter failures as typed causes", () => {
+    const cause = Object.create(null);
+    const options = {
+      get compress(): boolean {
+        throw cause;
+      },
+    };
+    expect(() => new Codec(options)).toThrow(nodeEntry.Ddu64InvalidInputError);
+    try {
+      new Codec(options);
+    } catch (error) {
+      expect(error).toMatchObject({ operation: "construct", cause });
+    }
+    const salt = new Uint8Array(3);
+    structuredClone(salt.buffer, { transfer: [salt.buffer] });
+    expect(() => new Codec({ encryptionKey: "key", keyDerivation: { salt } })).toThrow(
+      nodeEntry.Ddu64InvalidInputError,
+    );
+  });
+
+  it("wraps sync guard getters and unknown callback throws consistently", async () => {
+    const codec = new Codec();
+    const cause = Object.create(null);
+    const options = {
+      get compress(): boolean {
+        throw cause;
+      },
+    };
+    const encoded = codec.encode("input");
+    for (const method of ["encode", "decode", "getStats"] as const) {
+      try {
+        codec[method](method === "decode" ? encoded : "input", options);
+        expect.fail("expected failure");
+      } catch (error) {
+        expect(error).toBeInstanceOf(nodeEntry.Ddu64Error);
+        expect((error as Error).cause).toBe(cause);
+      }
+    }
+    await expect(
+      codec.encodeAsync("input", {
+        onProgress() {
+          throw cause;
+        },
+      }),
+    ).rejects.toMatchObject({ cause, code: "DDU64_ENCODE_FAILED" });
+    expect(codec.decode(codec.encode("retry"))).toBe("retry");
+  });
+
+  it("rejects Promise progress results in each codec path and permits later calls", async () => {
+    const codec = new Codec();
+    const options = {
+      onProgress: async () => {
+        throw new Error("progress");
+      },
+    };
+    const encoded = codec.encode("input");
+    for (const method of ["encode", "getStats", "decode", "decodeToUint8Array"] as const) {
+      expect(() => codec[method](method.startsWith("decode") ? encoded : "input", options)).toThrow(
+        nodeEntry.Ddu64InvalidInputError,
+      );
+    }
+    for (const method of [
+      "encodeAsync",
+      "getStatsAsync",
+      "decodeAsync",
+      "decodeToUint8ArrayAsync",
+    ] as const) {
+      await expect(
+        codec[method](method.startsWith("decode") ? encoded : "input", options),
+      ).rejects.toMatchObject({
+        code: "DDU64_INVALID_INPUT",
+        operation: method.startsWith("decode") ? "decode" : "encode",
+      });
+    }
+    expect(codec.decode(codec.encode("retry"))).toBe("retry");
+  });
+});
+
+it.each([nodeEntry.Ddu64, browserEntry.Ddu64])(
+  "eager create rejects invalid adapters and detached salts: %s",
+  async (Codec) => {
+    const salt = new Uint8Array(3);
+    structuredClone(salt.buffer, { transfer: [salt.buffer] });
+    await expect(Codec.create({ encryptionKey: "key", keyDerivation: { salt } })).rejects.toThrow(
+      nodeEntry.Ddu64InvalidInputError,
+    );
+    await expect(
+      Codec.create({ asyncAdapterFactory: async () => undefined as never }),
+    ).rejects.toThrow(nodeEntry.Ddu64AdapterError);
+  },
+);
+
+it("browser sync errors explain that native secure operations remain asynchronous", () => {
+  const ddu = new browserEntry.Ddu64({ compress: true });
+  for (const operation of ["encode", "decode", "getStats"] as const) {
+    try {
+      ddu[operation]("input");
+      expect.fail("sync secure calls must fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(browserEntry.Ddu64AdapterError);
+      expect(error).toMatchObject({
+        code: "DDU64_ADAPTER_UNAVAILABLE",
+        operation: operation === "decode" ? "decode" : "encode",
+      });
+      expect((error as Error).message).toContain(
+        "Browser compression and encryption require async methods",
+      );
+    }
+  }
+});
+
+describe.each([
   { name: "Node", Codec: nodeEntry.Ddu64 },
   { name: "Browser", Codec: browserEntry.Ddu64 },
 ])("async input and option snapshots: $name", ({ Codec }) => {
@@ -168,7 +286,7 @@ describe("진입점 import 스모크", () => {
       expect(() => ddu.encode(input, { compress: true })).toThrow(
         /encodeAsync.*@ddunigma\/node\/secure/s,
       );
-      // sync decode도 encode와 동일하게 명시 경로를 안내한다(가드 대칭).
+      // compress:true를 명시한 sync decode에도 같은 가드가 적용됩니다.
       expect(() => ddu.decode(encoded, { compress: true })).toThrow(
         /encodeAsync.*@ddunigma\/node\/secure/s,
       );

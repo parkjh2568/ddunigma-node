@@ -94,25 +94,33 @@ export class HangulObfuscationLayer implements ObfuscationLayer {
   deobfuscate(input: string): string {
     if (input.length === 0) return "";
 
-    const result = new Array<string>(input.length);
+    // 문자열 배열을 사용해 여러 코드 유닛으로 된 공개 alphabet도 그대로 복원합니다.
+    const batchSize = Math.min(input.length, 8192);
+    const result = new Array<string>(batchSize);
+    const chunks: string[] | undefined = input.length > batchSize ? [] : undefined;
+    const { alphabet, syllablesPerChar } = this.config;
+    for (let offset = 0; offset < input.length; offset += batchSize) {
+      const length = Math.min(batchSize, input.length - offset);
+      for (let i = 0; i < length; i++) {
+        const codePoint = input.charCodeAt(offset + i);
+        const charIndex =
+          codePoint < HANGUL_SYLLABLE_START || codePoint > HANGUL_SYLLABLE_END
+            ? -1
+            : Math.floor((codePoint - HANGUL_SYLLABLE_START) / syllablesPerChar);
 
-    for (let i = 0; i < input.length; i++) {
-      const codePoint = input.charCodeAt(i);
-      const charIndex =
-        codePoint < HANGUL_SYLLABLE_START || codePoint > HANGUL_SYLLABLE_END
-          ? -1
-          : Math.floor((codePoint - HANGUL_SYLLABLE_START) / this.config.syllablesPerChar);
-
-      if (charIndex < 0 || charIndex >= this.config.alphabet.length) {
-        throw new Ddu64ObfuscationError(
-          `[Ddu64 obfuscation] Invalid syllable at position ${i}: U+${codePoint.toString(16).padStart(4, "0").toUpperCase()} is not in the mapped range.`,
-        );
+        if (charIndex < 0 || charIndex >= alphabet.length) {
+          throw new Ddu64ObfuscationError(
+            `[Ddu64 obfuscation] Invalid syllable at position ${offset + i}: U+${codePoint.toString(16).padStart(4, "0").toUpperCase()} is not in the mapped range.`,
+          );
+        }
+        result[i] = alphabet[charIndex];
       }
-
-      result[i] = this.config.alphabet[charIndex];
+      result.length = length;
+      const chunk = result.join("");
+      if (!chunks) return chunk;
+      chunks.push(chunk);
     }
-
-    return result.join("");
+    return chunks!.join("");
   }
 }
 

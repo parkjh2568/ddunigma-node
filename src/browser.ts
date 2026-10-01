@@ -1,7 +1,8 @@
 /**
  * 브라우저 최적화 기본 진입점.
  *
- * 인코딩·체크섬·한글 난독화를 동기로 제공합니다. 비동기 압축/암복호화가 실제로
+ * `createDdu()`는 생성 시 정책을 고정하고 encode/decode를 항상 Promise로 반환합니다.
+ * 기존 Ddu64는 인코딩·체크섬·한글 난독화를 동기로 제공합니다. 비동기 압축/암복호화가 실제로
  * 사용될 때만 BrowserAdapter를 동적 import합니다. Web Streams 구현도 인스턴스 메서드가
  * 호출될 때만 불러옵니다. 명시적 어댑터 export는 `@ddunigma/node/secure`에서 제공합니다.
  *
@@ -13,7 +14,7 @@
 
 // ─── 브라우저 인코더 ─────────────────────────────────────────────────────────
 
-export { Ddu64Browser as Ddu64, Ddu64Browser } from "./Ddu64Browser.js";
+export { Ddu64Browser as Ddu64, Ddu64Browser, createDdu } from "./Ddu64Browser.js";
 export { Ddu64Core } from "./core/Ddu64Core.js";
 
 // ─── Charset 빌더 ────────────────────────────────────────────────────────────
@@ -55,6 +56,8 @@ export {
 export { DduSetSymbol } from "./core/types.js";
 
 export type {
+  DduCodec,
+  DduCreateOptions,
   DduBaseOptions,
   DduBaseConstructorOptions,
   DduSecureOptions,

@@ -11,7 +11,6 @@ import { resolveInitialCharSet, normalizeCharSet, isUrlSafeCompatible } from "./
 import type {
   PlatformAdapter,
   DduConstructorOptions,
-  DduInternalOptions,
   DduOptions,
   DduEncodeStats,
   CharSetInfo,
@@ -21,7 +20,8 @@ import type {
 } from "./types.js";
 import {
   Ddu64CharsetError,
-  Ddu64EncodeError,
+  Ddu64AdapterError,
+  Ddu64InvalidInputError,
   Ddu64ObfuscationError,
   isDdu64Error,
   toErrorMessage,
@@ -87,9 +87,6 @@ export class Ddu64Core {
   /** 인코딩에 사용되는 문자 */
   protected readonly dduChar: string[];
 
-  /** 인코딩 문자의 코드포인트 배열 (String.fromCharCode 배치 호출용) */
-  private readonly dduCharCodes: Uint16Array;
-
   /** 패딩 문자 */
   protected readonly paddingChar: string;
 
@@ -98,12 +95,6 @@ export class Ddu64Core {
 
   /** charset 크기가 2의 제곱수인지 여부 */
   protected readonly usePowerOfTwo: boolean;
-
-  /** UTF-16 코드 유닛 → 인덱스 direct lookup (단일 BMP 심볼 전용) */
-  private readonly dduCharCodeLookup: Int32Array;
-
-  /** 룩업 테이블 오프셋 (lookup[code - offset]) */
-  private readonly dduCharCodeLookupOffset: number;
 
   /** 기본 압축 활성화 */
   protected readonly defaultCompress: boolean;
@@ -126,10 +117,7 @@ export class Ddu64Core {
   /** 암호화 키 파생 옵션 */
   private readonly keyDerivation: KeyDerivationOptions | undefined;
 
-  /** 캐시된 암호화 키 해시 */
-  private encryptionKeyHash: Uint8Array | undefined;
-
-  /** 캐시된 어댑터 게이트웨이 컨텍스트 (키 파생 시 setter에서 해시를 함께 갱신) */
+  /** adapter와 파생 키 해시를 함께 보관하는 게이트웨이 컨텍스트 */
   private adapterGatewayContext: AdapterGatewayContext | undefined;
 
   /** 기본 체크섬 활성화 */
@@ -150,17 +138,8 @@ export class Ddu64Core {
   /** 기본 압축 알고리즘 */
   private readonly defaultCompressionAlgorithm: "deflate" | "brotli";
 
-  /** 반복 패딩 모드 사용 여부 */
-  private readonly useRepeatPadding: boolean;
-
   /** 반복 패딩 시 패딩 문자 1개가 나타내는 비트 수 */
   private readonly bitsPerPadChar: number;
-
-  /** BitPack 설정 */
-  private readonly bitPackConfig: BitPackConfig;
-
-  /** 표준 Base64 charset에서 네이티브 Base64 fast path 사용 여부 */
-  private readonly canUseNativeBase64: boolean;
 
   /** 인코딩/디코딩 payload codec 공유 컨텍스트 */
   private readonly payloadCodecContext: PayloadCodecContext;
@@ -212,161 +191,163 @@ export class Ddu64Core {
     paddingChar?: string,
     dduOptions?: DduConstructorOptions,
   ) {
-    const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
-    dduChar = resolved.dduChar;
-    paddingChar = resolved.paddingChar;
-    dduOptions = resolved.dduOptions;
-    validateRuntimeOptions(dduOptions);
-
-    // 잘못된 커스텀 charset은 기본적으로 거부합니다. 레거시 묵시적 fallback이 필요하면
-    // throwOnError: false를 명시합니다.
-    const shouldThrow = dduOptions?.throwOnError ?? true;
-
-    // 어댑터 해석: 명시적 adapter가 없으면 adapterFactory로 첫 사용 시점에 지연 생성합니다.
-    // 순수 인코딩/디코딩만 하면 어댑터는 생성되지 않습니다.
-    this.adapter = dduOptions?.adapter;
-    this.adapterFactory = dduOptions?.adapterFactory;
-    this.asyncAdapterFactory = dduOptions?.asyncAdapterFactory;
-    this.obfuscationLayerFactory = dduOptions?.obfuscationLayerFactory;
-
-    // Charset 초기화
-    let normalized: ReturnType<typeof normalizeCharSet>;
     try {
-      const initial = resolveInitialCharSet(dduChar, paddingChar, dduOptions, shouldThrow);
-      normalized = normalizeCharSet(initial, shouldThrow, dduOptions);
+      const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
+      dduChar = resolved.dduChar;
+      paddingChar = resolved.paddingChar;
+      dduOptions = resolved.dduOptions;
+      validateRuntimeOptions(dduOptions);
+
+      // 잘못된 커스텀 charset은 기본적으로 거부합니다. 레거시 묵시적 fallback이 필요하면
+      // throwOnError: false를 명시합니다.
+      const shouldThrow = dduOptions?.throwOnError ?? true;
+
+      // 어댑터 해석: 명시적 adapter가 없으면 adapterFactory로 첫 사용 시점에 지연 생성합니다.
+      // 순수 인코딩/디코딩만 하면 어댑터는 생성되지 않습니다.
+      this.adapter = dduOptions?.adapter;
+      this.adapterFactory = dduOptions?.adapterFactory;
+      this.asyncAdapterFactory = dduOptions?.asyncAdapterFactory;
+      this.obfuscationLayerFactory = dduOptions?.obfuscationLayerFactory;
+
+      // Charset 초기화
+      let normalized: ReturnType<typeof normalizeCharSet>;
+      try {
+        const initial = resolveInitialCharSet(dduChar, paddingChar, dduOptions, shouldThrow);
+        normalized = normalizeCharSet(initial, shouldThrow, dduOptions);
+      } catch (error) {
+        if (isDdu64Error(error)) throw error;
+        throw new Ddu64CharsetError(toErrorMessage(error), error);
+      }
+
+      this.dduChar = normalized.charSet;
+      this.paddingChar = normalized.padding;
+      const isPredefinedCharSet = normalized.isPredefined;
+      this.defaultCompress = dduOptions?.compress ?? false;
+
+      // 제한값
+      this.defaultMaxDecodedBytes = normalizeLimit(
+        dduOptions?.maxDecodedBytes,
+        DEFAULT_MAX_DECODED_BYTES,
+        shouldThrow,
+        "maxDecodedBytes",
+      );
+      this.defaultMaxDecompressedBytes = normalizeLimit(
+        dduOptions?.maxDecompressedBytes,
+        DEFAULT_MAX_DECOMPRESSED_BYTES,
+        shouldThrow,
+        "maxDecompressedBytes",
+      );
+      // 디코드 입력(인코딩 문자열) 자체의 상한. 청크/개행 제거 등 전처리 이전에 선검사하여
+      // 거대한 입력(예: 개행만 가득한 문자열)이 한도 우회 + 대량 문자열 복사를 유발하지 못하게 합니다.
+      // 기본값은 maxDecodedBytes에 비례하고 footer 등 고정 메타데이터 여유를 포함합니다.
+      // 매우 조밀한 사용자 청킹은 maxEncodedChars를 별도로 늘려야 합니다.
+      this.defaultMaxEncodedChars = normalizeLimit(
+        dduOptions?.maxEncodedChars,
+        this.defaultMaxDecodedBytes === Number.POSITIVE_INFINITY
+          ? Number.POSITIVE_INFINITY
+          : Math.min(Number.MAX_SAFE_INTEGER, this.defaultMaxDecodedBytes * 4 + 1024),
+        shouldThrow,
+        "maxEncodedChars",
+      );
+
+      // 비트 길이 계산
+      const dduLength = this.dduChar.length;
+      const autoIsPow2 = isPowerOfTwo(dduLength);
+      // preset 인코딩 프로필은 레거시 와이어 포맷을 고정하므로 사용자 옵션보다 우선합니다.
+      // 단, dduOptions.usePowerOfTwo=true여도 charset 크기가 2의 제곱수가 아니면 무시.
+      const requestedPow2 = dduOptions?.usePowerOfTwo;
+      const encodingProfile = normalized.encodingProfile;
+      this.usePowerOfTwo =
+        encodingProfile?.usePowerOfTwo ??
+        normalized.usePowerOfTwo ??
+        (requestedPow2 !== undefined ? requestedPow2 && autoIsPow2 : autoIsPow2);
+
+      // DDU_V1은 8개 심볼로 6비트 값을 두 글자 쌍으로 표현하는 Origin 호환 프로필입니다.
+      const presetBitLength =
+        encodingProfile?.bitLength ??
+        (normalized.isPredefined && normalized.usePowerOfTwo !== undefined
+          ? normalized.bitLength
+          : undefined);
+      this.bitLength = presetBitLength ?? calculateBitLength(dduLength, this.usePowerOfTwo);
+
+      const lookupTables = buildCharsetLookupTables(this.dduChar, isPredefinedCharSet);
+      const dduCharCodes = lookupTables.charCodes;
+
+      try {
+        this.urlSafe =
+          dduOptions?.urlSafe === true
+            ? isUrlSafeCompatible(this.dduChar, this.paddingChar, shouldThrow)
+            : false;
+      } catch (error) {
+        if (isDdu64Error(error)) throw error;
+        throw new Ddu64CharsetError(toErrorMessage(error), error);
+      }
+
+      // 암호화 키 (원시 저장, 해시는 첫 암/복호화 시점에 지연 파생 후 캐시)
+      // 생성 시점에 즉시 파생하면 암호화를 쓰지 않는 인스턴스나 고비용 PBKDF2 파생에서
+      // 불필요한 작업이 발생하므로, SyncAdapterGateway/AsyncAdapterGateway의 지연 파생에 맡깁니다.
+      this.encryptionKey = dduOptions?.encryptionKey;
+      const keyDerivation = dduOptions?.keyDerivation;
+      this.keyDerivation = keyDerivation
+        ? {
+            ...keyDerivation,
+            ...(keyDerivation.salt !== undefined
+              ? {
+                  salt:
+                    typeof keyDerivation.salt === "string"
+                      ? keyDerivation.salt
+                      : new Uint8Array(keyDerivation.salt),
+                }
+              : {}),
+          }
+        : undefined;
+
+      // 옵션
+      this.defaultChecksum = dduOptions?.checksum ?? false;
+      // output 범위는 암호화 사용 시 평문 CRC가 노출되는 것을 피합니다.
+      this.defaultChecksumScope = dduOptions?.checksumScope ?? "output";
+      this.defaultChunkSize = dduOptions?.chunkSize;
+      this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
+      this.defaultCompressionAlgorithm = dduOptions?.compressionAlgorithm ?? "deflate";
+      this.defaultCompressionLevel = normalizeCompressionLevel(
+        dduOptions?.compressionLevel,
+        this.defaultCompressionAlgorithm,
+      );
+      const useRepeatPadding = dduOptions?.useRepeatPadding ?? normalized.useRepeatPadding ?? false;
+      this.bitsPerPadChar = encodingProfile?.bitsPerPadChar ?? normalized.bitsPerPadChar ?? 2;
+
+      // 난독화
+      this.defaultObfuscate = dduOptions?.obfuscate ?? false;
+      this.defaultOnProgress = dduOptions?.onProgress;
+      this.defaultRequireEncryption =
+        dduOptions?.requireEncryption ?? this.encryptionKey !== undefined;
+      // 난독화는 암호화 키와 독립적으로 동작합니다.
+
+      // BitPack 설정
+      const bitPackConfig: BitPackConfig = {
+        bitLength: this.bitLength,
+        usePowerOfTwo: this.usePowerOfTwo,
+        charsetSize: dduLength,
+      };
+      const canUseNativeBase64 = canUseNativeBase64FastPath(
+        this.dduChar,
+        this.paddingChar,
+        this.usePowerOfTwo,
+        this.bitLength,
+      );
+      this.payloadCodecContext = {
+        bitPackConfig,
+        canUseNativeBase64,
+        dduCharCodes,
+        dduCharCodeLookup: lookupTables.charCodeLookup,
+        dduCharCodeLookupOffset: lookupTables.lookupOffset,
+        paddingChar: this.paddingChar,
+        useRepeatPadding,
+        bitsPerPadChar: this.bitsPerPadChar,
+      };
     } catch (error) {
-      if (isDdu64Error(error)) throw error;
-      throw new Ddu64CharsetError(toErrorMessage(error), error);
+      throw wrapDdu64Error(error, "construct");
     }
-
-    this.dduChar = normalized.charSet;
-    this.paddingChar = normalized.padding;
-    const isPredefinedCharSet = normalized.isPredefined;
-    this.defaultCompress = dduOptions?.compress ?? false;
-
-    // 제한값
-    this.defaultMaxDecodedBytes = normalizeLimit(
-      dduOptions?.maxDecodedBytes,
-      DEFAULT_MAX_DECODED_BYTES,
-      shouldThrow,
-      "maxDecodedBytes",
-    );
-    this.defaultMaxDecompressedBytes = normalizeLimit(
-      dduOptions?.maxDecompressedBytes,
-      DEFAULT_MAX_DECOMPRESSED_BYTES,
-      shouldThrow,
-      "maxDecompressedBytes",
-    );
-    // 디코드 입력(인코딩 문자열) 자체의 상한. 청크/개행 제거 등 전처리 이전에 선검사하여
-    // 거대한 입력(예: 개행만 가득한 문자열)이 한도 우회 + 대량 문자열 복사를 유발하지 못하게 합니다.
-    // 기본값은 maxDecodedBytes에 비례하고 footer 등 고정 메타데이터 여유를 포함합니다.
-    // 매우 조밀한 사용자 청킹은 maxEncodedChars를 별도로 늘려야 합니다.
-    this.defaultMaxEncodedChars = normalizeLimit(
-      dduOptions?.maxEncodedChars,
-      this.defaultMaxDecodedBytes === Number.POSITIVE_INFINITY
-        ? Number.POSITIVE_INFINITY
-        : Math.min(Number.MAX_SAFE_INTEGER, this.defaultMaxDecodedBytes * 4 + 1024),
-      shouldThrow,
-      "maxEncodedChars",
-    );
-
-    // 비트 길이 계산
-    const dduLength = this.dduChar.length;
-    const autoIsPow2 = isPowerOfTwo(dduLength);
-    // preset 인코딩 프로필은 레거시 와이어 포맷을 고정하므로 사용자 옵션보다 우선합니다.
-    // 단, dduOptions.usePowerOfTwo=true여도 charset 크기가 2의 제곱수가 아니면 무시.
-    const requestedPow2 = dduOptions?.usePowerOfTwo;
-    const encodingProfile = normalized.encodingProfile;
-    this.usePowerOfTwo =
-      encodingProfile?.usePowerOfTwo ??
-      normalized.usePowerOfTwo ??
-      (requestedPow2 !== undefined ? requestedPow2 && autoIsPow2 : autoIsPow2);
-
-    // DDU_V1은 8개 심볼로 6비트 값을 두 글자 쌍으로 표현하는 Origin 호환 프로필입니다.
-    const presetBitLength =
-      encodingProfile?.bitLength ??
-      (normalized.isPredefined && normalized.usePowerOfTwo !== undefined
-        ? normalized.bitLength
-        : undefined);
-    this.bitLength = presetBitLength ?? calculateBitLength(dduLength, this.usePowerOfTwo);
-
-    const lookupTables = buildCharsetLookupTables(this.dduChar, isPredefinedCharSet);
-    this.dduCharCodeLookup = lookupTables.charCodeLookup;
-    this.dduCharCodeLookupOffset = lookupTables.lookupOffset;
-    this.dduCharCodes = lookupTables.charCodes;
-
-    try {
-      this.urlSafe =
-        dduOptions?.urlSafe === true
-          ? isUrlSafeCompatible(this.dduChar, this.paddingChar, shouldThrow)
-          : false;
-    } catch (error) {
-      if (isDdu64Error(error)) throw error;
-      throw new Ddu64CharsetError(toErrorMessage(error), error);
-    }
-
-    // 암호화 키 (원시 저장, 해시는 첫 암/복호화 시점에 지연 파생 후 캐시)
-    // 생성 시점에 즉시 파생하면 암호화를 쓰지 않는 인스턴스나 고비용 PBKDF2 파생에서
-    // 불필요한 작업이 발생하므로, SyncAdapterGateway/AsyncAdapterGateway의 지연 파생에 맡깁니다.
-    this.encryptionKey = dduOptions?.encryptionKey;
-    const keyDerivation = dduOptions?.keyDerivation;
-    this.keyDerivation = keyDerivation
-      ? {
-          ...keyDerivation,
-          ...(keyDerivation.salt !== undefined
-            ? {
-                salt:
-                  typeof keyDerivation.salt === "string"
-                    ? keyDerivation.salt
-                    : new Uint8Array(keyDerivation.salt),
-              }
-            : {}),
-        }
-      : undefined;
-
-    // 옵션
-    this.defaultChecksum = dduOptions?.checksum ?? false;
-    // output 범위는 암호화 사용 시 평문 CRC가 노출되는 것을 피합니다.
-    this.defaultChecksumScope = dduOptions?.checksumScope ?? "output";
-    this.defaultChunkSize = dduOptions?.chunkSize;
-    this.defaultChunkSeparator = dduOptions?.chunkSeparator ?? "\n";
-    this.defaultCompressionAlgorithm = dduOptions?.compressionAlgorithm ?? "deflate";
-    this.defaultCompressionLevel = normalizeCompressionLevel(
-      dduOptions?.compressionLevel,
-      this.defaultCompressionAlgorithm,
-    );
-    this.useRepeatPadding = dduOptions?.useRepeatPadding ?? normalized.useRepeatPadding ?? false;
-    this.bitsPerPadChar = encodingProfile?.bitsPerPadChar ?? normalized.bitsPerPadChar ?? 2;
-
-    // 난독화
-    this.defaultObfuscate = dduOptions?.obfuscate ?? false;
-    this.defaultOnProgress = dduOptions?.onProgress;
-    this.defaultRequireEncryption =
-      dduOptions?.requireEncryption ?? this.encryptionKey !== undefined;
-    // 난독화는 암호화 키와 독립적으로 동작합니다.
-
-    // BitPack 설정
-    this.bitPackConfig = {
-      bitLength: this.bitLength,
-      usePowerOfTwo: this.usePowerOfTwo,
-      charsetSize: dduLength,
-    };
-    this.canUseNativeBase64 = canUseNativeBase64FastPath(
-      this.dduChar,
-      this.paddingChar,
-      this.usePowerOfTwo,
-      this.bitLength,
-    );
-    this.payloadCodecContext = {
-      bitPackConfig: this.bitPackConfig,
-      canUseNativeBase64: this.canUseNativeBase64,
-      dduCharCodes: this.dduCharCodes,
-      dduCharCodeLookup: this.dduCharCodeLookup,
-      dduCharCodeLookupOffset: this.dduCharCodeLookupOffset,
-      paddingChar: this.paddingChar,
-      useRepeatPadding: this.useRepeatPadding,
-      bitsPerPadChar: this.bitsPerPadChar,
-    };
   }
 
   // ─── 공개 메서드 ─────────────────────────────────────────────────────────
@@ -513,7 +494,7 @@ export class Ddu64Core {
     return {
       encryptionKey: this.encryptionKey,
       defaultMaxDecompressedBytes: this.defaultMaxDecompressedBytes,
-      reportProgress: (info) => this.reportProgress(options, info),
+      reportProgress: (info) => this.reportProgress(options, info, "decode"),
     };
   }
 
@@ -640,7 +621,7 @@ export class Ddu64Core {
       defaultCompressionLevel: this.defaultCompressionLevel,
       defaultCompressionAlgorithm: this.defaultCompressionAlgorithm,
       hasEncryptionKey: !!this.encryptionKey,
-      reportProgress: (info) => this.reportProgress(options, info),
+      reportProgress: (info) => this.reportProgress(options, info, "encode"),
       getEncryptionAAD: (compressionAlgorithm) =>
         buildEncryptionAAD({ compressionAlgorithm, pipelineVersion: 4 }),
       finalize: (
@@ -683,12 +664,16 @@ export class Ddu64Core {
     options: DduOptions | undefined,
   ): string {
     // 인코딩 (비트 패킹 단계)
-    this.reportProgress(options, {
-      processedBytes: workingData.length,
-      totalBytes: workingData.length,
-      percent: 70,
-      stage: "encode",
-    });
+    this.reportProgress(
+      options,
+      {
+        processedBytes: workingData.length,
+        totalBytes: workingData.length,
+        percent: 70,
+        stage: "encode",
+      },
+      "encode",
+    );
     let result = encodePayload(
       workingData,
       compressionAlgorithm,
@@ -699,25 +684,26 @@ export class Ddu64Core {
 
     result = applyEncodePostProcessing({
       encoded: result,
-      options,
       checksum,
       shouldChecksum,
       checksumScope,
       chunkSize,
       chunkSeparator,
       urlSafe: this.urlSafe,
-      shouldObfuscate: (callOptions) => this.shouldObfuscate(callOptions),
+      obfuscate: options?.obfuscate ?? this.defaultObfuscate,
       getObfuscationLayer: () => this.getObfuscationLayer(),
-      assertSafeChunkSeparator: (value, separator) =>
-        this.assertSafeChunkSeparator(value, separator),
     });
 
-    this.reportProgress(options, {
-      processedBytes: workingData.length,
-      totalBytes: workingData.length,
-      percent: 100,
-      stage: "done",
-    });
+    this.reportProgress(
+      options,
+      {
+        processedBytes: workingData.length,
+        totalBytes: workingData.length,
+        percent: 100,
+        stage: "done",
+      },
+      "encode",
+    );
     return result;
   }
 
@@ -727,6 +713,7 @@ export class Ddu64Core {
    * 검증(정렬/패딩/크기) → 비트팩 해제까지 수행합니다.
    */
   private decodePrelude(input: string, options: DduOptions | undefined): DecodePreludeResult {
+    const { dduCharCodeLookup, dduCharCodeLookupOffset } = this.payloadCodecContext;
     return runDecodePrelude(input, options, {
       defaultChecksum: this.defaultChecksum,
       defaultChunkSeparator: this.defaultChunkSeparator,
@@ -737,36 +724,60 @@ export class Ddu64Core {
       bitLength: this.bitLength,
       bitsPerPadChar: this.bitsPerPadChar,
       usePowerOfTwo: this.usePowerOfTwo,
-      dduCharCodeLookup: this.dduCharCodeLookup,
-      dduCharCodeLookupOffset: this.dduCharCodeLookupOffset,
+      dduCharCodeLookup,
+      dduCharCodeLookupOffset,
       charSetSize: this.dduChar.length,
       encryptionKey: this.encryptionKey,
       defaultRequireEncryption: this.defaultRequireEncryption,
-      shouldObfuscate: (callOptions) => this.shouldObfuscate(callOptions),
+      shouldObfuscate: (callOptions) => callOptions?.obfuscate ?? this.defaultObfuscate,
       deobfuscate: (value) => this.getObfuscationLayer().deobfuscate(value),
       decodeChars: (cleanedInput, paddingBits) =>
         decodePayload(cleanedInput, paddingBits, this.payloadCodecContext),
       reportDecodeStart: (totalBytes) => {
-        this.reportProgress(options, {
-          processedBytes: 0,
-          totalBytes,
-          percent: 0,
-          stage: "start",
-        });
+        this.reportProgress(
+          options,
+          {
+            processedBytes: 0,
+            totalBytes,
+            percent: 0,
+            stage: "start",
+          },
+          "decode",
+        );
       },
       reportBitpackDecode: (processedBytes, totalBytes) => {
-        this.reportProgress(options, {
-          processedBytes,
-          totalBytes,
-          percent: 30,
-          stage: "decode",
-        });
+        this.reportProgress(
+          options,
+          {
+            processedBytes,
+            totalBytes,
+            percent: 30,
+            stage: "decode",
+          },
+          "decode",
+        );
       },
     });
   }
 
-  private reportProgress(options: DduOptions | undefined, info: DduProgressInfo): void {
-    (options?.onProgress ?? this.defaultOnProgress)?.(info);
+  private reportProgress(
+    options: DduOptions | undefined,
+    info: DduProgressInfo,
+    operation: "encode" | "decode",
+  ): void {
+    const result: unknown = (options?.onProgress ?? this.defaultOnProgress)?.(info);
+    if (
+      result !== null &&
+      (typeof result === "object" || typeof result === "function") &&
+      typeof (result as { then?: unknown }).then === "function"
+    ) {
+      // 동기 API 계약을 유지하며 지원하지 않는 callback의 rejection도 관측합니다.
+      void Promise.resolve(result).catch(() => undefined);
+      throw new Ddu64InvalidInputError(
+        "[Ddu64 progress] Use a synchronous onProgress callback; handle async failures inside it.",
+        operation,
+      );
+    }
   }
 
   // ─── Adapter 해석 ─────────────────────────────────────────────────────────
@@ -788,6 +799,12 @@ export class Ddu64Core {
     if (!this.asyncAdapterPromise) {
       this.asyncAdapterPromise = this.asyncAdapterFactory()
         .then((loadedAdapter) => {
+          if (!loadedAdapter || typeof loadedAdapter !== "object") {
+            throw new Ddu64AdapterError(
+              "[Ddu64 adapter] Factory must return a PlatformAdapter object.",
+              "adapter",
+            );
+          }
           this.adapter = loadedAdapter;
           if (this.adapterGatewayContext) this.adapterGatewayContext.adapter = loadedAdapter;
           return loadedAdapter;
@@ -802,17 +819,12 @@ export class Ddu64Core {
 
   private getAdapterGatewayContext(): AdapterGatewayContext {
     if (!this.adapterGatewayContext) {
-      const ctx: AdapterGatewayContext = {
+      this.adapterGatewayContext = {
         adapter: this.getAdapter(),
         encryptionKey: this.encryptionKey,
         keyDerivation: this.keyDerivation,
-        encryptionKeyHash: this.encryptionKeyHash,
-        setEncryptionKeyHash: (hash: Uint8Array) => {
-          this.encryptionKeyHash = hash;
-          ctx.encryptionKeyHash = hash;
-        },
+        encryptionKeyHash: undefined,
       };
-      this.adapterGatewayContext = ctx;
     }
     return this.adapterGatewayContext;
   }
@@ -836,34 +848,5 @@ export class Ddu64Core {
       );
     }
     return this.obfuscationLayer;
-  }
-
-  /**
-   * 주어진 호출에 난독화를 적용해야 하는지 결정합니다.
-   * 호출별 옵션이 생성자 기본값을 오버라이드합니다.
-   * 난독화는 암호화 키와 무관하게 동작합니다.
-   */
-  private shouldObfuscate(options?: DduInternalOptions): boolean {
-    return options?.obfuscate ?? this.defaultObfuscate;
-  }
-
-  // ─── 유틸리티 메서드 ───────────────────────────────────────────────────────
-
-  private assertSafeChunkSeparator(encoded: string, separator: string): void {
-    if (
-      separator.length === 0 ||
-      separator === "\n" ||
-      separator === "\r\n" ||
-      separator === "\r"
-    ) {
-      return;
-    }
-
-    if (encoded.includes(separator)) {
-      throw new Ddu64EncodeError(
-        `[Ddu64 chunking] Unsafe chunkSeparator "${separator}" appears in encoded output. ` +
-          "Use a separator that cannot be produced by the charset, footer, checksum, or URL-safe output.",
-      );
-    }
   }
 }

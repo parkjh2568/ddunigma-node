@@ -4,8 +4,28 @@ import { build } from "esbuild";
 
 const cwd = process.cwd();
 const checks = [
-  { name: "node", entry: "./dist/index.js", platform: "node", limit: 15_800 },
-  { name: "browser", entry: "./dist/browser.js", platform: "browser", limit: 15_750 },
+  { name: "node", symbol: "Ddu64", entry: "./dist/index.js", platform: "node", limit: 15_800 },
+  {
+    name: "browser",
+    symbol: "Ddu64",
+    entry: "./dist/browser.js",
+    platform: "browser",
+    limit: 15_750,
+  },
+  {
+    name: "node-factory",
+    symbol: "createDdu",
+    entry: "./dist/index.js",
+    platform: "node",
+    limit: 16_000,
+  },
+  {
+    name: "browser-factory",
+    symbol: "createDdu",
+    entry: "./dist/browser.js",
+    platform: "browser",
+    limit: 15_950,
+  },
 ];
 
 for (const check of checks) {
@@ -23,7 +43,7 @@ for (const check of checks) {
     platform: check.platform,
     splitting: true,
     stdin: {
-      contents: `import { Ddu64 } from ${JSON.stringify(check.entry)}; console.log(Ddu64);`,
+      contents: `import { ${check.symbol} } from ${JSON.stringify(check.entry)}; console.log(${check.symbol});`,
       resolveDir: cwd,
       sourcefile: `${check.name}-initial-entry.mjs`,
     },

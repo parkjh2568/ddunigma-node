@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { CharsetBuilder } from "../src/core/CharsetBuilder.js";
 
 describe("CharsetBuilder", () => {
+  it("accepts large strings and arrays without spreading function arguments", () => {
+    expect(CharsetBuilder.fromString("ab".repeat(100_000)).unique().build()).toEqual(["a", "b"]);
+    expect(CharsetBuilder.fromString(Array<string>(200_000).fill("a")).unique().build()).toEqual([
+      "a",
+    ]);
+    expect(CharsetBuilder.fromString("a😀".repeat(100_000)).unique().build()).toEqual(["a", "😀"]);
+  });
   it("builds common preset ranges", () => {
     expect(CharsetBuilder.uppercase().length).toBe(26);
     expect(CharsetBuilder.lowercase().length).toBe(26);

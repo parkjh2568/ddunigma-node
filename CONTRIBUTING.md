@@ -7,6 +7,8 @@
 공개 계약은 [REFERENCE](docs/REFERENCE.md), 구조·최적화 근거는 [DECISIONS](docs/DECISIONS.md)가
 담당합니다. 상세 규칙을 에이전트 지침에 복제하거나 문서 전체를 매번 읽도록 요구하지 않습니다.
 
+호환성을 유지하는 간편 API·최적화 작업은 [실행 태스크](docs/TASKS.md)에서 범위와 완료 조건을 확인합니다.
+
 ## 작업 시작과 우선순위
 
 새 기능·구조 변경은 사용 사례, 출력·API, 대상 런타임, 입력 크기와 동시 호출 수를 기준으로
@@ -224,6 +226,15 @@ Playwright를 갱신하면 해당 버전의 브라우저 바이너리도 다시 
 
 ## 성능·크기·안전성
 
+- `pnpm bench:latency`는 대표 크기·문자열/바이너리·동시 호출을 기존 API와 간편 API에서
+  교대 측정합니다. 기본 20표본의 원시 시간·경험적 p50/p95·관측 메모리를 JSONL로 기록합니다.
+  `DDU_BENCH_SAMPLES`로 표본을 늘릴 수 있습니다. 타이머는 양쪽 실행을 함께 관측하며
+  transient 할당·진짜 peak RSS를 모두 포착하지는 못합니다. 다른 CPU 부하와 함께 실행하지 않습니다.
+- `pnpm bench:micro deobfuscate`처럼 이름으로 micro benchmark를 좁힐 수 있습니다.
+  `node --expose-gc --import tsx benchmarks/compare-obfuscation.ts <이전-package-디렉터리>`는
+  역난독화 전후를 비교합니다. 구버전 배포물을 무결성 검증 후 풀어서 사용합니다.
+- `node scripts/verify-compat.mjs <이전-package-디렉터리>`는 실제 구버전 배포물과 양방향
+  데이터를 교환하고 기존 export·동기 메서드·위치 인자 계약을 확인합니다.
 - hot path의 전체 크기 임시 배열·복사·반복 lookup 생성을 줄일 때는 출력 동치성과 측정 근거를
   함께 제공합니다. 기준 커밋·런타임·입력·표본 수·측정 분모를 기록합니다.
 - `pnpm bench`는 3표본 중앙값의 호출당 시간과 원문 바이트 기준 왕복 MiB/s를 표시합니다.

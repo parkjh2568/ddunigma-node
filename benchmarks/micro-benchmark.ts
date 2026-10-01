@@ -236,7 +236,10 @@ function main(): void {
     "case                                             iter     total(ms)    avg(us)     MiB/s",
   );
   console.log("------------------------------------------------------------------------");
-  for (const result of cases.map(runCase)) {
+  const filter = process.argv[2];
+  const selected = cases.filter((testCase) => !filter || testCase.name.includes(filter));
+  if (selected.length === 0) throw new Error(`No benchmark matches: ${filter}`);
+  for (const result of selected.map(runCase)) {
     console.log(
       `${result.name.padEnd(48)} ${result.iterations.toString().padStart(6)} ` +
         `${result.totalMs.toFixed(1).padStart(12)} ` +

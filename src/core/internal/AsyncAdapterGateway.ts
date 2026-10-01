@@ -119,7 +119,7 @@ async function getAsyncKeyHash(
   const promise = adapter
     .deriveKey(context.encryptionKey!, context.keyDerivation)
     .then((hash) => {
-      context.setEncryptionKeyHash(hash);
+      context.encryptionKeyHash = hash;
       return hash;
     })
     .finally(() => {

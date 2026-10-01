@@ -184,7 +184,7 @@ export interface DduBaseOptions {
   chunkSize?: number;
   /** 청크 구분자 (기본값: '\n') */
   chunkSeparator?: string;
-  /** 진행률 콜백 */
+  /** 동기 진행률 콜백. Promise/thenable 반환은 InvalidInput 오류로 거부합니다. */
   onProgress?: (info: DduProgressInfo) => void;
   /** 한글 난독화 활성화 (암호화 키와 독립적으로 동작) */
   obfuscate?: boolean;
@@ -338,6 +338,18 @@ export interface DduSecureConstructorOptions extends DduBaseConstructorOptions, 
  * 타입으로, secure 생성자 표면 전체(`DduSecureConstructorOptions`)와 동일합니다.
  */
 export type DduConstructorOptions = DduSecureConstructorOptions;
+
+/** 생성 시 처리 정책과 decode 결과 종류를 고정하는 간편 API 옵션. */
+export interface DduCreateOptions extends DduConstructorOptions {
+  /** decode 결과. 기본값은 UTF-8 문자열이며 bytes는 임의 바이너리를 보존합니다. */
+  output?: "text" | "bytes";
+}
+
+/** 기능·런타임에 관계없이 같은 두 메서드와 Promise 반환을 사용하는 codec. */
+export interface DduCodec<Output extends string | Uint8Array = string> {
+  encode(input: Uint8Array | string): Promise<string>;
+  decode(input: string): Promise<Output>;
+}
 
 // ─── Platform Adapter ────────────────────────────────────────────────────────
 

@@ -16,11 +16,13 @@ import { Ddu64Core } from "./core/Ddu64Core.js";
 import { HangulObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
 import {
   Ddu64AdapterError,
+  Ddu64InvalidInputError,
   isDdu64Error,
   wrapDdu64Error,
-  type Ddu64Operation,
 } from "./core/errors.js";
 import type {
+  DduCodec,
+  DduCreateOptions,
   DduEncodeStats,
   DduOptions,
   DduSecureConstructorOptions,
@@ -31,7 +33,6 @@ import { resolveConstructorArgs } from "./core/internal/constructorOptions.js";
 import { validateRuntimeOptions } from "./core/internal/OptionValidation.js";
 
 export class Ddu64Browser extends Ddu64Core {
-  readonly #defaultCompress: boolean;
   readonly #hasEncryptionKey: boolean;
   readonly #hasExplicitAdapter: boolean;
 
@@ -40,6 +41,7 @@ export class Ddu64Browser extends Ddu64Core {
    * 브라우저 압축·암호화는 adapter 준비 후에도 비동기 메서드로 실행합니다.
    */
   static async create(options: DduSecureConstructorOptions = {}): Promise<Ddu64Browser> {
+    let initializingAdapter = false;
     try {
       validateRuntimeOptions(options);
       if (options.adapter !== undefined) return new Ddu64Browser(options);
@@ -58,6 +60,7 @@ export class Ddu64Browser extends Ddu64Core {
           constructorOptions.keyDerivation.salt = new Uint8Array(salt);
         }
       }
+      initializingAdapter = true;
       let adapter: PlatformAdapter;
       if (adapterFactory !== undefined) {
         adapter = adapterFactory();
@@ -67,11 +70,20 @@ export class Ddu64Browser extends Ddu64Core {
         const { BrowserAdapter } = await import("./adapters/BrowserAdapter.js");
         adapter = new BrowserAdapter();
       }
+      if (!adapter || typeof adapter !== "object") {
+        throw new Ddu64AdapterError(
+          "[Ddu64 adapter] Factory must return a PlatformAdapter object.",
+          "adapter",
+        );
+      }
       return new Ddu64Browser({ ...constructorOptions, adapter });
     } catch (error) {
       if (isDdu64Error(error)) throw error;
+      if (!initializingAdapter) {
+        throw wrapDdu64Error(error, "construct");
+      }
       throw new Ddu64AdapterError(
-        "[Ddu64 create] Failed to initialize the browser runtime adapter.",
+        "[Ddu64 adapter] Initialization failed. Check the adapter factory.",
         "adapter",
         error,
       );
@@ -83,31 +95,34 @@ export class Ddu64Browser extends Ddu64Core {
     paddingChar?: string,
     dduOptions?: DduSecureConstructorOptions,
   ) {
-    const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
-    const hasExplicitAdapter =
-      resolved.dduOptions?.adapter !== undefined ||
-      resolved.dduOptions?.adapterFactory !== undefined;
+    try {
+      const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
+      const hasExplicitAdapter =
+        resolved.dduOptions?.adapter !== undefined ||
+        resolved.dduOptions?.adapterFactory !== undefined;
 
-    const options: DduSecureConstructorOptions = {
-      ...resolved.dduOptions,
-      ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
-      ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
-      asyncAdapterFactory:
-        resolved.dduOptions?.asyncAdapterFactory ??
-        (hasExplicitAdapter
-          ? undefined
-          : () =>
-              import("./adapters/BrowserAdapter.js").then(
-                ({ BrowserAdapter }) => new BrowserAdapter(),
-              )),
-      obfuscationLayerFactory:
-        resolved.dduOptions?.obfuscationLayerFactory ??
-        ((alphabet) => new HangulObfuscationLayer(alphabet)),
-    };
-    super(options);
-    this.#defaultCompress = options.compress === true;
-    this.#hasEncryptionKey = options.encryptionKey !== undefined;
-    this.#hasExplicitAdapter = hasExplicitAdapter;
+      const options: DduSecureConstructorOptions = {
+        ...resolved.dduOptions,
+        ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
+        ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
+        asyncAdapterFactory:
+          resolved.dduOptions?.asyncAdapterFactory ??
+          (hasExplicitAdapter
+            ? undefined
+            : () =>
+                import("./adapters/BrowserAdapter.js").then(
+                  ({ BrowserAdapter }) => new BrowserAdapter(),
+                )),
+        obfuscationLayerFactory:
+          resolved.dduOptions?.obfuscationLayerFactory ??
+          ((alphabet) => new HangulObfuscationLayer(alphabet)),
+      };
+      super(options);
+      this.#hasEncryptionKey = options.encryptionKey !== undefined;
+      this.#hasExplicitAdapter = hasExplicitAdapter;
+    } catch (error) {
+      throw wrapDdu64Error(error, "construct");
+    }
   }
 
   // ─── 공개 표면: adapter가 필요한 기본 진입점 호출은 비동기로 제한 ─────────────
@@ -158,16 +173,53 @@ export class Ddu64Browser extends Ddu64Core {
     }
   }
 
-  #assertSync(operation: Ddu64Operation, options?: DduOptions, includeEncryption = true): void {
-    if (this.#hasExplicitAdapter) return;
-    if (
-      (options?.compress ?? this.#defaultCompress) === true ||
-      (includeEncryption && this.#hasEncryptionKey)
-    ) {
-      throw new Ddu64AdapterError(
-        "@ddunigma/node/browser: use encodeAsync/decodeAsync/getStatsAsync, or @ddunigma/node/secure for secure options.",
-        operation,
+  #assertSync(
+    operation: "encode" | "decode",
+    options?: DduOptions,
+    includeEncryption = true,
+  ): void {
+    try {
+      if (this.#hasExplicitAdapter) return;
+      if (
+        (options?.compress ?? this.defaultCompress) === true ||
+        (includeEncryption && this.#hasEncryptionKey)
+      ) {
+        throw new Ddu64AdapterError(
+          "@ddunigma/node/browser: use encodeAsync/decodeAsync/getStatsAsync. Browser compression and encryption require async methods.",
+          operation,
+        );
+      }
+    } catch (error) {
+      throw wrapDdu64Error(error, operation);
+    }
+  }
+}
+
+/** 설정을 한 번 지정하고 encode/decode를 항상 await하는 codec을 생성합니다. */
+export function createDdu(options: DduCreateOptions & { output: "bytes" }): DduCodec<Uint8Array>;
+export function createDdu(options?: DduCreateOptions & { output?: "text" }): DduCodec;
+export function createDdu(options: DduCreateOptions): DduCodec<string | Uint8Array>;
+export function createDdu(options: DduCreateOptions = {}): DduCodec<string | Uint8Array> {
+  try {
+    validateRuntimeOptions(options);
+    const { output = "text", ...codecOptions } = options;
+    if (output !== "text" && output !== "bytes") {
+      throw new Ddu64InvalidInputError(
+        '[createDdu] output must be "text" or "bytes".',
+        "construct",
       );
     }
+    const codec = new Ddu64Browser(codecOptions);
+    return {
+      encode(input) {
+        // 먼저 await하지 않아 core의 입력 snapshot 시점을 유지합니다.
+        return codec.encodeAsync(input);
+      },
+      decode(input) {
+        return output === "bytes" ? codec.decodeToUint8ArrayAsync(input) : codec.decodeAsync(input);
+      },
+    };
+  } catch (error) {
+    throw wrapDdu64Error(error, "construct");
   }
 }

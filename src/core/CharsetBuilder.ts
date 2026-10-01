@@ -126,11 +126,7 @@ export class CharsetBuilder {
    * 문자열에서 문자들을 추가합니다.
    */
   addString(chars: string | string[]): CharsetBuilder {
-    if (typeof chars === "string") {
-      this.chars.push(...[...chars]);
-    } else {
-      this.chars.push(...chars);
-    }
+    for (const char of chars) this.chars.push(char);
     return this;
   }
 

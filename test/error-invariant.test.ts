@@ -6,7 +6,7 @@
  * 함께 이 계약을 유지한다.
  */
 
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { Ddu64Node } from "../src/Ddu64Node.js";
 import { Ddu64Secure } from "../src/Ddu64Secure.js";
@@ -14,7 +14,7 @@ import {
   createReadableEncodeStream,
   createReadableDecodeStream,
 } from "../src/streams/WebStreams.js";
-import { isDdu64Error } from "../src/core/errors.js";
+import { Ddu64Error, isDdu64Error } from "../src/core/errors.js";
 import type { DduSecureOptions } from "../src/core/types.js";
 
 const NUM_RUNS = 100;
@@ -141,20 +141,22 @@ describe("공개 API 에러 불변식 (plain Error 누출 0)", () => {
 
   it("스트림 디코드: 헤더 없는 garbage 입력은 Ddu64Error로 reject", async () => {
     const enc = new Ddu64Secure();
-    await assertTypedOnReject(async () => {
-      const readable = new ReadableStream<string>({
-        start(controller) {
-          controller.enqueue("garbage-without-stream-header");
-          controller.close();
-        },
-      });
-      const out = readable.pipeThrough(createReadableDecodeStream(enc));
-      const reader = out.getReader();
-      for (;;) {
-        const { done } = await reader.read();
-        if (done) break;
-      }
-    });
+    await expect(
+      (async () => {
+        const readable = new ReadableStream<string>({
+          start(controller) {
+            controller.enqueue("garbage-without-stream-header");
+            controller.close();
+          },
+        });
+        const out = readable.pipeThrough(createReadableDecodeStream(enc));
+        const reader = out.getReader();
+        for (;;) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      })(),
+    ).rejects.toBeInstanceOf(Ddu64Error);
   });
 
   it("스트림 인코드 후 디코드 라운드트립은 누출 없이 동작", async () => {

@@ -17,11 +17,47 @@ import {
   Ddu64DecodeError,
   Ddu64EncodeError,
   Ddu64ErrorCode,
+  Ddu64Error,
   Ddu64StreamError,
+  isDdu64Error,
   wrapDdu64Error,
 } from "../src/core/errors.js";
 
 describe("wrapDdu64Error 계약 (passthrough + operation fallback)", () => {
+  it("preserves unknown causes even when reading their messages fails", () => {
+    const getterError = new Error("original");
+    Object.defineProperty(getterError, "message", {
+      get() {
+        throw new Error("getter");
+      },
+    });
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    for (const cause of [
+      Object.create(null),
+      {
+        [Symbol.toPrimitive]() {
+          throw new Error("coercion");
+        },
+      },
+      getterError,
+      proxy,
+      undefined,
+      null,
+      Symbol("cause"),
+    ]) {
+      for (const operation of ["encode", "decode", "stream"] as const) {
+        const wrapped = wrapDdu64Error(cause, operation);
+        expect(wrapped).toBeInstanceOf(Ddu64Error);
+        expect(wrapped.cause).toBe(cause);
+        expect(typeof wrapped.message).toBe("string");
+      }
+    }
+    expect(isDdu64Error(proxy)).toBe(false);
+    expect(isDdu64Error({ name: "Ddu64EncodeError", code: Ddu64ErrorCode.EncodeFailed })).toBe(
+      false,
+    );
+  });
   it("이미 Ddu64Error면 동일 인스턴스를 그대로 반환한다", () => {
     const original = new Ddu64ChecksumError("[Ddu64 checksum] mismatch");
     expect(wrapDdu64Error(original, "decode")).toBe(original);

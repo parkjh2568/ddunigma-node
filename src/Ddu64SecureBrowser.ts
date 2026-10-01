@@ -13,6 +13,7 @@
  * @module Ddu64SecureBrowser
  */
 
+import { wrapDdu64Error } from "./core/errors.js";
 import { Ddu64Core } from "./core/Ddu64Core.js";
 import { BrowserAdapter } from "./adapters/BrowserAdapter.js";
 import { HangulObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
@@ -42,17 +43,21 @@ export class Ddu64SecureBrowser extends Ddu64Core {
     paddingChar?: string,
     dduOptions?: DduSecureConstructorOptions,
   ) {
-    const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
+    try {
+      const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
 
-    const options: DduSecureConstructorOptions = {
-      ...resolved.dduOptions,
-      ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
-      ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
-      adapterFactory: resolved.dduOptions?.adapterFactory ?? (() => new BrowserAdapter()),
-      obfuscationLayerFactory:
-        resolved.dduOptions?.obfuscationLayerFactory ??
-        ((alphabet) => new HangulObfuscationLayer(alphabet)),
-    };
-    super(options);
+      const options: DduSecureConstructorOptions = {
+        ...resolved.dduOptions,
+        ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
+        ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
+        adapterFactory: resolved.dduOptions?.adapterFactory ?? (() => new BrowserAdapter()),
+        obfuscationLayerFactory:
+          resolved.dduOptions?.obfuscationLayerFactory ??
+          ((alphabet) => new HangulObfuscationLayer(alphabet)),
+      };
+      super(options);
+    } catch (error) {
+      throw wrapDdu64Error(error, "construct");
+    }
   }
 }

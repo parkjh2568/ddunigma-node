@@ -64,6 +64,18 @@ function runNodeSmoke(packageDir) {
         if (decoded !== input) {
           throw new Error(specifier + " ESM round-trip failed");
         }
+        if (label !== "core") {
+          const simple = mod.createDdu({ compress: true, obfuscate: true, checksum: true });
+          const pending = simple.encode(input);
+          if (!(pending instanceof Promise) || await simple.decode(await pending) !== input) {
+            throw new Error(specifier + " ESM createDdu failed");
+          }
+          const bytes = mod.createDdu({ output: "bytes" });
+          const decodedBytes = await bytes.decode(await bytes.encode(new Uint8Array([0, 255])));
+          if (!(decodedBytes instanceof Uint8Array) || decodedBytes[1] !== 255) {
+            throw new Error(specifier + " ESM binary createDdu failed");
+          }
+        }
         if (label === "node" && typeof encoder.decodeToBuffer !== "function") {
           throw new Error("Node entry should expose decodeToBuffer");
         }
@@ -73,6 +85,23 @@ function runNodeSmoke(packageDir) {
       }
 
       const node = await import("@ddunigma/node");
+
+      const { createRequire } = await import("node:module");
+      const cjs = createRequire(import.meta.url)("@ddunigma/node");
+      for (const [consumer, producer] of [[node, cjs], [cjs, node]]) {
+        const cause = new producer.Ddu64AdapterError("mixed module error", "adapter");
+        if (!consumer.isDdu64Error(cause)) throw new Error("ESM/CJS error identity failed");
+        const mixed = new consumer.Ddu64({ compress: true, adapterFactory() { throw cause; } });
+        let caught = false;
+        try { await mixed.encodeAsync("mixed modules"); }
+        catch (error) {
+          caught = true;
+          if (error !== cause || error.code !== "DDU64_ADAPTER_UNAVAILABLE") {
+            throw new Error("ESM/CJS domain error was reclassified");
+          }
+        }
+        if (!caught) throw new Error("Expected mixed adapter failure");
+      }
 
       const rootKeyDerivation = {
         algorithm: "pbkdf2",
@@ -165,6 +194,12 @@ function runNodeSmoke(packageDir) {
           const decoded = encoder.decode(encoded);
           if (decoded !== input) {
             throw new Error(specifier + " CJS round-trip failed");
+          }
+          if (label !== "core") {
+            const simple = mod.createDdu({ compress: true, checksum: true });
+            if (await simple.decode(await simple.encode(input)) !== input) {
+              throw new Error(specifier + " CJS createDdu failed");
+            }
           }
         }
 
@@ -296,6 +331,9 @@ function runTypeSmoke(packageDir) {
         Ddu64,
         Ddu64Core,
         Ddu64Node,
+        createDdu,
+        type DduCodec,
+        type DduCreateOptions,
         DduSetSymbol,
         type DduBaseOptions,
         type DduBaseConstructorOptions,
@@ -314,6 +352,19 @@ function runTypeSmoke(packageDir) {
       } from "@ddunigma/node/secure";
       import { Ddu64 as BrowserDdu64 } from "@ddunigma/node/browser";
       import { Ddu64 as CoreDdu64, CharsetBuilder } from "@ddunigma/node/core";
+
+      const simple: DduCodec = createDdu({ compress: true });
+      const simpleEncoded: Promise<string> = simple.encode("type smoke");
+      const simpleDecoded: Promise<string> = simple.decode(await simpleEncoded);
+      const byteCodec: DduCodec<Uint8Array> = createDdu({ output: "bytes" });
+      const byteDecoded: Promise<Uint8Array> = byteCodec.decode("input");
+      const dynamicOptions: DduCreateOptions = { output: "bytes" };
+      const dynamic: DduCodec<string | Uint8Array> = createDdu(dynamicOptions);
+      void simpleDecoded; void byteDecoded; void dynamic;
+      // @ts-expect-error the new encode never returns a synchronous string
+      const invalidSync: string = simple.encode("input");
+      // @ts-expect-error policy is fixed at construction
+      simple.encode("input", { compress: false });
 
       const baseConstructorOptions: DduBaseConstructorOptions = {
         dduSetSymbol: DduSetSymbol.DDU,
@@ -391,6 +442,12 @@ function runTypeSmoke(packageDir) {
       import secure = require("@ddunigma/node/secure");
       import browser = require("@ddunigma/node/browser");
       import core = require("@ddunigma/node/core");
+
+      const simple: node.DduCodec = node.createDdu();
+      const encodedPromise: Promise<string> = simple.encode("cjs factory");
+      const bytes: browser.DduCodec<Uint8Array> = browser.createDdu({ output: "bytes" });
+      const decodedPromise: Promise<Uint8Array> = bytes.decode("input");
+      void encodedPromise; void decodedPromise;
 
       const baseCallOptions: node.DduBaseOptions = { obfuscate: true };
       const baseConstructorOptions: node.DduBaseConstructorOptions = {
@@ -507,6 +564,8 @@ try {
     { label: "coverage output", test: (file) => file.startsWith("coverage/") },
     { label: "node_modules content", test: (file) => file.startsWith("node_modules/") },
     { label: "contributor guide", test: (file) => file === "CONTRIBUTING.md" },
+    { label: "agent instructions", test: (file) => file === "AGENTS.md" },
+    { label: "implementation tasks", test: (file) => file === "docs/TASKS.md" },
     { label: "obsolete roadmap", test: (file) => file === "ROADMAP.md" },
   ];
 

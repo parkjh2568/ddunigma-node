@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { Ddu64 } from "../dist/index.js";
+import { Ddu64, createDdu } from "../dist/index.js";
 import {
   Ddu64 as Ddu64Secure,
   createReadableEncodeStream,
@@ -26,6 +26,9 @@ function eq(actual, expected, label) {
 
 async function main() {
   console.log(`runtime-smoke on Node ${process.version}`);
+
+  const simple = createDdu({ compress: true, obfuscate: true, checksum: true });
+  eq(await simple.decode(await simple.encode("간편 API")), "간편 API", "createDdu round-trip");
 
   // 1) 기본 문자열 라운드트립
   {

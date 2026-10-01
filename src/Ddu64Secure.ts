@@ -17,6 +17,7 @@
  * @module Ddu64Secure
  */
 
+import { wrapDdu64Error } from "./core/errors.js";
 import { Ddu64Core } from "./core/Ddu64Core.js";
 import { NodeAdapter } from "./adapters/NodeAdapter.js";
 import { HangulObfuscationLayer } from "./obfuscation/ObfuscationLayer.js";
@@ -44,19 +45,23 @@ export class Ddu64Secure extends Ddu64Core {
     paddingChar?: string,
     dduOptions?: DduSecureConstructorOptions,
   ) {
-    const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
+    try {
+      const resolved = resolveConstructorArgs(dduChar, paddingChar, dduOptions);
 
-    // secure 진입점은 NodeAdapter 모듈을 포함하되 인스턴스는 실제 사용 시 생성합니다.
-    const options: DduSecureConstructorOptions = {
-      ...resolved.dduOptions,
-      ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
-      ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
-      adapterFactory: resolved.dduOptions?.adapterFactory ?? (() => new NodeAdapter()),
-      obfuscationLayerFactory:
-        resolved.dduOptions?.obfuscationLayerFactory ??
-        ((alphabet) => new HangulObfuscationLayer(alphabet)),
-    };
-    super(options);
+      // secure 진입점은 NodeAdapter 모듈을 포함하되 인스턴스는 실제 사용 시 생성합니다.
+      const options: DduSecureConstructorOptions = {
+        ...resolved.dduOptions,
+        ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
+        ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
+        adapterFactory: resolved.dduOptions?.adapterFactory ?? (() => new NodeAdapter()),
+        obfuscationLayerFactory:
+          resolved.dduOptions?.obfuscationLayerFactory ??
+          ((alphabet) => new HangulObfuscationLayer(alphabet)),
+      };
+      super(options);
+    } catch (error) {
+      throw wrapDdu64Error(error, "construct");
+    }
   }
 
   /**

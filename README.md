@@ -7,21 +7,12 @@
 
 ## 지원 환경
 
-| 런타임              | 자동 선택 빌드                 | 압축·암호화 경로                             |
-| ------------------- | ------------------------------ | -------------------------------------------- |
-| Node.js >= 22       | Node                           | root lazy 또는 `create()` 동기·비동기        |
-| 브라우저·번들러     | browser 조건 또는 `/browser`   | WebCrypto·Compression Streams 기반 비동기    |
-| Web Workers·workerd | browser 호환                   | 런타임 Web API가 지원하는 기능만 비동기      |
-| Bun·Deno            | root: browser, `/secure`: Node | root 비동기, `/secure` Node 호환 동기·비동기 |
+Node.js >=22는 Node 빌드, 브라우저·Web Workers·workerd는 browser 빌드를 선택합니다.
+Bun·Deno의 root는 browser, `/secure`는 Node 호환 빌드를 선택합니다. Web API 경로를
+고정하려면 `/browser`를 사용하세요. 실제 압축·암호화 지원은 런타임 API에 따릅니다.
 
-Bun과 Deno에서 root는 명시적인 `bun`/`deno` 조건으로 browser 빌드를 선택하지만,
-`/secure`는 두 런타임의 Node 호환 조건에 따라 Node 빌드를 선택합니다. Web API 경로를
-고정하려면 `/browser`를 사용하세요. 브라우저 계열의 실제 지원 알고리즘은 WebCrypto와
-`CompressionStream`/`DecompressionStream` 구현에 따라 달라집니다.
-
-CI는 Node 24에서 전체 검증, Node 22·26과 Bun·Deno에서 런타임 호환을 확인합니다.
-별도 Playwright 작업은 Chromium·Firefox·WebKit에서 브라우저 빌드와 Node 간 데이터 호환을
-실행합니다. Node에서 `/browser`를 import하는 smoke와 실제 브라우저 엔진 검증은 별개입니다.
+CI는 Node 24 전체 검증, Node 22·26과 Bun·Deno의 호환 smoke, 별도 Chromium·Firefox·WebKit
+검증을 실행합니다. [런타임별 상세 계약](docs/REFERENCE.md#진입점)을 참고하세요.
 
 ## Install
 
@@ -50,19 +41,24 @@ npm install @ddunigma/node
 
 ## Quick Start
 
-```typescript
-import { Ddu64, DduSetSymbol } from "@ddunigma/node";
+`createDdu`는 6.3.0에서 추가됩니다(현재 작업 트리는 미배포). 설치된 6.2.x의 `Ddu64` API는
+그대로 유지되며 [기존 API](docs/REFERENCE.md#기존-ddu64-api)로 사용할 수 있습니다.
 
-const ddu = new Ddu64();
-const encoded = ddu.encode("abc"); // "우잇땩얃"
-ddu.decode(encoded); // "abc"
-const hidden = ddu.encode("abc", { obfuscate: true }); // "렀뜁낂붃"
-ddu.decode(hidden, { obfuscate: true }); // "abc"
+```javascript
+const { createDdu } = require("@ddunigma/node");
 
-// 구버전 8문자 쌍 형식 호환
-const legacy = new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
-legacy.decode(legacy.encode("legacy"));
+async function main() {
+  const ddu = createDdu();
+  const encoded = await ddu.encode("abc"); // "우잇땩얃"
+  console.log(await ddu.decode(encoded)); // "abc"
+}
+
+main().catch(console.error);
 ```
+
+ESM에서는 `import { createDdu } from "@ddunigma/node"`를 사용합니다. 압축·암호화·난독화는
+생성 옵션으로 지정하고 두 메서드명은 그대로 사용합니다. 옵션은 객체 생성 시 보존하며
+호출별 설정을 기억하거나 자동 추측하지 않습니다.
 
 게임의 퍼즐 힌트나 커뮤니티 메시지처럼 출력의 모습 자체가 필요한 곳에 적용할 수 있습니다.
 위 `abc`는 원문 3바이트, DDU 출력 4문자·UTF-8 12바이트입니다. 난독화는 같은 설정과 입력에
@@ -71,12 +67,10 @@ legacy.decode(legacy.encode("legacy"));
 
 ## 진입점
 
-| 진입점                   | 기능                                                      | 권장 용도                  |
-| ------------------------ | --------------------------------------------------------- | -------------------------- |
-| `@ddunigma/node`         | codec + lazy adapter·Web Streams + Node eager `create()`  | 일반 사용 기본             |
-| `@ddunigma/node/browser` | 웹 codec + lazy adapter·Web Streams                       | 웹 경로 명시               |
-| `@ddunigma/node/secure`  | adapter·Web Streams 함수와 Node 동기 클래스를 정적 export | 고급 제어·기존 API 호환    |
-| `@ddunigma/node/core`    | 플랫폼 독립 codec/checksum, 구현 직접 주입                | 최소 정적 그래프·직접 주입 |
+- root: 일반 codec과 lazy adapter·Web Streams, Node의 eager `Ddu64.create()`.
+- `/browser`: 웹 경로를 명시하는 codec과 lazy 기능.
+- `/secure`: adapter·Web Streams 함수·런타임별 secure 클래스를 정적으로 export하는 고급·호환 경로.
+- `/core`: 플랫폼 독립 codec/checksum에 구현을 직접 주입하는 최소 경로.
 
 Root 진입점은 평문 codec 경로에서 adapter나 Web Streams 구현을 불러오지 않습니다.
 비동기 압축·암복호화 또는 stream 메서드가 실제로 실행될 때만 해당 모듈을 동적 import해
@@ -92,11 +86,11 @@ Node에서 동기 압축·암호화가 필요하면 별도 import 대신 `Ddu64.
 ## 한글 난독화
 
 ```typescript
-import { Ddu64 } from "@ddunigma/node";
+import { createDdu } from "@ddunigma/node";
 
-const ddu = new Ddu64({ obfuscate: true });
-const encoded = ddu.encode("재미있는 난독화");
-const decoded = ddu.decode(encoded);
+const ddu = createDdu({ obfuscate: true });
+const encoded = await ddu.encode("재미있는 난독화");
+const decoded = await ddu.decode(encoded);
 ```
 
 난독화는 charset 문자를 한글 음절로 바꾸는 결정론적 1:1 가역 변환입니다. 빈도 분포를
@@ -106,12 +100,12 @@ const decoded = ddu.decode(encoded);
 ## 압축·암호화·Checksum
 
 ```typescript
-import { Ddu64 } from "@ddunigma/node";
+import { createDdu } from "@ddunigma/node";
 
 const encryptionKey = process.env.DDU64_KEY;
 if (!encryptionKey) throw new Error("DDU64_KEY is required");
 
-const ddu = new Ddu64({
+const ddu = createDdu({
   compress: true,
   encryptionKey,
   keyDerivation: {
@@ -122,8 +116,8 @@ const ddu = new Ddu64({
   checksum: true,
 });
 
-const encoded = await ddu.encodeAsync("보호할 데이터");
-const decoded = await ddu.decodeAsync(encoded);
+const encoded = await ddu.encode("보호할 데이터");
+const decoded = await ddu.decode(encoded);
 ```
 
 비동기 메서드가 반환한 뒤 입력 `Uint8Array`/`Buffer`와 호출 옵션을 재사용해도 진행 중인
@@ -131,22 +125,8 @@ const decoded = await ddu.decodeAsync(encoded);
 처리할 때 인스턴스를 재사용하면 파생된 키를 다시 사용할 수 있습니다.
 
 압축 여부는 wire metadata에서 판별하므로 decode에 `compress:true`를 반복할 필요가 없습니다.
-Node에서 동기 압축·암호화가 필요하면 같은 import의 비동기 팩토리를 사용하세요.
-
-```typescript
-const eagerDdu = await Ddu64.create({
-  compress: true,
-  encryptionKey,
-  keyDerivation: {
-    algorithm: "pbkdf2",
-    salt: "my-application-and-user-specific-salt",
-    iterations: 600_000,
-  },
-});
-
-const syncEncoded = eagerDdu.encode("보호할 데이터");
-const syncDecoded = eagerDdu.decode(syncEncoded);
-```
+Node의 동기 호출은 기존 `Ddu64.create()`를 사용합니다.
+[동기 압축·암호화 예제](docs/REFERENCE.md#압축-암호화-체크섬)를 참고하세요.
 
 비밀 데이터와 공격자가 조절할 수 있는 입력을 같은 payload에 넣어 압축한 뒤 암호화하면
 길이 차이를 이용한 정보 노출이 생길 수 있습니다. 이런 데이터는 함께 압축하지 않거나,
