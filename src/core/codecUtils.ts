@@ -7,7 +7,7 @@
 
 // ─── CRC32 ───────────────────────────────────────────────────────────────────
 
-/** CRC32 룩업 테이블 (바이트 단위 연산, 비트 루프 대비 4-8배 빠름) */
+/** 바이트별 CRC32 연산에서 비트 루프를 반복하지 않도록 미리 계산한 룩업 테이블. */
 const CRC32_TABLE: Uint32Array = /* @__PURE__ */ (() => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
@@ -99,17 +99,14 @@ export function splitIntoChunks(input: string, chunkSize: number, separator: str
   if (chunkSize <= 0 || input.length <= chunkSize) return input;
 
   const chunkCount = Math.ceil(input.length / chunkSize);
-  const parts = new Array<string>(chunkCount * 2 - 1);
+  const parts = new Array<string>(chunkCount);
   let partIndex = 0;
 
   for (let i = 0; i < input.length; i += chunkSize) {
     parts[partIndex++] = input.slice(i, i + chunkSize);
-    if (i + chunkSize < input.length) {
-      parts[partIndex++] = separator;
-    }
   }
 
-  return parts.join("");
+  return parts.join(separator);
 }
 
 /**

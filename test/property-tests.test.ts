@@ -2,7 +2,7 @@
  * Property-Based Tests (fast-check)
  *
  * ddunigma 라이브러리의 핵심 속성을 검증하는 property-based 테스트.
- * 모든 테스트는 최소 100회 반복으로 실행됩니다.
+ * 일반 속성은 100회, 비용이 큰 PBKDF2 교차 검사는 별도 반복 수로 검증합니다.
  */
 
 import { describe, it, expect } from "vitest";
@@ -789,6 +789,8 @@ describe("Property-Based Tests", () => {
               compress: opts.compress,
               compressionAlgorithm: opts.compressionAlgorithm,
               encryptionKey: opts.encryptionKey,
+              // 조합 불변식은 PBKDF2 비용과 분리하며 기본 algorithm은 유지합니다.
+              keyDerivation: { iterations: 10_000 },
               checksum: opts.checksum,
               obfuscate: opts.obfuscate,
             });

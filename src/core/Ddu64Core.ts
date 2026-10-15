@@ -6,7 +6,13 @@
  */
 
 import { calculateBitLength, isPowerOfTwo, type BitPackConfig } from "./BitPack.js";
-import { normalizeCompressionLevel, bytesToString } from "./codecUtils.js";
+import {
+  normalizeCompressionLevel,
+  bytesToString,
+  removeChunks,
+  splitIntoChunks,
+  toUrlSafe,
+} from "./codecUtils.js";
 import { resolveInitialCharSet, normalizeCharSet, isUrlSafeCompatible } from "./CharsetResolver.js";
 import type {
   PlatformAdapter,
@@ -20,6 +26,7 @@ import type {
 } from "./types.js";
 import {
   Ddu64CharsetError,
+  Ddu64EncodeError,
   Ddu64AdapterError,
   Ddu64InvalidInputError,
   Ddu64ObfuscationError,
@@ -45,7 +52,6 @@ import { resolveConstructorArgs } from "./internal/constructorOptions.js";
 import { buildCharsetLookupTables } from "./internal/CharsetLookup.js";
 import { normalizeLimit } from "./internal/DecodeValidation.js";
 import { runDecodePrelude, type DecodePreludeResult } from "./internal/DecodePrelude.js";
-import { applyPostEncoding as applyEncodePostProcessing } from "./internal/EncodeFinalize.js";
 import { decodePayload, encodePayload, type PayloadCodecContext } from "./internal/PayloadCodec.js";
 import { buildObfuscationAlphabet } from "./internal/ObfuscationAlphabet.js";
 import {
@@ -63,7 +69,7 @@ import {
   runSyncEncodePipeline,
   type EncodePipelineBaseContext,
 } from "./pipeline/EncodePipeline.js";
-import { buildEncryptionAAD } from "./wireFormat.js";
+import { buildEncryptionAAD, CHECKSUM_MARKER_SCOPED } from "./wireFormat.js";
 
 const DEFAULT_MAX_DECODED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
@@ -682,17 +688,43 @@ export class Ddu64Core {
       this.payloadCodecContext,
     );
 
-    result = applyEncodePostProcessing({
-      encoded: result,
-      checksum,
-      shouldChecksum,
-      checksumScope,
-      chunkSize,
-      chunkSeparator,
-      urlSafe: this.urlSafe,
-      obfuscate: options?.obfuscate ?? this.defaultObfuscate,
-      getObfuscationLayer: () => this.getObfuscationLayer(),
-    });
+    // Wire 순서: footer → 난독화 → checksum → URL-safe → 청크 분할.
+    const urlSafe = this.urlSafe;
+    if (options?.obfuscate ?? this.defaultObfuscate) {
+      result = this.getObfuscationLayer().obfuscate(result);
+    }
+
+    if (shouldChecksum && checksum) {
+      const scopeChar = checksumScope === "plaintext" ? "P" : "O";
+      result = result + CHECKSUM_MARKER_SCOPED + scopeChar + checksum;
+    }
+
+    if (urlSafe) {
+      result = toUrlSafe(result);
+    }
+
+    if (chunkSize && chunkSize > 0) {
+      if (
+        chunkSeparator !== "" &&
+        chunkSeparator !== "\n" &&
+        chunkSeparator !== "\r\n" &&
+        chunkSeparator !== "\r" &&
+        result.includes(chunkSeparator)
+      ) {
+        throw new Ddu64EncodeError(
+          `[Ddu64 chunking] Unsafe chunkSeparator "${chunkSeparator}" appears in encoded output. ` +
+            "Use a separator that cannot be produced by the charset, footer, checksum, or URL-safe output.",
+        );
+      }
+      const chunked = splitIntoChunks(result, chunkSize, chunkSeparator);
+      // 본문에 없는 구분자도 청크 경계와 중첩되면 replaceAll이 원문을 손상시킵니다.
+      if (chunkSeparator.length > 1 && removeChunks(chunked, chunkSeparator) !== result) {
+        throw new Ddu64EncodeError(
+          "[Ddu64 chunking] chunkSeparator overlaps a boundary. Use a separator outside the alphabet.",
+        );
+      }
+      result = chunked;
+    }
 
     this.reportProgress(
       options,
@@ -787,7 +819,14 @@ export class Ddu64Core {
    */
   private getAdapter(): PlatformAdapter | undefined {
     if (this.adapter === undefined && this.adapterFactory !== undefined) {
-      this.adapter = this.adapterFactory();
+      const adapter = this.adapterFactory();
+      if (!adapter || typeof adapter !== "object") {
+        throw new Ddu64AdapterError(
+          "[Ddu64 adapter] Factory must return a PlatformAdapter object.",
+          "adapter",
+        );
+      }
+      this.adapter = adapter;
     }
     return this.adapter;
   }

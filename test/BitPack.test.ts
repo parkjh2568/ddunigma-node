@@ -223,10 +223,7 @@ describe("BitPack - standalone bit-packing engine", () => {
     });
   });
 
-  describe("equivalence with Ddu64 encodeFast/decodeFast", () => {
-    // This test verifies that BitPack produces the same indices as Ddu64's internal logic
-    // by encoding known inputs and checking the index values match expected patterns.
-
+  describe("known bit-packing index vectors", () => {
     it("matches expected indices for 'Hello' with 64-char charset", () => {
       const config: BitPackConfig = { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 };
       // "Hello" = [0x48, 0x65, 0x6C, 0x6C, 0x6F]

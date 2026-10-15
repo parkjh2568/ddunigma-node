@@ -89,6 +89,15 @@ describe("core/codecUtils", () => {
   });
 
   describe("splitIntoChunks", () => {
+    it.each([
+      ["", "abcde"],
+      ["::", "ab::cd::e"],
+      ["\r\n", "ab\r\ncd\r\ne"],
+      ["$&", "ab$&cd$&e"],
+    ])("preserves the literal separator %j and the final partial chunk", (separator, expected) => {
+      expect(splitIntoChunks("abcde", 2, separator)).toBe(expected);
+    });
+
     it("should return input unchanged if chunkSize <= 0", () => {
       expect(splitIntoChunks("abcdef", 0, "\n")).toBe("abcdef");
       expect(splitIntoChunks("abcdef", -1, "\n")).toBe("abcdef");

@@ -50,7 +50,11 @@ export class Ddu64SecureBrowser extends Ddu64Core {
         ...resolved.dduOptions,
         ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
         ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
-        adapterFactory: resolved.dduOptions?.adapterFactory ?? (() => new BrowserAdapter()),
+        adapterFactory:
+          resolved.dduOptions?.adapterFactory ??
+          (resolved.dduOptions?.asyncAdapterFactory === undefined
+            ? () => new BrowserAdapter()
+            : undefined),
         obfuscationLayerFactory:
           resolved.dduOptions?.obfuscationLayerFactory ??
           ((alphabet) => new HangulObfuscationLayer(alphabet)),

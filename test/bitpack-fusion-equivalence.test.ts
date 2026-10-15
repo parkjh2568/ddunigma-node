@@ -301,7 +301,7 @@ describe("BitPack fused ↔ reference equivalence", () => {
   });
 
   // The 6/8-bit direct mappings must stay byte-identical to the generic reference path.
-  describe("L2 unroll branch ↔ raw bitPackEncode6/8 + bitPackDecode (explicit)", () => {
+  describe("6/8-bit direct mapping ↔ raw bitPackEncode6/8 + bitPackDecode", () => {
     const config6: BitPackConfig = { bitLength: 6, usePowerOfTwo: true, charsetSize: 64 };
     const charset6 = makeCharset(64);
     const tbl6 = buildCharsetLookupTables(charset6);

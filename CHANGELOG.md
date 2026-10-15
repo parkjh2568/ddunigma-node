@@ -12,10 +12,16 @@
 - 역난독화의 문자 매핑용 임시 배열을 최대 8,192개 문자열로 제한했습니다. 여러 코드 유닛으로 된 custom
   alphabet과 기존 오류 위치·wire 출력을 유지합니다.
 - 청크 구분자의 경계 중첩에 따른 데이터 손상을 거부하고, 스트림 청크 타입·detached buffer를
-  길이 검사 전에 검증합니다. transform/flush 실패는 읽기와 write/close 양쪽에 전달합니다.
+  길이 검사 전에 검증합니다. 실제 view와 다른 `Uint8Array.length`도 거부해 데이터 누락과
+  스트림 크기 한도 오계산을 방지합니다. transform/flush 실패는 읽기와 write/close 양쪽에 전달합니다.
 - `onProgress`의 Promise/thenable 반환을 `InvalidInput`으로 거부하며 rejection을 처리합니다.
   생성·동기 가드·오류 메시지 변환·브라우저 복호화에서 예외 원인을 보존하고 ESM/CJS 오류를 함께 식별합니다.
-- 잘못된 adapter 초기화 결과를 캐시하지 않으며 CharsetBuilder의 큰 입력을 인자 한도 없이 처리합니다.
+- 동기·비동기 factory의 잘못된 adapter 결과를 캐시하지 않고 secure의 사용자 비동기 factory를 존중합니다.
+  스트림 본문에서 생성자 청크 구분자를 제거하지 않으며 CharsetBuilder의 큰 입력을 인자 한도 없이 처리합니다.
+- Node의 native Base64 경로가 재정의된 `buffer`·`byteOffset`·`byteLength` 대신 실제 Uint8Array view를
+  사용해 입력 누락과 다른 버퍼 출력 문제를 방지합니다. 단일 호출 변환 중계는 기존 함수에 통합했습니다.
+- 난독화의 사용 문자 조회를 숫자 키로 재사용하고, native Base64가 없는 환경의 중복 검증 순회를
+  줄였습니다. 청크 분할의 임시 배열 슬롯도 줄이며 기존 출력·오류·크기 제한은 유지합니다.
 
 ## 6.2.0 - 2026-09-17
 

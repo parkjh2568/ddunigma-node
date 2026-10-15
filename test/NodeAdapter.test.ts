@@ -16,6 +16,13 @@ describe("NodeAdapter", () => {
   });
 
   describe("key derivation", () => {
+    it("preserves the default PBKDF2 parameters", () => {
+      // PBKDF2-SHA256 / 210,000 iterations / ddunigma:pbkdf2:v1 / 32 bytes.
+      expect(Buffer.from(adapter.deriveKeySync("default-kdf-contract")).toString("hex")).toBe(
+        "0c879ccbefb2cfc90525d58c44f82765c710ade6d7b9dc00cc600f22467af251",
+      );
+    });
+
     it("produces consistent 32-byte output", () => {
       const key1 = adapter.deriveKeySync("test-key");
       const key2 = adapter.deriveKeySync("test-key");

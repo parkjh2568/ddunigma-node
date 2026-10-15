@@ -8,8 +8,8 @@
  * (6비트 3바이트→4심볼, 8비트 1바이트→1심볼)을 사용합니다. 이 언롤의 비트 분해식은 `BitPack`의
  * `bitPackEncode6`/`bitPackEncode8`와 **동일**하며(중복이지만 의도된 것 — BitPack은 동치 오라클로
  * 유지), 두 곳의 출력이 바이트 동치임을 `test/bitpack-fusion-equivalence.test.ts`가 고정합니다.
- * 비트 레이아웃 변경 시 BitPack과 이 모듈을 함께 갱신해야 합니다. `STRING_CHUNK_SIZE`는 측정상
- * sweet spot(더 키우면 `String.fromCharCode.apply` 인자 오버헤드로 역효과)입니다.
+ * 비트 레이아웃 변경 시 BitPack과 이 모듈을 함께 갱신해야 합니다. `STRING_CHUNK_SIZE`는
+ * 문자열 변환의 인자 수와 임시 버퍼 크기를 제한합니다. 크기 변경은 벤치마크로 검증합니다.
  *
  * @module core/internal/IndexStringMapper
  */
@@ -50,7 +50,7 @@ export function packPow2ToString(
   let bufIdx = 0;
   let paddingBits = 0;
 
-  // L2 언롤 융합 분기: bitLength 6/8은 누산기 없이 직접 매핑한다.
+  // bitLength 6/8은 누산기 없이 직접 매핑한다.
   // 인덱스 배열을 만들지 않고 곧바로 charCodes[...]로 코드 유닛을 산출하며,
   // 비트 분해식은 bitPackEncode6/bitPackEncode8과 동일하므로 raw 경로와 바이트 동치다.
   if (bitLength === 6) {
@@ -196,7 +196,7 @@ export function unpackPow2FromString(
 
   const lookupLen = lookup.length;
 
-  // L2 대칭 언롤 융합 분기: bitLength 6/8은 누산기 없이 직접 역매핑한다.
+  // bitLength 6/8은 누산기 없이 직접 역매핑한다.
   // 비트 합성식은 packPow2ToString(인코드 언롤) 및 bitPackDecode pow2 분기와 동일하므로
   // raw 경로와 바이트 동치다. 마지막 심볼의 패딩 비트 제거가 필요한 그룹은 제네릭 누산으로
   // 처리하여 동치를 보존한다(잔여 1·2바이트, paddingBits 4·2).

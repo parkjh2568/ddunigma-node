@@ -10,7 +10,7 @@
  * - package.json exports['./secure'] 조건부 매핑이 올바른 빌드를 가리킴
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +30,24 @@ describe.each([
   secureEntry.Ddu64,
   secureBrowserEntry.Ddu64,
 ])("exception boundaries: %s", (Codec) => {
+  it.each([undefined, null, false, 42])(
+    "retries invalid sync factory result %s without caching it",
+    async (invalid) => {
+      const adapter = new secureEntry.NodeAdapter();
+      const factory = vi.fn(() => adapter).mockReturnValueOnce(invalid as never);
+      const codec = new Codec({
+        encryptionKey: "factory-retry-key",
+        keyDerivation: { algorithm: "sha256" },
+        adapterFactory: factory,
+      });
+      expect(() => codec.encode("first")).toThrow(nodeEntry.Ddu64AdapterError);
+      expect(factory).toHaveBeenCalledTimes(1);
+      expect(await codec.decodeAsync(await codec.encodeAsync("retry"))).toBe("retry");
+      expect(codec.decode(codec.encode("sync retry"))).toBe("sync retry");
+      expect(factory).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it("preserves constructor option getter failures as typed causes", () => {
     const cause = Object.create(null);
     const options = {
@@ -108,6 +126,52 @@ describe.each([
   });
 });
 
+it.each([secureEntry.Ddu64, secureBrowserEntry.Ddu64])(
+  "secure entry honors an explicit async adapter factory: %s",
+  async (Codec) => {
+    const adapter = new secureEntry.NodeAdapter();
+    const factory = vi
+      .fn(async () => adapter)
+      .mockRejectedValueOnce(new Error("temporary factory failure"));
+    const codec = new Codec({
+      compress: true,
+      encryptionKey: "async-factory-key",
+      keyDerivation: { algorithm: "sha256" },
+      asyncAdapterFactory: factory,
+    });
+    expect(() => codec.encode("sync before initialization", { compress: false })).toThrow(
+      nodeEntry.Ddu64AdapterError,
+    );
+    await expect(codec.encodeAsync("first")).rejects.toBeInstanceOf(nodeEntry.Ddu64Error);
+    const inputs = ["retry ".repeat(20), "concurrent ".repeat(20)];
+    const encoded = await Promise.all(inputs.map((input) => codec.encodeAsync(input)));
+    expect(await Promise.all(encoded.map((input) => codec.decodeAsync(input)))).toEqual(inputs);
+    expect(factory).toHaveBeenCalledTimes(2);
+  },
+);
+
+it.each([nodeEntry.Ddu64, browserEntry.Ddu64, secureEntry.Ddu64, secureBrowserEntry.Ddu64])(
+  "entry keeps explicit adapter and sync factory precedence: %s",
+  async (Codec) => {
+    for (const mode of ["adapter", "adapterFactory"] as const) {
+      const adapter = new secureEntry.NodeAdapter();
+      const syncFactory = vi.fn(() => adapter);
+      const asyncFactory = vi.fn(async () => adapter);
+      const codec = new Codec({
+        compress: true,
+        ...(mode === "adapter" ? { adapter } : { adapterFactory: syncFactory }),
+        asyncAdapterFactory: asyncFactory,
+      });
+      expect(await codec.decodeAsync(await codec.encodeAsync("priority ".repeat(20)))).toBe(
+        "priority ".repeat(20),
+      );
+      expect(codec.decode(codec.encode("sync"))).toBe("sync");
+      expect(syncFactory).toHaveBeenCalledTimes(mode === "adapter" ? 0 : 1);
+      expect(asyncFactory).not.toHaveBeenCalled();
+    }
+  },
+);
+
 it.each([nodeEntry.Ddu64, browserEntry.Ddu64])(
   "eager create rejects invalid adapters and detached salts: %s",
   async (Codec) => {
@@ -119,6 +183,9 @@ it.each([nodeEntry.Ddu64, browserEntry.Ddu64])(
     await expect(
       Codec.create({ asyncAdapterFactory: async () => undefined as never }),
     ).rejects.toThrow(nodeEntry.Ddu64AdapterError);
+    await expect(Codec.create({ adapterFactory: () => undefined as never })).rejects.toThrow(
+      nodeEntry.Ddu64AdapterError,
+    );
   },
 );
 
@@ -145,6 +212,34 @@ describe.each([
   { name: "Node", Codec: nodeEntry.Ddu64 },
   { name: "Browser", Codec: browserEntry.Ddu64 },
 ])("async input and option snapshots: $name", ({ Codec }) => {
+  it("shares the first concurrent adapter initialization", async () => {
+    const factory = vi.fn(async () => {
+      await Promise.resolve();
+      return new secureEntry.NodeAdapter();
+    });
+    const codec = new Codec({ asyncAdapterFactory: factory });
+    const inputs = ["first ".repeat(20), "second ".repeat(20)];
+    const encoded = await Promise.all(
+      inputs.map((input) => codec.encodeAsync(input, { compress: true })),
+    );
+    expect(await Promise.all(encoded.map((input) => codec.decodeAsync(input)))).toEqual(inputs);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a failed adapter initialization on the next call", async () => {
+    const factory = vi
+      .fn(async () => new secureEntry.NodeAdapter())
+      .mockRejectedValueOnce(new Error("temporary adapter failure"));
+    const codec = new Codec({ asyncAdapterFactory: factory });
+    const input = "retry lazy adapter ".repeat(20);
+    await expect(codec.encodeAsync(input, { compress: true })).rejects.toBeInstanceOf(
+      nodeEntry.Ddu64Error,
+    );
+    const encoded = await codec.encodeAsync(input, { compress: true });
+    expect(await codec.decodeAsync(encoded)).toBe(input);
+    expect(factory).toHaveBeenCalledTimes(2);
+  });
+
   it.each([false, true])(
     "snapshots async payloads and options with compress=%s",
     async (compress) => {
@@ -328,42 +423,6 @@ describe("진입점 import 스모크", () => {
       const input = "injected adapter factory ".repeat(20);
 
       expect(ddu.decode(ddu.encode(input))).toBe(input);
-    });
-
-    it("동시 첫 비동기 호출에서 adapter factory를 한 번만 실행한다", async () => {
-      let factoryCalls = 0;
-      const ddu = new nodeEntry.Ddu64({
-        asyncAdapterFactory: async () => {
-          factoryCalls++;
-          await Promise.resolve();
-          return new secureEntry.NodeAdapter();
-        },
-      });
-
-      await Promise.all([
-        ddu.encodeAsync("first ".repeat(20), { compress: true }),
-        ddu.encodeAsync("second ".repeat(20), { compress: true }),
-      ]);
-      expect(factoryCalls).toBe(1);
-    });
-
-    it("실패한 async adapter factory는 다음 호출에서 재시도한다", async () => {
-      let factoryCalls = 0;
-      const ddu = new nodeEntry.Ddu64({
-        asyncAdapterFactory: async () => {
-          factoryCalls++;
-          if (factoryCalls === 1) throw new Error("temporary adapter failure");
-          return new secureEntry.NodeAdapter();
-        },
-      });
-      const input = "retry lazy adapter ".repeat(20);
-
-      await expect(ddu.encodeAsync(input, { compress: true })).rejects.toBeInstanceOf(
-        nodeEntry.Ddu64Error,
-      );
-      const encoded = await ddu.encodeAsync(input, { compress: true });
-      expect(await ddu.decodeAsync(encoded)).toBe(input);
-      expect(factoryCalls).toBe(2);
     });
 
     it("create()는 adapter를 준비해 Node 동기 secure 호출을 지원한다", async () => {

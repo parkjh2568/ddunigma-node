@@ -18,6 +18,10 @@ const typedArrayTag = Object.getOwnPropertyDescriptor(
   Object.getPrototypeOf(Uint8Array.prototype),
   Symbol.toStringTag,
 )!.get!;
+const typedArrayLength = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  "length",
+)!.get!;
 
 export function validateRuntimeOptions(
   options: PublicOptions | undefined,
@@ -222,9 +226,13 @@ export function validateEncodeInput(
   try {
     // intrinsic at은 복사 없이 detached/out-of-bounds view를 거부합니다.
     Uint8Array.prototype.at.call(input, 0);
+    // 인코딩과 스트림 한도가 사용하는 length는 실제 view 길이와 같아야 합니다.
+    if (input.length !== typedArrayLength.call(input)) {
+      throw new TypeError("Overridden Uint8Array length");
+    }
   } catch (cause) {
     throw new Ddu64InvalidInputError(
-      "[Ddu64 input] Detached/out-of-bounds buffer; check the Uint8Array.",
+      "[Ddu64 input] Invalid Uint8Array buffer or length.",
       operation,
       cause,
     );

@@ -33,6 +33,7 @@ import { buildObfuscationAlphabet } from "../core/internal/ObfuscationAlphabet.j
  */
 export class HangulObfuscationLayer implements ObfuscationLayer {
   private readonly config: SyllableMapConfig;
+  private codeToIndex?: Map<number, number>;
 
   /**
    * 새 HangulObfuscationLayer를 생성합니다.
@@ -57,18 +58,24 @@ export class HangulObfuscationLayer implements ObfuscationLayer {
   obfuscate(input: string): string {
     if (input.length === 0) return "";
 
+    const { charToIndex, syllablesPerChar } = this.config;
+    const codeToIndex = (this.codeToIndex ??= new Map<number, number>());
     const codes = new Uint16Array(Math.min(input.length, 8192));
     const chunks: string[] = [];
-    const { charToIndex, syllablesPerChar } = this.config;
     for (let offset = 0; offset < input.length; offset += codes.length) {
       const length = Math.min(codes.length, input.length - offset);
       for (let i = 0; i < length; i++) {
-        const char = input[offset + i];
-        const charIndex = charToIndex.get(char);
+        const code = input.charCodeAt(offset + i);
+        let charIndex = codeToIndex.get(code);
         if (charIndex === undefined) {
-          throw new Ddu64ObfuscationError(
-            `[Ddu64 obfuscation] Character "${char}" (U+${char.charCodeAt(0).toString(16).padStart(4, "0").toUpperCase()}) not found in obfuscation alphabet.`,
-          );
+          const char = input[offset + i];
+          charIndex = charToIndex.get(char);
+          if (charIndex === undefined) {
+            throw new Ddu64ObfuscationError(
+              `[Ddu64 obfuscation] Character "${char}" (U+${code.toString(16).padStart(4, "0").toUpperCase()}) not found in obfuscation alphabet.`,
+            );
+          }
+          codeToIndex.set(code, charIndex);
         }
         // 배치 경계에서도 전체 문자열 위치를 유지해야 기존 wire와 동일합니다.
         codes[i] =

@@ -37,6 +37,62 @@ it("owns the alphabet used by both mapping directions", () => {
   expect(layer.obfuscate("abba")).toBe(encoded);
 });
 
+it("uses the last alphabet index for duplicate characters on first and repeated calls", () => {
+  const layer = new HangulObfuscationLayer(["a", "b", "a"]);
+  const syllablesPerChar = Math.floor(HANGUL_SYLLABLE_COUNT / 3);
+  const expected = String.fromCharCode(
+    HANGUL_SYLLABLE_START + 2 * syllablesPerChar,
+    HANGUL_SYLLABLE_START + syllablesPerChar + 1,
+    HANGUL_SYLLABLE_START + 2 * syllablesPerChar + 2,
+  );
+  expect(layer.obfuscate("aba")).toBe(expected);
+  expect(layer.obfuscate("aba")).toBe(expected);
+  expect(layer.deobfuscate(expected)).toBe("aba");
+});
+
+it("preserves valid mapping after an initial call fails on an unknown character", () => {
+  const layer = new HangulObfuscationLayer(["a", "b"]);
+  expect(() => layer.obfuscate("a!")).toThrow('Character "!" (U+0021) not found');
+  const expected = String.fromCharCode(
+    HANGUL_SYLLABLE_START,
+    HANGUL_SYLLABLE_START + Math.floor(HANGUL_SYLLABLE_COUNT / 2) + 1,
+  );
+  expect(layer.obfuscate("ab")).toBe(expected);
+  expect(layer.deobfuscate(expected)).toBe("ab");
+});
+
+it("does not inspect unused non-string alphabet entries while mapping a valid character", () => {
+  const layer = new HangulObfuscationLayer([null, undefined, "a"] as unknown as string[]);
+  const expected = String.fromCharCode(
+    HANGUL_SYLLABLE_START + 2 * Math.floor(HANGUL_SYLLABLE_COUNT / 3),
+  );
+  expect(layer.obfuscate("a")).toBe(expected);
+  expect(layer.deobfuscate(expected)).toBe("a");
+});
+
+it("does not recognize a multi-code-unit alphabet entry by its prefix", () => {
+  const layer = new HangulObfuscationLayer(["", "ab", "😀", "가나", "a"]);
+  const syllablesPerChar = Math.floor(HANGUL_SYLLABLE_COUNT / 5);
+  expect(layer.obfuscate("")).toBe("");
+  expect(layer.obfuscate("a")).toBe(
+    String.fromCharCode(HANGUL_SYLLABLE_START + 4 * syllablesPerChar),
+  );
+  for (const input of ["ab", "😀", "가"]) {
+    expect(() => layer.obfuscate(input)).toThrow("not found in obfuscation alphabet");
+  }
+});
+
+it("preserves single surrogate code units and their positional mapping", () => {
+  const layer = new HangulObfuscationLayer(["\ud83d", "\ude00", "😀"]);
+  const syllablesPerChar = Math.floor(HANGUL_SYLLABLE_COUNT / 3);
+  const expected = String.fromCharCode(
+    HANGUL_SYLLABLE_START,
+    HANGUL_SYLLABLE_START + syllablesPerChar + 1,
+  );
+  expect(layer.obfuscate("😀")).toBe(expected);
+  expect(layer.deobfuscate(expected)).toBe("😀");
+});
+
 it("preserves the positional mapping across string batch boundaries", () => {
   for (const alphabet of [
     ["a", "b"],

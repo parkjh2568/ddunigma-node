@@ -44,6 +44,13 @@ npm install @ddunigma/node
 `createDdu`는 6.3.0에서 추가됩니다(현재 작업 트리는 미배포). 설치된 6.2.x의 `Ddu64` API는
 그대로 유지되며 [기존 API](docs/REFERENCE.md#기존-ddu64-api)로 사용할 수 있습니다.
 
+| 필요한 작업             | 선택할 API                       | 호출 방식                                    |
+| ----------------------- | -------------------------------- | -------------------------------------------- |
+| 텍스트 인코딩·복원      | `createDdu()`                    | `await encode()`·`await decode()`            |
+| 바이너리 복원           | `createDdu({ output: "bytes" })` | decode가 `Uint8Array` 반환                   |
+| 통계·스트림·호출별 옵션 | 기존 `Ddu64` 인스턴스            | 필요한 메서드와 옵션 선택                    |
+| Node 동기 압축·암호화   | `await Ddu64.create(options)`    | 준비 후 동기 encode·decode; 브라우저는 async |
+
 ```javascript
 const { createDdu } = require("@ddunigma/node");
 
@@ -64,6 +71,16 @@ ESM에서는 `import { createDdu } from "@ddunigma/node"`를 사용합니다. �
 위 `abc`는 원문 3바이트, DDU 출력 4문자·UTF-8 12바이트입니다. 난독화는 같은 설정과 입력에
 항상 같은 결과를 내며, 출력이 지나는 저장소·복사 경로는 Unicode 코드포인트를 보존해야 합니다.
 정규화(NFD 등)로 한글 음절을 분해하면 복원할 수 없습니다.
+
+임의 바이너리는 문자열로 디코딩하지 않고 반환 종류를 명시하세요.
+
+```typescript
+import { createDdu } from "@ddunigma/node";
+
+const binary = createDdu({ output: "bytes" });
+const bytes = new Uint8Array([0, 128, 255]);
+const restored = await binary.decode(await binary.encode(bytes)); // Uint8Array [0, 128, 255]
+```
 
 ## 진입점
 
@@ -166,6 +183,36 @@ const decodeStream = await ddu.createDecodeStream();
 암호화만 끄는 동작은 지원하지 않으므로 평문 처리는 별도 인스턴스를 사용하세요. 한 번
 동적 import된 모듈은 런타임의 ESM 캐시에 남으며, 옵션 비활성화가 모듈 unload를 의미하지는
 않습니다.
+
+## 오류 처리
+
+생성 오류는 즉시 throw하고 비동기 연산 오류는 reject하므로 객체 생성과 await를 같은
+`try` 안에 두세요. 오류 메시지나 `instanceof` 대신 `isDdu64Error`와 `code`로 분기하면
+ESM/CJS를 함께 사용하는 경우에도 같은 오류 계약을 사용할 수 있습니다.
+
+```typescript
+import { createDdu, Ddu64ErrorCode, isDdu64Error } from "@ddunigma/node";
+
+try {
+  const ddu = createDdu({ checksum: true, maxEncodedChars: 1024 });
+  const encoded = await ddu.encode("저장할 데이터");
+  console.log(await ddu.decode(encoded));
+} catch (error) {
+  if (!isDdu64Error(error)) throw error;
+  if (error.code === Ddu64ErrorCode.InvalidInput) {
+    console.error("입력과 옵션을 확인하세요.");
+  } else if (error.code === Ddu64ErrorCode.LimitExceeded) {
+    console.error("설정한 입력 크기 한도를 확인하세요.");
+  } else if (error.code === Ddu64ErrorCode.ChecksumMismatch) {
+    console.error("송수신 설정과 저장된 데이터의 손상 여부를 확인하세요.");
+  } else {
+    throw error;
+  }
+}
+```
+
+입력·한도·인증 오류는 같은 입력으로 반복 호출해도 해결되지 않습니다. 오류별 대응과
+adapter 초기화 재시도 계약은 [오류 처리 reference](docs/REFERENCE.md#오류-처리)를 참고하세요.
 
 ## 상세 문서
 

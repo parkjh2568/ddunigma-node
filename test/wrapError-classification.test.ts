@@ -1,11 +1,11 @@
 /**
- * `wrapDdu64Error` 계약 테스트 (분류기 제거 후).
+ * `wrapDdu64Error` 계약 테스트.
  *
  * 내부 모듈이 발생 지점에서 도메인 타입 에러(Ddu64XxxError)를 직접 throw하므로,
- * `wrapDdu64Error`의 메시지 키워드 추측 분류는 제거되었습니다. 이제 계약은 단순합니다:
+ * `wrapDdu64Error`는 메시지 키워드로 분류하지 않습니다:
  *  1) 이미 Ddu64Error면 그대로 통과(인스턴스 보존)
  *  2) 그 외(외부/예기치 못한 에러)는 operation 기반 fallback으로만 래핑
- *     (encode→EncodeFailed, decode→DecodeFailed, stream→StreamFailed)
+ *     (construct→InvalidInput, encode→EncodeFailed, decode→DecodeFailed, stream→StreamFailed)
  *
  * 핵심 회귀 가드: 내부처럼 보이는 메시지(`[Ddu64 ...]`)라도 더 이상 키워드로 재분류되지 않음을
  * 고정합니다. (분류 책임은 발생 지점에 있으며, 여기서 메시지 문구로 타입이 바뀌면 안 됩니다.)

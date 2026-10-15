@@ -59,7 +59,7 @@ describe("custom charset + padding decode", () => {
     }
   });
 
-  it("re-encodes decoded values back to the original payload", () => {
+  it("preserves decoded values through a new encode/decode round-trip", () => {
     const encoder = createEncoder();
     for (const [encoded] of VECTORS) {
       const decoded = encoder.decode(encoded);

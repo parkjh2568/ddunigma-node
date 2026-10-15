@@ -1,6 +1,11 @@
 import { Ddu64 as RootDdu64, createDdu as createRootDdu, Ddu64ErrorCode } from "@ddunigma/node";
 import { Ddu64, createDdu } from "@ddunigma/node/browser";
-import { BrowserAdapter, Ddu64 as SecureDdu64 } from "@ddunigma/node/secure";
+import {
+  BrowserAdapter,
+  Ddu64 as SecureDdu64,
+  createReadableEncodeStream,
+  createReadableDecodeStream,
+} from "@ddunigma/node/secure";
 import footerCollisionVectors from "./fixtures/footer-collision-vectors.json";
 
 // scripts/browser-smoke.mjs bundles this entry with browser export conditions.
@@ -57,11 +62,107 @@ export async function runBrowserSmoke({
   }
   if (!invalidSalt) throw new Error("Detached KDF salt was accepted");
 
+  class HiddenLength extends Uint8Array {
+    get length() {
+      return 1;
+    }
+  }
+  const hiddenBytes = new HiddenLength([1, 2, 3, 4, 5, 6]);
+  let invalidLength = false;
+  try {
+    await createDdu().encode(hiddenBytes);
+  } catch (error) {
+    if (error.code !== Ddu64ErrorCode.InvalidInput) throw error;
+    invalidLength = true;
+  }
+  if (!invalidLength) throw new Error("Overridden Uint8Array length was accepted");
+
+  for (const checksum of [false, true]) {
+    const ddu = new Ddu64({
+      dduChar: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+      paddingChar: "=",
+      chunkSize: 2,
+      chunkSeparator: "AAAA",
+    });
+    const bytes = new Uint8Array([0, 0, 0, 0, 0, 64]);
+    const decoded = new Uint8Array(
+      await new Response(
+        new Blob([bytes])
+          .stream()
+          .pipeThrough(createReadableEncodeStream(ddu, { checksum }))
+          .pipeThrough(createReadableDecodeStream(ddu, { checksum, chunkSeparator: "BA" })),
+      ).arrayBuffer(),
+    );
+    if (decoded.length !== bytes.length || decoded.some((byte, i) => byte !== bytes[i])) {
+      throw new Error("Stream removed a codec chunk separator from its payload");
+    }
+  }
+
+  for (const Codec of [Ddu64, SecureDdu64]) {
+    for (const invalid of [null, undefined]) {
+      let calls = 0;
+      const adapter = new BrowserAdapter();
+      const ddu = new Codec({
+        encryptionKey: "factory-retry-key",
+        keyDerivation: { algorithm: "sha256" },
+        adapterFactory: () => (++calls === 1 ? invalid : adapter),
+      });
+      let failed = false;
+      try {
+        await ddu.encodeAsync("first");
+      } catch (error) {
+        if (error.code !== Ddu64ErrorCode.AdapterUnavailable) throw error;
+        failed = true;
+      }
+      if (
+        !failed ||
+        (await ddu.decodeAsync(await ddu.encodeAsync("retry"))) !== "retry" ||
+        calls !== 2
+      ) {
+        throw new Error("Invalid sync adapter factory result was cached");
+      }
+    }
+  }
+
+  let secureFactoryCalls = 0;
+  const secureAdapter = new BrowserAdapter();
+  const customSecure = new SecureDdu64({
+    encryptionKey: "custom-secure-key",
+    keyDerivation: { algorithm: "sha256" },
+    asyncAdapterFactory: async () => {
+      secureFactoryCalls++;
+      if (secureFactoryCalls === 1) throw new Error("temporary factory failure");
+      return secureAdapter;
+    },
+  });
+  let secureFactoryFailed = false;
+  try {
+    await customSecure.encodeAsync("first");
+  } catch (error) {
+    if (error.cause?.message !== "temporary factory failure") throw error;
+    secureFactoryFailed = true;
+  }
+  const secureInputs = ["retry", "concurrent"];
+  const secureEncoded = await Promise.all(
+    secureInputs.map((text) => customSecure.encodeAsync(text)),
+  );
+  const secureDecoded = await Promise.all(
+    secureEncoded.map((text) => customSecure.decodeAsync(text)),
+  );
+  if (
+    !secureFactoryFailed ||
+    secureFactoryCalls !== 2 ||
+    secureDecoded.some((text, i) => text !== secureInputs[i])
+  ) {
+    throw new Error("Secure entry ignored or failed to share the explicit async factory");
+  }
+
   for (const checksum of [false, true]) {
     const ddu = new Ddu64();
     for (const [stream, chunk] of [
       [await ddu.createEncodeStream({ checksum }), "abc"],
       [await ddu.createEncodeStream({ checksum }), detached],
+      [await ddu.createEncodeStream({ checksum, maxBufferedBytes: 1 }), hiddenBytes],
       [await ddu.createDecodeStream({ maxBufferedChars: 1 }), ["x".repeat(224)]],
     ]) {
       const reader = stream.readable.getReader();
@@ -218,6 +319,18 @@ export async function runBrowserSmoke({
         }
         if ((await simple.encode(plain)) !== encoded || (await simple.decode(encoded)) !== plain) {
           throw new Error(`createDdu Base64 failed: fallback=${fallback}`);
+        }
+      }
+      for (const field of ["buffer", "byteOffset", "byteLength"]) {
+        const bytes = new Uint8Array([9, 1, 2, 3, 9]).subarray(1, 4);
+        Object.defineProperty(bytes, field, {
+          get() {
+            throw new Error(`shadowed ${field} must not be read`);
+          },
+        });
+        const expected = globalThis.btoa("\x01\x02\x03");
+        if (codec.encode(bytes) !== expected || (await simple.encode(bytes)) !== expected) {
+          throw new Error(`Base64 view metadata failed: ${field}, fallback=${fallback}`);
         }
       }
     }

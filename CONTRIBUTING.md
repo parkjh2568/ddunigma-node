@@ -7,7 +7,7 @@
 공개 계약은 [REFERENCE](docs/REFERENCE.md), 구조·최적화 근거는 [DECISIONS](docs/DECISIONS.md)가
 담당합니다. 상세 규칙을 에이전트 지침에 복제하거나 문서 전체를 매번 읽도록 요구하지 않습니다.
 
-호환성을 유지하는 간편 API·최적화 작업은 [실행 태스크](docs/TASKS.md)에서 범위와 완료 조건을 확인합니다.
+현재 출시 전 미완료 항목은 [남은 작업](docs/TASKS.md)에서 확인합니다.
 
 ## 작업 시작과 우선순위
 
@@ -78,6 +78,7 @@ CJS `.cjs`/`.d.cts`는 함께 검증합니다. 소스의 `moduleResolution: bund
 ## TypeScript·모듈
 
 - strict TypeScript·ES2022 타겟을 유지하고 상대 소스 import에 `.js` 확장자를 사용합니다.
+- TypeScript 설정은 `noEmit`으로 타입만 검사하며, 배포 JS·선언 파일은 `pnpm build`의 tsup이 생성합니다.
 - 타입 전용 참조는 `import type` 또는 `type` 지정자를, 공개 옵션은 해당 진입점의 type export를 사용합니다.
 - production 경계는 `unknown`으로 받아 검증하며 `any`를 사용하지 않습니다. 테스트의 `any` 허용은
   잘못된 런타임 입력을 검증하는 경우 등에 한정합니다.
@@ -135,7 +136,8 @@ ESLint는 [flat config](eslint.config.mjs)와 `--max-warnings=0`, 타입 검사�
 - 현재 core에 adapter를 주입하며 첫 동시 호출은 초기화 Promise를 공유합니다.
 - 디코딩의 알고리즘·버전은 wire metadata로 판별합니다. 호출별 처리 비활성화와 크기 제한은
   해당 공개 옵션의 계약에 따라 별도로 적용합니다.
-- 사용자가 `adapter` 또는 `adapterFactory`를 주입하면 자동 adapter보다 우선합니다.
+- 사용자 `adapter` → `adapterFactory` → `asyncAdapterFactory` → 자동 adapter 순으로 선택합니다.
+  factory의 객체가 아닌 결과는 캐시하지 않고 오류로 거부하며 다음 호출에서 재시도합니다.
 - `Ddu64.create()`는 별도 import 없이 adapter를 먼저 준비하는 명시적 eager 경로입니다.
   Node에서는 준비 후 동기 secure 호출을 허용하고 브라우저는 계속 비동기 호출만 지원합니다.
 
@@ -226,26 +228,39 @@ Playwright를 갱신하면 해당 버전의 브라우저 바이너리도 다시 
 
 ## 성능·크기·안전성
 
-- `pnpm bench:latency`는 대표 크기·문자열/바이너리·동시 호출을 기존 API와 간편 API에서
-  교대 측정합니다. 기본 20표본의 원시 시간·경험적 p50/p95·관측 메모리를 JSONL로 기록합니다.
-  `DDU_BENCH_SAMPLES`로 표본을 늘릴 수 있습니다. 타이머는 양쪽 실행을 함께 관측하며
-  transient 할당·진짜 peak RSS를 모두 포착하지는 못합니다. 다른 CPU 부하와 함께 실행하지 않습니다.
-- `pnpm bench:micro deobfuscate`처럼 이름으로 micro benchmark를 좁힐 수 있습니다.
-  `node --expose-gc --import tsx benchmarks/compare-obfuscation.ts <이전-package-디렉터리>`는
-  역난독화 전후를 비교합니다. 구버전 배포물을 무결성 검증 후 풀어서 사용합니다.
-- `node scripts/verify-compat.mjs <이전-package-디렉터리>`는 실제 구버전 배포물과 양방향
-  데이터를 교환하고 기존 export·동기 메서드·위치 인자 계약을 확인합니다.
-- hot path의 전체 크기 임시 배열·복사·반복 lookup 생성을 줄일 때는 출력 동치성과 측정 근거를
-  함께 제공합니다. 기준 커밋·런타임·입력·표본 수·측정 분모를 기록합니다.
-- `pnpm bench`는 3표본 중앙값의 호출당 시간과 원문 바이트 기준 왕복 MiB/s를 표시합니다.
-  일반 문자열 길이와 UTF-8 출력 크기를 구분하고, 직접 플랫폼 Base64·압축 가능한 텍스트·결정론적
-  난수·이미 압축된 입력을 비교합니다. 첫 KDF 측정은 새 인스턴스 기준이며 재사용 비용과 구분하고
-  프로세스 시작 비용은 포함하지 않습니다. `bench:guard`의 ASCII unpack만 인코딩 문자 수를 분모로 사용합니다.
-- 문자열의 UTF-8 변환 포함 여부와 Web Streams의 미리 변환한 byte 입력을 구분합니다.
-  footer처럼 짧은 suffix만 읽는 연산은 호출당 시간으로 비교합니다.
-- 원문·압축·출력 바이트와 UTF-16 길이를 섞지 않습니다. 표본 노이즈 수준의 시간 차이를 속도 개선으로,
-  복사 한 번 제거를 동일 크기의 최대 RSS 감소로 보고하지 않습니다.
-- 스트림 입력 상한은 출력·작업 버퍼·동시 호출을 포함한 프로세스 메모리 상한이 아닙니다.
+| 명령·스크립트             | 측정·검증 대상                                         | 출력·단위                                                               |
+| ------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `pnpm bench`              | codec, 직접 Base64, 압축 입력 특성, 최초·재사용 KDF    | 3표본 중앙값; 호출 시간·원문 기준 왕복 MiB/s·UTF-8 출력 크기            |
+| `pnpm bench:latency`      | 기존 API와 간편 API, 입력 크기·동시 호출               | JSONL; 기본 20표본의 시간·p50/p95·관측 메모리·이벤트 루프 지연          |
+| `pnpm bench:micro [이름]` | 지정한 primitive 또는 codec 경로                       | 3표본 중앙값; 호출 시간과 해당 입력 기준 MiB/s                          |
+| `pnpm bench:guard`        | 융합 비트 매핑, 전체 DDU·난독화                        | 3표본 중앙값; 원문 기준 MiB/s 하한, ASCII unpack만 인코딩 문자 수 기준  |
+| `compare-obfuscation.ts`  | 구버전 배포물과 역난독화 비교                          | 호출 시간·관측 heap 비교                                                |
+| `compare-codec.ts`        | 수정 전 소스와 codec·강제 fallback·청크·첫 난독화 비교 | JSONL; 교대 시간·p50, codec/fallback의 CPU·메모리·p95, 입력·소스 식별자 |
+| `verify-compat.mjs`       | 구버전 배포물과 양방향 호환                            | export·동기 메서드·위치 인자·데이터 교환 검증                           |
+
+비교·호환 스크립트는 다음과 같이 실행합니다. 이전 배포물은 무결성을 검증한 후 풀어서 사용합니다.
+소스 비교는 두 디렉터리의 의존성을 같은 lockfile·런타임으로 준비하며 npm 배포물 대신 소스를 전달합니다.
+
+```bash
+node --expose-gc --import tsx benchmarks/compare-obfuscation.ts <이전-package-디렉터리>
+node --expose-gc --import tsx benchmarks/compare-codec.ts <수정전-소스-디렉터리>
+node scripts/verify-compat.mjs <이전-package-디렉터리>
+```
+
+- 측정은 다른 CPU 부하와 함께 실행하지 않습니다. `DDU_BENCH_SAMPLES`로 표본을 늘릴 수 있으며
+  `bench:latency`는 최소 20개, `compare-codec`은 최소 9개입니다. p50/p95는 경험적 백분위수입니다.
+  `compare-codec`의 p95는 배치 평균의 백분위수이며 개별 호출의 지연 보장이 아닙니다.
+- `compare-codec`은 출력 동치를 확인하고 소스·lockfile·benchmark 해시를 기록합니다. 소스 해시는
+  `ObfuscationLayer.ts`·`NativeBase64FastPath.ts`·`codecUtils.ts`의 결합값이며 전체 커밋 해시가 아닙니다.
+  청크·cold-layer는 시간만 기록하며 cold-layer는 생성자＋첫 난독화 호출입니다.
+- 개선 근거에는 기준 커밋 또는 소스 식별자, 런타임, 입력·반복 횟수, 측정 분모를 남깁니다.
+  원문 바이트·UTF-8 출력·UTF-16 길이를 구분하고, footer처럼 suffix만 읽는 연산은 호출 시간으로 비교합니다.
+- 문자열의 UTF-8 변환 포함 여부와 stream의 byte 입력을 구분합니다. 최초 KDF는 새 인스턴스,
+  재사용 비용은 같은 인스턴스로 측정하며 cold import에 프로세스 시작 비용을 포함하지 않습니다.
+- 관측 heap·external·arrayBuffers는 transient 할당이나 실제 peak RSS를 모두 포착하지 못합니다.
+  타이머의 관측 범위와 GC 시점을 명시하고 노이즈 수준의 차이나 복사 제거를 전체 속도·RSS 개선으로 주장하지 않습니다.
+- hot path의 배열·복사·lookup을 줄이면 출력 동치성도 확인합니다. 스트림 입력 상한은 출력·작업 버퍼·
+  동시 호출을 포함한 프로세스 메모리 상한이 아닙니다.
 - 번들 크기는 진입점별 최소 경로, adapter 활성화 경로, 전체 lazy 그래프와 초기 정적 그래프를 구분합니다.
 - 새 runtime dependency는 표준 API로 해결할 수 없고 크기·유지보수·공급망 비용을 정량화한 경우에만
   추가합니다.
@@ -284,8 +299,5 @@ GitHub Release tag는 `v${package.json.version}`이어야 하며 workflow가 불
 
 ## 참고
 
-- 최근 공식 자료와 이 프로젝트의 채택·보류 판단: [설계 검토](docs/DECISIONS.md#최근-공식-동향과-적용-판단)
+- 구조·최적화의 채택·보류 판단: [설계 결정](docs/DECISIONS.md#최적화-보류와-재검토-조건)
 - [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
-- 에이전트 지침은 작업별 문서 선택과 완료 기준을 명시합니다. 모델별 세부 실행 순서를 강제하지 않는
-  방향은 [OpenAI의 스킬·프롬프트 검토 지침](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra)을
-  참고했습니다. 프로젝트의 API·wire·검증 계약은 모델과 관계없이 유지합니다.

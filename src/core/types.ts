@@ -169,7 +169,7 @@ export interface KeyDerivationOptions {
  * 인코딩 + 한글 난독화(재미 풀세트)에 필요한 옵션을 포함합니다.
  */
 export interface DduBaseOptions {
-  /** 최대 디코딩 바이트 수 (Zip Bomb 방어) */
+  /** 비트 디코딩 결과의 최대 바이트 수. 압축 해제 출력은 maxDecompressedBytes로 제한합니다. */
   maxDecodedBytes?: number;
   /**
    * 최대 디코딩 입력(인코딩 문자열) 길이(문자 수). 청크/개행 제거 등 전처리 이전에

@@ -53,7 +53,11 @@ export class Ddu64Secure extends Ddu64Core {
         ...resolved.dduOptions,
         ...(resolved.dduChar !== undefined ? { dduChar: resolved.dduChar } : {}),
         ...(resolved.paddingChar !== undefined ? { paddingChar: resolved.paddingChar } : {}),
-        adapterFactory: resolved.dduOptions?.adapterFactory ?? (() => new NodeAdapter()),
+        adapterFactory:
+          resolved.dduOptions?.adapterFactory ??
+          (resolved.dduOptions?.asyncAdapterFactory === undefined
+            ? () => new NodeAdapter()
+            : undefined),
         obfuscationLayerFactory:
           resolved.dduOptions?.obfuscationLayerFactory ??
           ((alphabet) => new HangulObfuscationLayer(alphabet)),

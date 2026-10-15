@@ -3,10 +3,10 @@
  * (과거 초안 명칭으로 불렸으나 폐기된 KDF envelope와는 무관.)
  *
  * 체크섬 접미사만 `CHK[8hex]` → `CK[P|O][8hex]`로 바꾸고 payload+footer는 4.x와 동일합니다.
- * 따라서 기존 4.x 코덱으로 payload+footer를 생성하고(체크섬 off), scope에 따른 CRC를 계산해
- * 기대 출력을 조립합니다. 회귀 기준이 될 벡터를 고정하기 위한 스크립트입니다.
+ * 현재 소스 코덱으로 payload+footer를 생성하고(체크섬 off), scope에 따른 CRC를 계산해
+ * 기대 출력을 조립합니다. 기존 fixture는 회귀 기준이며, 재생성만으로 구버전 호환성을 증명하지 않습니다.
  *
- * 실행: npx tsx scripts/gen-scoped-checksum-vectors.ts
+ * 실행: pnpm gen:scoped-checksum-vectors
  * 출력: test/fixtures/scoped-checksum-vectors.json
  *
  * @module scripts/gen-scoped-checksum-vectors

@@ -214,6 +214,21 @@ describe("security and resource regressions", () => {
     expect(encryptedEncoder.decodeToUint8Array(encrypted)).toEqual(new Uint8Array([1, 2, 3, 4]));
   });
 
+  it("rejects overridden Uint8Array lengths before encoding or measuring bytes", async () => {
+    const encoder = createEncoder();
+    for (const length of [0, 1, 7]) {
+      const input = new Uint8Array([1, 2, 3, 4, 5, 6]);
+      Object.defineProperty(input, "length", { value: length });
+      expect(() => encoder.encode(input)).toThrow(Ddu64InvalidInputError);
+      expect(() => encoder.getStats(input)).toThrow(Ddu64InvalidInputError);
+      await expect(encoder.encodeAsync(input)).rejects.toBeInstanceOf(Ddu64InvalidInputError);
+      await expect(encoder.getStatsAsync(input)).rejects.toBeInstanceOf(Ddu64InvalidInputError);
+      expect(() => createEncoder({ keyDerivation: { salt: input } })).toThrow(
+        Ddu64InvalidInputError,
+      );
+    }
+  });
+
   it("rejects malformed constructor options before charset setup", () => {
     const invalidCases = [
       { throwOnError: "yes" },

@@ -22,7 +22,7 @@
  * @module streams/WebStreams
  */
 
-import { Ddu64Core } from "../core/Ddu64Core.js";
+import type { Ddu64Core } from "../core/Ddu64Core.js";
 import {
   buildStreamHeader,
   parseStreamHeader,
@@ -319,8 +319,9 @@ export function createReadableDecodeStream(
             compress: options?.compress,
             compressionAlgorithm: headerMeta!.compressionAlgorithm,
             checksum: shouldChecksum,
-            chunkSize: undefined,
-            chunkSeparator: undefined,
+            // DDS1 본문에는 구분자를 넣지 않으므로 생성자 기본값으로도 제거하지 않습니다.
+            chunkSize: 0,
+            chunkSeparator: "",
           });
           textBuffer = "";
           const decoded = await pendingDecode;

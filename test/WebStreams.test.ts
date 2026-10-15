@@ -35,6 +35,7 @@ import {
 } from "../src/core/wireFormat.js";
 import {
   Ddu64ChecksumError,
+  Ddu64EncodeError,
   Ddu64DecryptionError,
   Ddu64ErrorCode,
   Ddu64LimitError,
@@ -47,11 +48,34 @@ describe.each([
   { name: "Node", Codec: Ddu64 },
   { name: "Browser", Codec: Ddu64Browser },
 ])("stream option and ownership contracts: $name", ({ Codec }) => {
+  it.each([false, true])(
+    "ignores codec chunk separators in stream payloads, checksum=%s",
+    async (checksum) => {
+      const encoder = new Codec({
+        dduChar: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        paddingChar: "=",
+        chunkSize: 2,
+        chunkSeparator: "AAAA",
+      });
+      const input = new Uint8Array([0, 0, 0, 0, 0, 64]);
+      expect(() => encoder.encode(input)).toThrow(Ddu64EncodeError);
+      const encoded = await encodeViaStream(encoder, input, { checksum });
+      expect(await decodeViaStream(encoder, encoded, { checksum, chunkSeparator: "BA" })).toEqual(
+        input,
+      );
+    },
+  );
+
   it.each([false, true])("rejects invalid encode chunks with checksum=%s", async (checksum) => {
     const detached = new Uint8Array(3);
     structuredClone(detached.buffer, { transfer: [detached.buffer] });
     const disguised = new Uint16Array(3);
     Object.defineProperty(disguised, Symbol.toStringTag, { value: "Uint8Array" });
+    class HiddenLength extends Uint8Array {
+      override get length() {
+        return 1;
+      }
+    }
     for (const chunk of [
       null,
       "abc",
@@ -60,6 +84,7 @@ describe.each([
       new Uint16Array(3),
       detached,
       disguised,
+      new HiddenLength([1, 2, 3, 4, 5, 6]),
     ]) {
       const encoder = new Codec();
       const stream = await encoder.createEncodeStream({ checksum, maxBufferedBytes: 1 });

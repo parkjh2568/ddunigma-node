@@ -35,15 +35,15 @@ type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Extends<A, B> = A extends B ? true : false;
 
-// ─── Base/Secure 포함 관계 (Req 6.2, 6.4) ────────────────────────────────────
+// ─── Base/Secure 포함 관계 ────────────────────────────────────────────────
 
 // DduSecureOptions는 DduBaseOptions를 확장한다(Base 표면을 모두 포함).
 type _SecureExtendsBase = Expect<Extends<DduSecureOptions, DduBaseOptions>>;
 
-// 별개의 명명 타입이다 — Base와 Secure는 동일하지 않다 (Req 6.5).
+// 별개의 명명 타입이다 — Base와 Secure는 동일하지 않다.
 type _DistinctOptions = Expect<Equal<Equal<DduBaseOptions, DduSecureOptions>, false>>;
 
-// ─── Base는 secure 옵션을 포함하지 않는다 (Req 6.1) ───────────────────────────
+// ─── Base는 secure 옵션을 포함하지 않는다 ─────────────────────────────────
 
 // compress/encryptionKey/checksum 등 secure 키는 Base 표면에 없다.
 type _NoCompressInBase = Expect<Equal<Extract<keyof DduBaseOptions, "compress">, never>>;

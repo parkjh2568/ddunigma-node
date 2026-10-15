@@ -66,7 +66,7 @@ describe("공개 API 에러 불변식 (plain Error 누출 0)", () => {
   const secureEncoders = () => [
     new Ddu64Secure(),
     new Ddu64Secure({ compress: true, checksum: true }),
-    new Ddu64Secure({ encryptionKey: "inv-key" }),
+    new Ddu64Secure({ encryptionKey: "inv-key", keyDerivation: { iterations: 10_000 } }),
   ];
 
   it("decode/decodeToUint8Array: 임의 문자열 입력에 타입 에러만", () => {
@@ -162,19 +162,17 @@ describe("공개 API 에러 불변식 (plain Error 누출 0)", () => {
   it("스트림 인코드 후 디코드 라운드트립은 누출 없이 동작", async () => {
     const enc = new Ddu64Secure();
     const bytes = new TextEncoder().encode("stream invariant check");
-    await assertTypedOnReject(async () => {
-      const src = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(bytes);
-          controller.close();
-        },
-      });
-      const encodedStream = src.pipeThrough(createReadableEncodeStream(enc));
-      const reader = encodedStream.getReader();
-      for (;;) {
-        const { done } = await reader.read();
-        if (done) break;
-      }
+    const src = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
     });
+    const decodedStream = src
+      .pipeThrough(createReadableEncodeStream(enc))
+      .pipeThrough(createReadableDecodeStream(enc));
+    const reader = decodedStream.getReader();
+    expect(await reader.read()).toEqual({ done: false, value: bytes });
+    expect(await reader.read()).toEqual({ done: true, value: undefined });
   });
 });

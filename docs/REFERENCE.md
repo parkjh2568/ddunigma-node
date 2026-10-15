@@ -48,6 +48,9 @@ const decodedBuffer = ddu.decodeToBuffer(encodedBytes); // Node.js 전용
 파일 형식의 BOM 제거가 필요하면 디코딩 후 애플리케이션에서 명시적으로 처리하세요.
 
 `encodeAsync`/`getStatsAsync`는 지연 사용되는 입력 바이트를 첫 await 전에 복사합니다.
+입력 `Uint8Array`의 `length`가 실제 view 길이와 다르면 `InvalidInput`으로 거부합니다.
+표준 Base64의 Node 최적화 경로도 실제 view의 버퍼·offset을 사용하며 재정의된 메타데이터로
+다른 버퍼나 바이트 범위를 인코딩하지 않습니다.
 비동기 codec 메서드의 호출 옵션도 호출 시점에 보존하므로, 반환된 Promise를 기다리는 동안
 원래 배열·옵션을 재사용할 수 있습니다. 스트림 입력은 `writer.write()`가 완료된 뒤 재사용하세요.
 
@@ -269,10 +272,8 @@ const decoded = ddu.decode(encoded);
 해당 연산이 실제로 필요한 시점에만 BrowserAdapter(WebCrypto·CompressionStream 기반)를
 동적 import합니다.
 
-패키지 root는 브라우저, Web Workers, workerd, Bun, Deno에서 browser 호환 빌드를
-선택합니다. Bun과 Deno의 `/secure`는 두 런타임이 제공하는 Node 호환 조건에 따라 Node
-빌드를 선택합니다. Web API 경로를 고정하려면 `/browser`를 명시하세요. 실제 압축·암호화
-지원 범위는 선택된 빌드와 런타임 API 구현으로 결정됩니다.
+Web API 경로를 고정하려면 `/browser`를 명시하세요. 환경별 root·`/secure` 선택은
+[진입점 표](#진입점)를 참고하세요.
 
 ```typescript
 import { Ddu64 } from "@ddunigma/node/browser";
@@ -309,9 +310,11 @@ const decodeStream = await ddu.createDecodeStream({ maxBufferedChars: 8 * 1024 *
 - `writer.write()` 완료 후 입력 `Uint8Array`/`Buffer`를 재사용해도 보관된 입력은 바뀌지 않습니다.
 - 호출별 `obfuscate`와 `onProgress`는 청크·buffered 인코딩 모두에 적용됩니다.
 - 스트림 생성 함수·메서드는 생성 호출 시점의 옵션을 보존합니다.
+- DDS1 본문에는 청크 구분자를 넣지 않으며 생성자·호출 옵션의 `chunkSeparator`로 본문을 제거하지 않습니다.
 
 encode 청크는 Buffer를 포함한 접근 가능한 `Uint8Array`, decode 청크는 문자열이어야 합니다.
-배열·DataView·다른 typed array·detached buffer는 형변환하지 않고 거부합니다. transform/flush
+배열·DataView·다른 typed array·detached buffer와 실제 view 길이와 다른 `length`를 갖는
+Uint8Array는 형변환하지 않고 거부합니다. transform/flush
 실패는 읽기와 현재 write/close에 같은 오류로 전달됩니다. 두 작업의 Promise를 모두 처리하세요.
 
 `maxBufferedBytes`와 `maxBufferedChars`는 축적 입력의 한도입니다. 합친 바이트 배열, 비동기
