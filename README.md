@@ -25,7 +25,7 @@ npm install @ddunigma/node
 다음 요구에는 잘 맞습니다.
 
 - 인코더와 디코더를 모두 통제하며 한글 또는 자체 charset 출력을 사용해야 하는 경우
-- 기존 ddunigma 출력과의 하위 호환이 필요한 경우
+- 지원하는 wire profile의 기존 데이터를 같은 charset·KDF 설정으로 복원해야 하는 경우
 - 런타임 의존성 없이 Node.js와 웹에서 같은 codec 계약을 유지하려는 경우
 - 게임, 퍼즐, 식별 표현처럼 가역 난독화의 시각적 특성이 제품 가치인 경우
 
@@ -36,8 +36,8 @@ npm install @ddunigma/node
 - 인증 토큰, 키 봉투, 장기 보관 암호문: 검증된 보안 프로토콜과 키 관리 체계를 사용하세요.
 - 제한 없는 대용량 스트리밍: 애플리케이션 프레이밍이나 전용 스트리밍 도구를 사용하세요.
 
-프리셋, 커스텀 charset, KDF 설정은 송수신 양쪽에서 함께 관리해야 합니다. 출력 포맷을
-제어할 수 없는 경계에는 이 codec을 도입하지 않는 편이 안전합니다.
+프리셋·charset·KDF 설정은 송수신 양쪽에서 함께 관리해야 합니다. 회귀 검증 기준은 npm 6.2.0이며
+2.x의 무수정 교체는 보장하지 않습니다. [호환성 범위](docs/REFERENCE.md#호환성-범위)를 확인하세요.
 
 ## Quick Start
 
@@ -89,16 +89,10 @@ const restored = await binary.decode(await binary.encode(bytes)); // Uint8Array 
 - `/secure`: adapter·Web Streams 함수·런타임별 secure 클래스를 정적으로 export하는 고급·호환 경로.
 - `/core`: 플랫폼 독립 codec/checksum에 구현을 직접 주입하는 최소 경로.
 
-Root 진입점은 평문 codec 경로에서 adapter나 Web Streams 구현을 불러오지 않습니다.
-비동기 압축·암복호화 또는 stream 메서드가 실제로 실행될 때만 해당 모듈을 동적 import해
-같은 core 인스턴스에서 사용합니다.
+root·`/browser`의 평문 경로는 adapter·Web Streams를 로드하지 않습니다. 비동기 압축·암복호화나 stream 호출에서
+필요한 모듈을 동적 import해 같은 core 인스턴스에서 사용합니다.
 
-Node에서 동기 압축·암호화가 필요하면 별도 import 대신 `Ddu64.create()`로 adapter를 먼저
-준비할 수 있습니다. 브라우저의 압축·암호화는 `create()` 사용 여부와 관계없이 비동기입니다.
-
-`/secure`는 adapter 클래스와 기존 Web Streams 함수 export를 정적으로 사용해야 하는
-고급·호환 진입점입니다. 이름은 기능 묶음을 뜻하며 프로토콜 설계, 키 저장·교환·회전,
-사용자 인증까지 대신한다는 의미는 아닙니다.
+`/secure`는 기능 묶음이며 프로토콜 설계, 키 저장·교환·회전, 사용자 인증을 대신하지 않습니다.
 
 ## 한글 난독화
 

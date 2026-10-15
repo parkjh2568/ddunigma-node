@@ -1,9 +1,10 @@
 # 범위·설계 결정 기록
 
-기존 ddunigma 데이터 호환성과 runtime dependency 0개를 우선한다. 공개 계약은
+지원하는 wire profile의 데이터 호환성과 runtime dependency 0개를 우선한다. 공개 계약은
 [REFERENCE](REFERENCE.md), 구현·측정·배포 절차는 저장소의 [CONTRIBUTING](https://github.com/parkjh2568/ddunigma-node/blob/master/CONTRIBUTING.md),
 미완료 출시 항목은 저장소의 [TASKS](https://github.com/parkjh2568/ddunigma-node/blob/master/docs/TASKS.md)에서 관리한다.
-기준 배포는 `f4eef3d`의 6.2.0이다. 아래 측정 기록은 해당 시점의 채택 근거이며 현행 성능 보장이 아니다.
+회귀 기준은 `f4eef3d`의 npm 6.2.0이다. 2.x 이행 범위는 [호환성 범위](REFERENCE.md#호환성-범위)를 따른다.
+아래 측정 기록은 해당 시점의 채택 근거이며 현행 성능 보장이 아니다.
 
 ## 제품 범위
 

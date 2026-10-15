@@ -209,7 +209,7 @@ npm에 배포된 `f4eef3d`(`v6.2.0`)의 변경입니다. GitHub Release와 npm �
   차단됩니다(공개 옵션 타입이 `DduBaseOptions`로 축소). 런타임에 우회하면 어댑터 부재로
   `Ddu64CompressionError`/`Ddu64EncryptionError`가 발생합니다.
 - **난독화는 이제 암호화 키 없이** 기본 진입점에서 바로 사용할 수 있습니다(아래 항목 참고).
-- **인코딩 출력(wire format)은 이전과 100% 동일**합니다. 기존 데이터는 그대로 디코딩됩니다.
+- 5.0.0의 같은 설정에 대한 wire format을 유지합니다.
 
 ### 난독화 암호화 의존 해제 (Behavior change)
 
@@ -221,27 +221,14 @@ npm에 배포된 `f4eef3d`(`v6.2.0`)의 변경입니다. GitHub Release와 npm �
 
 ### WASM 코덱 제거 (Breaking)
 
-WASM 가속 경로를 전면 제거하고 인코딩/디코딩 hot path를 순수 JavaScript 비트팩으로
-단일화했습니다. 측정 결과 WASM의 이득은 16KB 이상·비표준 charset·`preloadWasm()` 선행
-호출이라는 좁은 조건에서만 +10~30%로 제한적이었던 반면, Rust 툴체인·약 19KB 임베드
-바이너리·로더 상태머신·JS/Rust 이중 유지보수 비용이 컸습니다. 표준 Base64 charset은
-네이티브 Base64 fast path로 계속 가속됩니다.
+WASM 경로를 제거하고 JavaScript 비트팩으로 단일화했습니다. 기존 측정에서 이득은
+16KB 이상·비표준 charset·사전 로드 조건의 10~30%였으며, Rust·약 19KB 바이너리·로더의
+유지 비용을 줄였습니다. 표준 Base64의 네이티브 가속과 5.0.0 wire format은 유지합니다.
 
-5.0.0에 존재하던 다음 공개 API가 제거되었습니다:
+제거한 5.0.0 공개 API: `preloadWasm`·`getWasmCodec`·`getWasmCodecSync`(모든 진입점),
+`wasmThreshold` 옵션·`getCharSetInfo()` 필드, `WasmCodec` 타입.
 
-- 함수: `preloadWasm`, `getWasmCodec`, `getWasmCodecSync` (모든 진입점)
-- 생성자 옵션: `wasmThreshold`
-- 타입: `WasmCodec`
-- `getCharSetInfo()` 반환 필드: `wasmThreshold`
-
-#### 마이그레이션
-
-- `preloadWasm()` 호출은 **삭제**하면 됩니다. 사전 로드 없이 동기/비동기 인코딩이
-  그대로 동작합니다.
-- `wasmThreshold` 옵션은 **삭제**하면 됩니다. 무시되던 설정이므로 출력에 영향이 없습니다.
-- `WasmCodec` 타입 import는 **삭제**하면 됩니다.
-- **인코딩 출력(wire format)은 이전 버전과 100% 동일**합니다. 기존에 인코딩한
-  데이터는 그대로 디코딩됩니다. 재인코딩이 필요 없습니다.
+해당 import·호출·옵션·반환 필드 참조를 삭제하세요. 사전 로드와 데이터 재인코딩은 필요 없습니다.
 
 ### 암호화 디코더 기본 동작 변경 (Breaking)
 
@@ -256,9 +243,9 @@ payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `tr
 
 ### deprecated API 제거 (Breaking)
 
-- 생성자 옵션 `encoding` 및 타입 `DduTextEncoding` 제거. 런타임 문자열 처리는 항상
-  UTF-8이며 이 옵션은 동작에 영향이 없었습니다. `CharSetInfo.encoding`은 리터럴
-  `"utf-8"` 타입으로 고정됩니다.
+- 생성자 옵션 `encoding` 및 타입 `DduTextEncoding` 제거. 6.0 문자열 처리는 UTF-8로 고정하며
+  `CharSetInfo.encoding`도 `"utf-8"`입니다. 2.x의 다른 문자 인코딩은 입력 전
+  `Buffer.from(text, encoding)`, 바이트 복원 후 `.toString(encoding)`으로 처리하세요.
 - 함수 `createObfuscationLayer` 제거. 인코더 출력과 호환되지 않던 deprecated 헬퍼이며,
   대체로 `createEncoderObfuscationLayer`(footer 마커·숫자 포함) 또는 `Ddu64`의
   `obfuscate` 옵션을 사용하세요.

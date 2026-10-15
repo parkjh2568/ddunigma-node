@@ -64,11 +64,24 @@ const decodedBuffer = ddu.decodeToBuffer(encodedBytes); // Node.js 전용
 import { Ddu64, DduSetSymbol } from "@ddunigma/node";
 
 const ddu = new Ddu64();
-const legacy = new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
+const v1 = new Ddu64({ dduSetSymbol: DduSetSymbol.DDU_V1 });
 const oneCharset = new Ddu64({ dduSetSymbol: DduSetSymbol.ONECHARSET });
 ```
 
 `dduSetSymbol`은 enum 멤버(`DduSetSymbol.DDU`)와 문자열 리터럴(`"ddu"`) 모두 받습니다.
+
+## 호환성 범위
+
+6.3.0은 npm 6.2.0의 같은 charset·옵션·KDF 설정을 회귀 검증한다. 2.x의 무수정 교체는 보장하지 않는다.
+
+현재 `DDU`는 64문자·6비트 직접 매핑이다. `DDU_V1`은 8문자·6비트 쌍 표현으로,
+npm 2.0.2·2.2.0의 8문자·3비트 기본 DDU와 다르다. 잘못된 문자표로 읽으면 오류 없이
+다른 바이트를 반환할 수 있어 이름이나 디코딩 성공만으로 형식을 추정하지 않는다.
+
+2.x의 zlib wrapper 압축은 현재 raw DEFLATE와 다르다. `TWOCHARSET`·`THREECHARSET`,
+`BaseDdu`·`encoding`·`useBuildErrorReturn`과 2.2.0의 `DduPipeline`·Node Transform API도
+그대로 사용할 수 없다. 2.2.0 codec 암호문의 SHA-256 파생과 현재 기본 PBKDF2도 구분한다.
+기존 데이터는 실제 생성 버전·설정으로 복원한 뒤 현재 codec으로 재인코딩한다.
 
 ## 커스텀 charset
 

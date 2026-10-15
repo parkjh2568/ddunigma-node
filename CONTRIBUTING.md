@@ -236,7 +236,7 @@ Playwright를 갱신하면 해당 버전의 브라우저 바이너리도 다시 
 | `pnpm bench:guard`        | 융합 비트 매핑, 전체 DDU·난독화                        | 3표본 중앙값; 원문 기준 MiB/s 하한, ASCII unpack만 인코딩 문자 수 기준  |
 | `compare-obfuscation.ts`  | 구버전 배포물과 역난독화 비교                          | 호출 시간·관측 heap 비교                                                |
 | `compare-codec.ts`        | 수정 전 소스와 codec·강제 fallback·청크·첫 난독화 비교 | JSONL; 교대 시간·p50, codec/fallback의 CPU·메모리·p95, 입력·소스 식별자 |
-| `verify-compat.mjs`       | 구버전 배포물과 양방향 호환                            | export·동기 메서드·위치 인자·데이터 교환 검증                           |
+| `verify-compat.mjs`       | npm 6.2.0 기준 배포물과 양방향 호환                    | export·공개 메서드·위치 인자·데이터 교환 검증                           |
 
 비교·호환 스크립트는 다음과 같이 실행합니다. 이전 배포물은 무결성을 검증한 후 풀어서 사용합니다.
 소스 비교는 두 디렉터리의 의존성을 같은 lockfile·런타임으로 준비하며 npm 배포물 대신 소스를 전달합니다.
@@ -246,6 +246,10 @@ node --expose-gc --import tsx benchmarks/compare-obfuscation.ts <이전-package-
 node --expose-gc --import tsx benchmarks/compare-codec.ts <수정전-소스-디렉터리>
 node scripts/verify-compat.mjs <이전-package-디렉터리>
 ```
+
+`verify-compat.mjs`는 공식 6.2.0 배포물만 기준으로 받으며 다른 버전은 import 전에 거부합니다.
+2.x의 전체 API·데이터 호환성 판정기로 사용하지 않습니다. 기준 배포를 바꿀 때는 공개 표면·
+프리셋·압축·암호화·스트림 형식과 검사 범위를 함께 검토합니다.
 
 - 측정은 다른 CPU 부하와 함께 실행하지 않습니다. `DDU_BENCH_SAMPLES`로 표본을 늘릴 수 있으며
   `bench:latency`는 최소 20개, `compare-codec`은 최소 9개입니다. p50/p95는 경험적 백분위수입니다.
