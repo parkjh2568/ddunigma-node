@@ -9,6 +9,64 @@ function expectOwnedBytes(value: Uint8Array): void {
 describe("NodeAdapter", () => {
   const adapter = new NodeAdapter();
 
+  it.each(["buffer", "byteOffset", "byteLength"])(
+    "uses actual subview bytes when %s metadata is shadowed",
+    async (field) => {
+      for (const backing of [
+        new Uint8Array(256),
+        Buffer.alloc(256),
+        new Uint8Array(new SharedArrayBuffer(256)),
+        Buffer.from(new SharedArrayBuffer(256)),
+      ]) {
+        backing.fill(65, 32, 160);
+        const input = backing.subarray(32, 160);
+        const expected = new Uint8Array(input);
+        Object.defineProperty(input, field, {
+          get() {
+            throw new Error(`shadowed ${field} must not be read`);
+          },
+        });
+
+        for (const algorithm of ["deflate", "brotli"] as const) {
+          const syncCompressed =
+            algorithm === "deflate"
+              ? adapter.deflateSync(input)
+              : adapter.brotliCompressSync(input);
+          expect(
+            algorithm === "deflate"
+              ? adapter.inflateSync(syncCompressed)
+              : adapter.brotliDecompressSync(syncCompressed),
+          ).toEqual(expected);
+          const compressed =
+            algorithm === "deflate"
+              ? await adapter.deflate(input)
+              : await adapter.brotliCompress(input);
+          const compressedBacking =
+            backing instanceof Buffer
+              ? Buffer.alloc(compressed.length + 32)
+              : new Uint8Array(compressed.length + 32);
+          compressedBacking.set(compressed, 16);
+          const compressedInput = compressedBacking.subarray(16, 16 + compressed.length);
+          Object.defineProperty(compressedInput, field, {
+            get() {
+              throw new Error(`shadowed compressed ${field} must not be read`);
+            },
+          });
+          expect(
+            algorithm === "deflate"
+              ? adapter.inflateSync(compressedInput)
+              : adapter.brotliDecompressSync(compressedInput),
+          ).toEqual(expected);
+          expect(
+            algorithm === "deflate"
+              ? await adapter.inflate(compressedInput)
+              : await adapter.brotliDecompress(compressedInput),
+          ).toEqual(expected);
+        }
+      }
+    },
+  );
+
   describe("capability flags", () => {
     it("reports correct runtime", () => {
       expect(adapter.runtime).toBe("node");

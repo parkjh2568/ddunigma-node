@@ -40,6 +40,11 @@ const inflateRawAsync = promisify(inflateRaw);
 const brotliCompressAsync = promisify(zlibBrotliCompress);
 const brotliDecompressAsync = promisify(zlibBrotliDecompress);
 const pbkdf2Async = promisify(pbkdf2);
+const {
+  buffer: { get: typedArrayBuffer },
+  byteOffset: { get: typedArrayByteOffset },
+  byteLength: { get: typedArrayByteLength },
+} = Object.getOwnPropertyDescriptors(Object.getPrototypeOf(Uint8Array.prototype));
 
 /**
  * 압축 해제 중 발생한 에러가 출력 크기 제한 초과면 표준 메시지로 다시 던지고,
@@ -62,12 +67,13 @@ function rethrowDecompressLimitError(e: unknown, maxBytes: number, label: string
 }
 
 function toBufferView(data: Uint8Array): Buffer {
-  if (Buffer.isBuffer(data)) return data;
-  // SharedArrayBuffer는 일부 Node.js native API에서 거부될 수 있으므로 복사
-  if (data.buffer instanceof SharedArrayBuffer) {
+  const buffer = typedArrayBuffer!.call(data);
+  // 일반 SAB view는 native API를 위해 복사하되 기존 Buffer의 zero-copy 경로는 유지합니다.
+  if (buffer instanceof SharedArrayBuffer && !Buffer.isBuffer(data)) {
     return Buffer.from(data);
   }
-  return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  // Buffer도 byteLength를 재정의할 수 있으므로 실제 범위의 새 view를 전달합니다.
+  return Buffer.from(buffer, typedArrayByteOffset!.call(data), typedArrayByteLength!.call(data));
 }
 
 /**

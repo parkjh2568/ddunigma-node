@@ -510,6 +510,52 @@ describe("security and resource regressions", () => {
     expect(encoder.decode(input, { maxDecodedBytes: 8, maxEncodedChars: 2500 })).toBe("");
   });
 
+  it.each([undefined, 8, 16, Infinity])(
+    "preserves an explicit constructor character limit with call byte limit %s",
+    async (maxDecodedBytes) => {
+      const encoder = createEncoder({ maxDecodedBytes: 8, maxEncodedChars: 2500 });
+      const input = "\n".repeat(2000);
+      const options = { maxDecodedBytes };
+      expect(encoder.decode(input, options)).toBe("");
+      expect(encoder.decodeToUint8Array(input, options)).toEqual(new Uint8Array());
+      await expect(encoder.decodeAsync(input, options)).resolves.toBe("");
+      await expect(encoder.decodeToUint8ArrayAsync(input, options)).resolves.toEqual(
+        new Uint8Array(),
+      );
+
+      const smaller = createEncoder({ maxDecodedBytes: 8, maxEncodedChars: 100 });
+      expect(() => smaller.decode(input, options)).toThrow(Ddu64LimitError);
+      await expect(smaller.decodeAsync(input, options)).rejects.toThrow(Ddu64LimitError);
+    },
+  );
+
+  it.each([16, Infinity])(
+    "tightens the character limit when a call lowers constructor byte limit %s",
+    async (constructorLimit) => {
+      const encoder = createEncoder({ maxDecodedBytes: constructorLimit, maxEncodedChars: 2500 });
+      const input = "\n".repeat(2000);
+      expect(() => encoder.decode(input, { maxDecodedBytes: 8 })).toThrow(Ddu64LimitError);
+      await expect(encoder.decodeAsync(input, { maxDecodedBytes: 8 })).rejects.toThrow(
+        Ddu64LimitError,
+      );
+      expect(encoder.decode(input, { maxDecodedBytes: 8, maxEncodedChars: 2500 })).toBe("");
+      await expect(
+        encoder.decodeAsync(input, { maxDecodedBytes: 8, maxEncodedChars: 2500 }),
+      ).resolves.toBe("");
+    },
+  );
+
+  it("accepts bounded binary output with an explicit constructor character limit", async () => {
+    const encoder = new Ddu64Core("AB", "=", {
+      maxDecodedBytes: 300,
+      maxEncodedChars: 2400,
+    });
+    const bytes = new Uint8Array(300);
+    const encoded = encoder.encode(bytes);
+    expect(encoder.decodeToUint8Array(encoded)).toEqual(bytes);
+    await expect(encoder.decodeToUint8ArrayAsync(encoded)).resolves.toEqual(bytes);
+  });
+
   it("lets call-level chunkSize zero disable constructor chunking", () => {
     const encoder = new Ddu64Core({ chunkSize: 4, chunkSeparator: "\n" });
     const input = "hello world payload";

@@ -1,376 +1,114 @@
 # Changelog
 
-이 프로젝트의 주요 변경 사항을 기록합니다.
+버전별 사용자 영향과 이행 사항을 기록합니다. 현재 사용법은 [REFERENCE](docs/REFERENCE.md),
+구조·측정 근거는 [DECISIONS](docs/DECISIONS.md)를 참고하세요.
 
 ## Unreleased — 6.3.0
 
-- root와 `/browser`에 `createDdu()`를 추가했습니다. 생성 시 옵션을 지정하고 항상
-  `await ddu.encode()`·`await ddu.decode()`를 사용합니다. `output: "bytes"`는 바이너리를
-  반환하며 기존 `Ddu64`의 동기/비동기 API와 저장 형식은 유지됩니다.
-- 브라우저 동기 secure 호출의 오류 안내를 수정하고, 실제 adapter 선택·간편 API의 입력 보존·
-  동시 초기화·packed ESM/CJS·타입·브라우저 검증을 보강했습니다.
-- 역난독화의 문자 매핑용 임시 배열을 최대 8,192개 문자열로 제한했습니다. 여러 코드 유닛으로 된 custom
-  alphabet과 기존 오류 위치·wire 출력을 유지합니다.
-- 청크 구분자의 경계 중첩에 따른 데이터 손상을 거부하고, 스트림 청크 타입·detached buffer를
-  길이 검사 전에 검증합니다. 실제 view와 다른 `Uint8Array.length`도 거부해 데이터 누락과
-  스트림 크기 한도 오계산을 방지합니다. transform/flush 실패는 읽기와 write/close 양쪽에 전달합니다.
-- `onProgress`의 Promise/thenable 반환을 `InvalidInput`으로 거부하며 rejection을 처리합니다.
-  생성·동기 가드·오류 메시지 변환·브라우저 복호화에서 예외 원인을 보존하고 ESM/CJS 오류를 함께 식별합니다.
-- 동기·비동기 factory의 잘못된 adapter 결과를 캐시하지 않고 secure의 사용자 비동기 factory를 존중합니다.
-  스트림 본문에서 생성자 청크 구분자를 제거하지 않으며 CharsetBuilder의 큰 입력을 인자 한도 없이 처리합니다.
-- Node의 native Base64 경로가 재정의된 `buffer`·`byteOffset`·`byteLength` 대신 실제 Uint8Array view를
-  사용해 입력 누락과 다른 버퍼 출력 문제를 방지합니다. 단일 호출 변환 중계는 기존 함수에 통합했습니다.
-- 난독화의 사용 문자 조회를 숫자 키로 재사용하고, native Base64가 없는 환경의 중복 검증 순회를
-  줄였습니다. 청크 분할의 임시 배열 슬롯도 줄이며 기존 출력·오류·크기 제한은 유지합니다.
+- root·`/browser`에 `createDdu()` 추가. 생성 시 정책을 고정하고 encode/decode는 항상
+  Promise를 반환합니다. `output: "bytes"`는 Uint8Array를 반환합니다. 기존 Ddu64·wire는 유지합니다.
+- 간편 API의 입력 보존·동시 초기화·packed ESM/CJS·타입·브라우저 검증을 보강했습니다.
+- 잘못된 청크 구분자의 경계 중첩을 거부하고, 스트림 타입·detached buffer·실제 view와 다른
+  `Uint8Array.length`를 검증합니다. transform/flush 오류를 읽기와 write/close 양쪽에 전달합니다.
+- Promise/thenable을 반환하는 progress callback을 거부하고 rejection을 처리합니다.
+  생성·동기 가드·메시지 변환·브라우저 복호화의 cause와 ESM/CJS 오류 식별을 보존합니다.
+- 잘못된 adapter factory 결과를 캐시하지 않으며 secure의 사용자 비동기 factory를 존중합니다.
+  브라우저 동기 secure 호출의 오류 안내도 수정했습니다.
+- DDS1 본문을 생성자 청크 구분자로 제거하지 않도록 하고, CharsetBuilder의 큰 입력 처리를 수정했습니다.
+- Node native Base64·압축·압축 해제가 재정의된 메타데이터 대신 실제 view의 버퍼·offset·길이를 사용합니다.
+- 생성자에 명시한 `maxEncodedChars`를 보존하며, 호출별 바이트 한도를 낮출 때만 자동 축소합니다.
+- 난독화·역난독화의 lookup·임시 버퍼, native 부재 시 중복 순회, 청크 배열을 줄였습니다.
+  다중 코드 유닛 난독화 alphabet·오류 위치·출력·입력 보존·한도는 유지합니다.
 
 ## 6.2.0 - 2026-09-17
 
-npm에 배포된 `f4eef3d`(`v6.2.0`)의 변경입니다. GitHub Release와 npm 배포 상태는 별개입니다.
+npm 배포 기준은 `f4eef3d`(`v6.2.0`)입니다. GitHub Release와 npm 게시 상태는 별개입니다.
 
-### 정확성·입력 보존
-
-- 숫자 `paddingChar`와 `useRepeatPadding:true` 조합이 자기 출력을 디코딩하지 못하던 문제를
-  수정했습니다. payload 경계와 바이트 정렬로 숫자 footer와 반복 패딩을 구별합니다.
-- 커스텀 charset의 본문 끝과 padding이 `V3`·`ENC` 같은 마커처럼 보일 때 정상 payload를
-  잘못 제거하던 footer 파싱을 수정했습니다. 압축 마커 충돌에서도 정상 ENC/V3/V4 정보를
-  보존하며, 실제 암호문 고정 벡터로 Node·브라우저 디코딩을 검증합니다.
-- 비동기 codec의 입력 바이트·호출 옵션과 스트림 생성 옵션을 보존해, 호출 후 버퍼·옵션 재사용이
-  출력·checksum·압축 해제 제한을 바꾸지 않도록 했습니다.
-- output checksum을 검증하는 decode의 진행률 역행을 수정했습니다. 검증 순서는 유지합니다.
-- 청크 스트림에서 호출별 `obfuscate`와 `onProgress`가 누락되던 문제를 수정했습니다.
-- 스트림의 buffered 입력과 잔여 바이트를 독립 복사해 `write()` 이후 `Uint8Array`/`Buffer`
-  재사용으로 데이터가 바뀌지 않도록 했습니다.
-- `Ddu64.create()`가 adapter 초기화를 기다리기 전에 charset·coda·KDF 설정과 salt를
-  보존하며, 공개 `HangulObfuscationLayer`도 생성 당시 alphabet을 유지합니다.
-- 빈 charset 심볼을 거부하고, fallback 후 최종 preset의 비트폭·패딩 프로필을 일관되게
-  적용합니다. 줄바꿈이 포함된 커스텀 청크 구분자도 정상 제거합니다.
-- 문자열 디코딩이 선두 `U+FEFF`(UTF-8 BOM)를 제거하던 문제를 수정했습니다. 이제 원문을
-  보존하며, 종전의 BOM 제거가 필요한 사용자는 애플리케이션에서 명시적으로 처리해야 합니다.
-  인코딩 wire format과 바이트 디코딩 결과는 바뀌지 않습니다.
-
-### 성능·검증
-
-- 문자열 통계의 UTF-8 변환과 원문 크기 기록을 인코딩 파이프라인에서 한 번만 처리해
-  `getStatsAsync`의 중복 입력 복사를 제거했습니다. 외부 바이트 입력 보존과 통계 단위는 유지합니다.
-- 스트림 flush에서 합친 버퍼가 준비되면 원래 청크 참조를 해제하고, 실패 시 축적 상태를 정리합니다.
-- Chromium·Firefox·WebKit 엔진 smoke를 추가해 브라우저 조건부 export, Base64 대체 경로,
-  비동기 입력 보존, Web Streams와 Node↔브라우저 압축·암호화 호환을 검증합니다.
-- 기본 CI를 Node 24로 이동하고 Node 22·26 호환 검증을 유지합니다. 벤치마크는 직접 Buffer
-  Base64 기준선, 난수·이미 압축된 입력, UTF-8 출력 크기, 첫 KDF·인스턴스 재사용 비용을 구분하며,
-  전체 DDU·난독화 경로도 성능 가드에 포함합니다.
-- 난독화 문자열 생성을 최대 8,192개 코드 유닛 단위로 처리해 전체 크기의 임시 문자열 배열을
-  제거했습니다. 위치별 매핑과 기존 출력은 유지합니다.
-- Node AES-GCM의 중간 `Buffer.concat` 복사를 제거하고, 작은 non-pow2 입력의 문자열 생성
-  버퍼를 실제 출력 크기로 제한했습니다. 인증 검증과 독립 결과 버퍼 계약은 유지합니다.
-- 벤치마크 출력 소비·MiB/s 단위·측정 분모를 정리하고 크기별 난독화·AES·Node/browser codec
-  측정을 추가했습니다. Bun/Deno smoke는 실제 패키지 root와 `/secure` export도 검증합니다.
-
-### 단일 root 기능 활성화
-
-- `@ddunigma/node`와 `/browser`의 `Ddu64`에 `createEncodeStream()`과
-  `createDecodeStream()`을 추가했습니다. Web Streams 구현은 메서드 호출 시점에만 동적
-  import되며, 기존 `/secure` 함수 export는 그대로 유지됩니다.
-- `Ddu64.create(options)` 비동기 팩토리를 추가했습니다. Node root는 adapter를 미리 준비해
-  별도 `/secure` import 없이 동기 압축·암호화를 사용할 수 있고, 브라우저는 준비된 adapter로
-  비동기 연산을 수행합니다.
-- root와 browser에서 `DduStreamOptions`를 export합니다. 기존 생성자, 메서드, subpath와 wire
-  format은 변경되지 않습니다.
-
-### 문서·패키징
-
-- 크기 통계와 진행률의 단위, 커스텀 charset 기본 길이, URL-safe의 비표준 치환 규칙,
-  Unicode 정규화와 스트림 메모리 한도를 실제 예제로 명확히 했습니다.
-- 불필요한 내부 기본 옵션 객체와 고정 파이프라인 버전 전달을 제거하고, 단일 호출 푸터 중계
-  함수를 호출부에 통합했습니다. 디코딩 스트림의 동기 transform에서도 불필요한 async를 제거했습니다.
-- 저장소 이력에 있던 원작자 저작권 고지를 현재 고지와 함께 LICENCE에 보존했습니다.
-- 이 라이브러리가 적합한 사용 사례와 표준 Base64·보안 프로토콜·대용량 스트리밍이 더 적합한
-  경계를 README와 API reference에 명시했습니다.
-- `/secure`를 기능 묶음으로 정의하고, 난독화·CRC32의 한계, 압축 후 암호화의 길이 기반 정보
-  노출 위험, 애플리케이션 키 관리 책임을 문서와 공개 타입 JSDoc에 보강했습니다.
-- 브라우저, Workers, workerd, Bun, Deno의 조건부 진입점 선택을 문서화하고, 범위 기록을
-  `docs/DECISIONS.md`로 정리했습니다.
-- npm 배포물에서 개발자 전용 `CONTRIBUTING.md`를 제외하고 사용자용 reference와 결정 기록만
-  유지하도록 pack 검증을 갱신했습니다. 공개 API와 wire format은 변경되지 않습니다.
+- 숫자 padding·반복 padding 및 본문과 충돌하는 V3·ENC·압축 marker의 footer 파싱을 수정했습니다.
+  정상 암호화·버전 정보를 보존하며 실제 암호문 벡터로 검증합니다.
+- 비동기 입력·호출 옵션·생성자 charset/coda/KDF salt·난독화 alphabet을 지연 사용 전에 보존합니다.
+  스트림도 write 후 재사용할 입력을 복사하고 결합·실패 후 원래 참조를 정리합니다.
+- 청크 스트림의 호출별 난독화·progress와 output checksum decode의 진행률 역행을 수정했습니다.
+- 빈 charset 심볼을 거부하고 fallback preset의 비트폭·패딩을 일치시킵니다. 줄바꿈 구분자도 처리합니다.
+- **BOM 보존:** decode가 선두 U+FEFF를 제거하지 않습니다. 기존 제거 동작이 필요하면
+  애플리케이션에서 명시적으로 처리하세요. wire·바이트 decode는 바뀌지 않습니다.
+- root·`/browser`에 `createEncodeStream()`·`createDecodeStream()` 추가. `/secure` 함수 export는 유지합니다.
+- `Ddu64.create(options)` 추가. Node는 adapter 준비 후 동기 압축·암호화가 가능하며 브라우저는 async입니다.
+  `DduStreamOptions`도 root·browser에서 export합니다.
+- 통계의 중복 UTF-8 변환·입력 복사, AES 중간 concat, 난독화·non-pow2 임시 버퍼를 줄였습니다.
+- Node 24 전체 검사와 Node 22·26/Bun/Deno, Chromium·Firefox·WebKit 검증을 구성했습니다.
+  성능 측정에 Base64 기준선·입력 특성·초기/재사용 KDF·UTF-8 출력 크기를 구분합니다.
+- 배포물에서 CONTRIBUTING을 제외하고 LICENCE의 원작자 고지를 보존했습니다. 크기·진행률 단위,
+  Unicode·스트림 한도·보안 경계·진입점 계약을 정리했습니다.
 
 ## 6.1.2 - 2026-09-02
 
-- `v6.1.2` 태그의 커밋 `533c9a3`에서 npm package version metadata를 `6.1.2`로 갱신했습니다.
-  해당 커밋에는 런타임 코드 변경이 없습니다.
+- `v6.1.2`의 `533c9a3`에서 package version만 갱신했습니다. 런타임 변경은 없습니다.
 
 ## 6.1.1 - 2026-09-02
 
-### 정확성·안전성
-
-- `throwOnError:false` fallback에서 padding 충돌 제거 후 charset이 1개가 되면 비트 패킹이
-  종료되지 않던 문제를 수정했습니다. 변형된 charset을 다시 검증하고 유효한 preset으로
-  fallback합니다.
-- 빈 custom charset·빈 padding·빈 coda, 유효 범위 밖 bit length, 잘못된 factory 타입을
-  명시적으로 거부합니다. 생성자 옵션과 호출 옵션을 합친 뒤의 chunk 설정도 다시 검증합니다.
-- `getStats`/`getStatsAsync`와 progress callback의 일반 오류를 공개 `Ddu64Error` 계약에 맞게
-  래핑합니다.
-- BrowserAdapter가 압축과 압축 해제 지원 여부를 각각 감지·캐시하도록 수정했습니다. 한쪽 Web
-  API만 제공하는 런타임에서도 지원되는 방향은 정상 동작합니다.
-
-### 기본 진입점 adapter 통합
-
-- `@ddunigma/node`와 `@ddunigma/node/browser`의 비동기 secure 경로가 별도 secure 인스턴스를
-  만들지 않고 현재 core에 adapter만 동적 import·주입합니다. 첫 동시 호출은 하나의 Promise를
-  공유하며, charset·KDF salt 등 생성자 상태는 생성 시점 snapshot을 유지합니다.
-- 압축된 입력은 wire metadata로 판별하므로 `decodeAsync`에 `compress:true`를 반복하지 않아도
-  lazy adapter가 로드됩니다. 명시적 `adapter`/`adapterFactory`는 자동 adapter보다 우선합니다.
-- root와 browser 진입점이 실제 메서드에서 받는 `DduOptions`/`DduConstructorOptions` 및 adapter·
-  KDF 타입을 동일하게 export합니다. 동기 압축·암호화는 계속 `/secure` 진입점을 사용합니다.
-
-### 유지보수·배포
-
-- 사용되지 않는 sync crypto 중계 모듈, 중복 테스트, 단일 호출 전달 helper와 오래된 작업 주석을
-  제거하고 현재 구조를 기준으로 `CONTRIBUTING.md`, README, API reference를 정비했습니다.
-- format check, production `any` 금지, benchmark lint/typecheck, packed ESM/CJS/browser secure smoke,
-  패키지 크기 상한, Node 22/24/26 및 Bun/Deno smoke를 릴리스 게이트에 추가했습니다.
-- npm OIDC trusted publishing workflow를 추가하고 이미 배포된 `6.1.0`과 충돌하지 않도록 패치
-  버전을 `6.1.1`로 올렸습니다.
+- padding 제거 후 1문자 charset이 남아 반복문이 종료되지 않던 fallback을 수정했습니다.
+- 빈 charset/padding/coda·무효 bit length·factory 타입과 생성자/호출 옵션 조합을 검증합니다.
+- 통계·progress 예외를 Ddu64Error로 정규화하고, 브라우저 압축·해제 가용성을 각각 감지합니다.
+- root 비동기 secure 처리가 별도 인스턴스 대신 현재 core에 adapter를 주입합니다.
+  첫 동시 초기화는 Promise를 공유하고 압축 metadata를 자동 판별합니다. 명시 adapter 설정이 우선합니다.
+- root·browser의 옵션·adapter·KDF 타입 export를 맞췄습니다. 당시 root 동기 secure는 `/secure`를 사용합니다.
+- format·lint·타입·Knip·크기·packed consumer·런타임 smoke 검증과 npm OIDC 배포를 보강했습니다.
+  이미 배포된 6.1.0과 충돌하지 않도록 패치 버전을 올렸습니다.
 
 ## 6.1.0 - 2026-07-09
 
-### 기본 진입점에 lazy secure 추가 (편의성 개선)
-
-기본 진입점(`@ddunigma/node`, `@ddunigma/node/browser`)에서 secure 옵션(`compress`,
-`encryptionKey`)이 감지된 **비동기** 호출은 이제 secure 래퍼(`Ddu64Secure`/`Ddu64SecureBrowser`)를
-`import()`로 지연 로드해 그대로 처리합니다. lean 정적 import 그래프는 유지되며(어댑터는 동적
-청크에만 포함), 순수 인코딩/난독화 경로는 종전대로 어댑터를 로드하지 않습니다.
-
-- 대상 async 메서드: `encodeAsync`/`decodeAsync`/`decodeToUint8ArrayAsync`/`decodeToBufferAsync`,
-  그리고 압축 통계용 `getStatsAsync`(Node·브라우저 대칭).
-- 동기 secure(예: `encode({ compress: true })`)는 여전히 지원하지 않으며, `encode`/`decode`/
-  `decodeToUint8Array`/`getStats`가 대칭적으로 `Ddu64AdapterError`를 던져 `encodeAsync`/
-  `decodeAsync`/`getStatsAsync` 또는 `@ddunigma/node/secure`를 안내합니다.
-- **타입 표면 변경(주의):** 기본 진입점의 공개 옵션 타입이 `DduBaseOptions` → `DduOptions`
-  (secure 전체)로 넓어졌습니다. 이에 따라 6.0의 **컴파일 단계 차단**(`encode(x, { compress: true })`가
-  타입 에러)이 **런타임 가드**로 전환됩니다. 동기 메서드에 secure 옵션을 넘기면 컴파일은
-  통과하고 호출 시 위 `Ddu64AdapterError`가 발생합니다.
-- 명시 `adapter`를 기본 진입점 생성자에 주입하면 base 코어가 sync/async secure를 직접 처리하며
-  lazy 우회 및 동기 가드가 비활성화됩니다.
-- 성능: adapter 판정을 생성 시점 boolean 캐시로 옮겨, async hot-path에서 호출마다 발생하던
-  `getCharSetInfo()` 할당(charset 배열 복사 + 정보 객체)을 제거했습니다.
+- root·`/browser`의 비동기 secure 호출이 래퍼를 lazy import하도록 했습니다.
+  encode/decode·byte/Buffer decode·압축 통계에 적용하며 평문 정적 그래프는 유지합니다.
+- 공개 옵션 타입을 DduBaseOptions에서 DduOptions로 확장했습니다. 동기 secure 옵션은 타입 검사를
+  통과해도 당시 root에서는 Ddu64AdapterError가 발생하므로 async 또는 `/secure`를 사용합니다.
+- 명시 adapter 주입은 sync/async secure를 직접 처리합니다. 매 호출의 charset 정보 복사도 제거했습니다.
 
 ## 6.0.1 - 2026-07-09
 
-- npm package version metadata를 `6.0.1`로 갱신했습니다.
+- npm package version metadata를 6.0.1로 갱신했습니다.
 
 ## 6.0.0
 
-이전 published 버전(5.0.0) 대비 호환성에 영향을 주는 변경이 포함되어 메이저로 올립니다.
+5.0.0 대비 breaking change입니다. 아래 이행 사항은 6.0 도입 당시 기준이며 현재 API는 REFERENCE를 따르세요.
 
-### 인코딩 hot path 성능 최적화 (내부 개선, 출력 불변)
+### Breaking changes와 이행
 
-한글/커스텀 charset의 인코드/디코드 hot path를 최적화했습니다. **공개 API·옵션·wire format·
-출력 바이트는 전혀 변경되지 않습니다**(기존 데이터 100% 그대로 디코딩, 재인코딩 불필요).
+| 변경                                              | 필요한 작업                                                                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 압축·암호화·체크섬·Web Streams를 `/secure`로 분리 | 당시 root 사용자는 `import { Ddu64 } from "@ddunigma/node/secure"`로 변경. 관련 adapter·stream 함수·타입 export도 이동했습니다.             |
+| root의 secure 옵션 타입 축소                      | 6.0에서는 DduBaseOptions만 허용합니다. 우회 호출도 adapter 부재로 실패합니다. 6.1 이후 변경과 구분하세요.                                   |
+| WASM 제거                                         | `preloadWasm`·`getWasmCodec`·`getWasmCodecSync`, `wasmThreshold` 옵션·정보 필드, `WasmCodec` 참조 삭제. 사전 로드·재인코딩은 필요 없습니다. |
+| 키가 있는 decoder는 암호화 footer 필수            | 기존 평문을 같은 인스턴스로 읽어야 하면 해당 decode에 `requireEncryption: false` 명시.                                                      |
+| `encoding`·`DduTextEncoding` 제거, UTF-8 고정     | 2.x의 다른 문자 인코딩은 입력 전 `Buffer.from(text, encoding)`, 바이트 복원 후 `.toString(encoding)` 사용.                                  |
+| `createObfuscationLayer` 제거                     | `createEncoderObfuscationLayer` 또는 Ddu64의 `obfuscate` 사용.                                                                              |
+| adapter capability 플래그 제거                    | `supportsSyncCrypto`·`supportsSyncCompression`·`supportsBrotli` 대신 실제 메서드 존재로 판단.                                               |
+| `PlatformAdapter.randomBytes` 선택 메서드화       | 직접 호출 코드는 `adapter.randomBytes?.(...)`로 변경. 기본 adapter는 계속 제공합니다.                                                       |
+| 최소 Node 22                                      | 배포 런타임을 Node 22 이상으로 변경.                                                                                                        |
 
-- `IndexStringMapper`의 `packPow2ToString`/`unpackPow2FromString`에 `bitLength === 6`/`=== 8`
-  직접 매핑 언롤 융합 분기를 추가했습니다. 6비트는 3바이트↔4심볼, 8비트는 1바이트↔1심볼을
-  누산기 루프 없이 한 패스로 처리합니다. 측정상 인코드 문자열 구축 처리량이 크게 개선되고
-  (`packPow2ToString` 약 40→~183 MB/s), 디코드도 대칭 언롤로 개선됩니다(약 150→~420 MB/s).
-- 표준 base64 알파벳은 기존 네이티브 fast path(`Uint8Array.toBase64`/`fromBase64`)를 그대로
-  사용합니다. 한글 charset은 비-ASCII 출력이라 네이티브 base64 속도에는 도달할 수 없습니다.
-- 동치 보장: 융합 경로 출력이 raw 비트팩(`bitPackEncode`/`bitPackDecode`) 기준과 바이트 동치임을
-  오라클 테스트로 고정하고, property 테스트(바이트 동치/라운드트립/하위호환)와 고정 벡터로
-  회귀를 차단합니다. `bench:guard`의 처리량 하한을 개선분에 맞춰 상향했습니다.
-- `bitPackEncode`/`bitPackDecode`(및 `bitPackEncode6`/`bitPackEncode8`)는 프로덕션 hot path가
-  아니라 **동치 검증 기준(오라클)**으로 유지됩니다.
+### 동작·보안 수정
 
-### 진입점 재편 — 압축/암호화/체크섬을 `/secure`로 분리 (Breaking)
+- 난독화의 키 요구를 없앴습니다. 기존 암호문·난독화 데이터는 같은 설정으로 복원됩니다.
+- `maxEncodedChars`를 추가해 전처리 전 입력 길이를 제한합니다. 자동값은
+  `maxDecodedBytes * 4 + 1024`이며 호출별 출력 한도를 낮추면 함께 낮아집니다.
+- 빈 암호화 키와 charset/padding의 surrogate를 거부합니다. `chunkSize: 0`은 호출별 청킹 비활성화입니다.
+- decode 입력 손상은 Ddu64DecodeError, charset 설정은 Ddu64CharsetError, 크기 한도는
+  Ddu64LimitError로 구분합니다. `.code`로 분기하는 코드는 이 분류를 확인하세요.
+- 브라우저 미지원 기능은 Ddu64AdapterError로 전달합니다. 외부 오류를 메시지 키워드로 추측하지 않습니다.
+- 스트림의 키 설정은 암호화를 결정합니다. 평문 스트림은 키 없는 인스턴스를 사용하세요.
+- KDF 파라미터를 명시하고 외부에서 관리하도록 안내했습니다. 기본 파라미터·wire는 유지합니다.
 
-라이브러리의 주목적을 "재미 + 시각적 난독화"로 확정하고, 압축/암호화/체크섬/Web Streams를
-전용 진입점 `@ddunigma/node/secure`로 분리했습니다. 기본 진입점(`@ddunigma/node`,
-`@ddunigma/node/browser`)은 **인코딩 + 한글 난독화만** 제공하는 lean 빌드가 되어 어댑터
-(zlib/crypto·WebCrypto/CompressionStream)와 CRC32/압축 코드가 트리셰이킹됩니다.
+### 성능·구조·개발 환경
 
-진입점 구성(4개):
-
-- `@ddunigma/node` — Node lean(`Ddu64Node`): 인코딩 + 난독화, `decodeToBuffer` 제공.
-- `@ddunigma/node/browser` — 브라우저 lean(`Ddu64Browser`): 인코딩 + 난독화.
-- `@ddunigma/node/secure` — 배터리(`Ddu64Secure`): 압축/암호화/체크섬/Web Streams. Node/브라우저
-  조건부 빌드로 자동 선택.
-- `@ddunigma/node/core` — 코어(`Ddu64Core`): 순수 인코딩/디코딩(불변).
-
-#### 마이그레이션
-
-- 압축/암호화/체크섬/Web Streams를 사용하던 코드의 import 경로를 `@ddunigma/node` →
-  **`@ddunigma/node/secure`** 로 변경하세요. 클래스 사용법·옵션·wire format은 동일합니다.
-  ```diff
-  - import { Ddu64 } from "@ddunigma/node";
-  + import { Ddu64 } from "@ddunigma/node/secure";
-    const ddu = new Ddu64({ compress: true, encryptionKey: "k", checksum: true });
-  ```
-- `NodeAdapter`/`BrowserAdapter`/`createReadableEncodeStream`/`createReadableDecodeStream`와
-  `DduStreamOptions`/`PlatformAdapter`/`KeyDerivationOptions` 등 배터리 관련 export도
-  `@ddunigma/node/secure`로 이전되었습니다.
-- 기본 진입점에서 `encode(x, { compress: true })`처럼 secure 옵션을 호출하면 타입 단계에서
-  차단됩니다(공개 옵션 타입이 `DduBaseOptions`로 축소). 런타임에 우회하면 어댑터 부재로
-  `Ddu64CompressionError`/`Ddu64EncryptionError`가 발생합니다.
-- **난독화는 이제 암호화 키 없이** 기본 진입점에서 바로 사용할 수 있습니다(아래 항목 참고).
-- 5.0.0의 같은 설정에 대한 wire format을 유지합니다.
-
-### 난독화 암호화 의존 해제 (Behavior change)
-
-`obfuscate: true`가 더 이상 `encryptionKey`를 요구하지 않습니다. 키 없이 난독화 인코딩이
-정상 동작하며, 역난독은 디코더의 키 보유 여부와 무관합니다(난독 알파벳이 charset·패딩·푸터
-마커·숫자로 키 비의존적으로 구성). 기존에 "난독화는 암호화 필요" 제약으로 던지던 예외
-2곳(`Ddu64Core` 생성자, `shouldObfuscate()`)이 제거되었습니다. 기존 "암호문 + 난독" 데이터는
-동일 키로 기존과 동일하게 복원됩니다.
-
-### WASM 코덱 제거 (Breaking)
-
-WASM 경로를 제거하고 JavaScript 비트팩으로 단일화했습니다. 기존 측정에서 이득은
-16KB 이상·비표준 charset·사전 로드 조건의 10~30%였으며, Rust·약 19KB 바이너리·로더의
-유지 비용을 줄였습니다. 표준 Base64의 네이티브 가속과 5.0.0 wire format은 유지합니다.
-
-제거한 5.0.0 공개 API: `preloadWasm`·`getWasmCodec`·`getWasmCodecSync`(모든 진입점),
-`wasmThreshold` 옵션·`getCharSetInfo()` 필드, `WasmCodec` 타입.
-
-해당 import·호출·옵션·반환 필드 참조를 삭제하세요. 사전 로드와 데이터 재인코딩은 필요 없습니다.
-
-### 암호화 디코더 기본 동작 변경 (Breaking)
-
-`encryptionKey`가 설정된 인스턴스는 이제 **기본적으로 암호화 footer가 없는 평문
-payload를 거부**합니다(`requireEncryption` 기본값이 키 보유 시 `true`). 키를 가진
-디코더가 인증되지 않은 평문을 무비판적으로 수용하던 다운그레이드 위험을 차단합니다.
-
-#### 마이그레이션
-
-- 같은 인스턴스로 레거시 평문을 디코딩해야 하면 호출에 `requireEncryption: false`를
-  명시하세요.
-
-### deprecated API 제거 (Breaking)
-
-- 생성자 옵션 `encoding` 및 타입 `DduTextEncoding` 제거. 6.0 문자열 처리는 UTF-8로 고정하며
-  `CharSetInfo.encoding`도 `"utf-8"`입니다. 2.x의 다른 문자 인코딩은 입력 전
-  `Buffer.from(text, encoding)`, 바이트 복원 후 `.toString(encoding)`으로 처리하세요.
-- 함수 `createObfuscationLayer` 제거. 인코더 출력과 호환되지 않던 deprecated 헬퍼이며,
-  대체로 `createEncoderObfuscationLayer`(footer 마커·숫자 포함) 또는 `Ddu64`의
-  `obfuscate` 옵션을 사용하세요.
-
-### PlatformAdapter 슬림화 (Breaking)
-
-- `PlatformAdapter`에서 introspection 전용 capability 플래그 `supportsSyncCrypto`,
-  `supportsSyncCompression`, `supportsBrotli`를 **제거**했습니다. 코어 파이프라인은 이
-  플래그가 아니라 실제 메서드 존재 여부(`encryptSync`/`deriveKeySync`/`brotliCompressSync`
-  등)로 가용성을 판단하므로 동작에 영향이 없습니다.
-- `randomBytes`를 **선택(optional) 메서드로 변경**했습니다. 코어 파이프라인이 호출하지 않는
-  편의 메서드이므로(각 어댑터가 암호화 IV를 내부에서 직접 생성) 커스텀 어댑터는 구현하지
-  않아도 됩니다. `NodeAdapter`/`BrowserAdapter`는 계속 제공합니다.
-- 마이그레이션: 커스텀 어댑터에서 위 capability 플래그·`randomBytes`를 더 이상 구현할 필요가
-  없습니다. `PlatformAdapter` 타입으로 `adapter.randomBytes(...)`를 호출하던 코드는 옵셔널
-  호출(`adapter.randomBytes?.(...)`)로 바꾸세요.
-
-### 키 파생(KDF) 포지셔닝 (정책 명시, 포맷 변경 없음)
-
-- 본 라이브러리의 AES-256-GCM 암호화는 **부가 기능**이며 단독 보안 솔루션이 아님을
-  README에 명시했습니다. 기본 PBKDF2 210k + 고정 기본 salt는 저엔트로피 키에 충분치
-  않으므로(OWASP는 PBKDF2-HMAC-SHA256 ≥600k 권고) 애플리케이션 고유 `salt`와 높은
-  `iterations` 지정을 권장합니다. 자기기술 KDF envelope는 설계 결정 기록에서 범위 밖으로
-  결정(현행 암호화·포맷 불변).
-
-### 입력 크기 한도 추가 (보안 강화)
-
-- 디코드 입력(인코딩 문자열) 길이 상한 `maxEncodedChars` 옵션 추가. 청크/개행 제거 등
-  전처리 **이전에** 선검사하여, 개행만 가득한 거대한 입력이 출력 한도(`maxDecodedBytes`)를
-  우회하면서 대량 문자열 복사를 유발하던 문제를 차단합니다. 자동값은
-  `maxDecodedBytes×4+1024` 문자이며 호출 단위로 출력 한도를 낮추면 함께 낮아집니다.
-
-### 기타 변경
-
-- `encryptionKey: ""`(빈 문자열)를 생성/옵션 검증에서 거부합니다. 이전에는 빈 키가
-  평문 인코딩을 만들면서 키 보유 디코더는 이를 거부해 라운드트립이 깨졌습니다.
-- charset/패딩에 짝 없는 surrogate 코드 유닛(U+D800–U+DFFF) 사용을 거부합니다
-  (UTF-8/URL/JSON 경계에서 손상 방지).
-- `chunkSize: 0`이 청킹 비활성화의 명시적 값이 되었습니다. 생성자에 `chunkSize`
-  기본값이 있어도 호출 단위로 `chunkSize: 0`을 주어 끌 수 있습니다(스트림 내부에서 사용).
-
-### 내부 개선
-
-- **에러 분류를 발생 지점으로 이전 (메시지 키워드 추측 제거)**: 내부 모듈이 실패 지점에서
-  도메인 타입 에러(`Ddu64DecodeError`/`Ddu64LimitError`/`Ddu64DecryptionError`/
-  `Ddu64ObfuscationError`/`Ddu64EncodeError`/`Ddu64InvalidInputError`)를 **직접 throw**하도록
-  전환하고, `wrapDdu64Error`의 메시지 키워드 기반 분류 휴리스틱을 제거했습니다. 이제
-  `wrapDdu64Error`는 "이미 `Ddu64Error`면 통과, 그 외는 operation 기반 fallback"만 수행합니다.
-  분류 책임이 단일 진실 소스(발생 지점)로 모여 메시지 문구 변경에 의한 타입 드리프트가
-  구조적으로 차단됩니다. **에러 메시지·wire format·인코딩/디코딩 출력은 불변**입니다.
-  - 디코드 입력 손상(무효 문자/인덱스, 잘린 심볼 쌍, 정렬·패딩·비트길이 오류)의 에러 타입이
-    이전의 혼재(`Ddu64CharsetError`/`Ddu64LimitError` 등)에서 **`Ddu64DecodeError`로 일관**되게
-    정리되었습니다. charset _설정_ 오류만 `Ddu64CharsetError`로 남습니다. 디코드 입력 길이/출력
-    크기 한도 초과는 `Ddu64LimitError`입니다. (`.code`로 분기하던 코드는 이 의미 정리에 맞춰
-    확인하세요. 6.0 미배포 변경이라 published 호환 영향은 없습니다.)
-- **코어/어댑터·난독화 분리 (번들 경량화)**: `Ddu64Core`가 `NodeAdapter`/`BrowserAdapter`와
-  `HangulObfuscationLayer`를 더 이상 정적으로 참조하지 않습니다. 어댑터는 `adapterFactory`로
-  첫 압축/암호화 시점에 지연 생성하고, 난독화는 `obfuscationLayerFactory` 주입으로 분리했습니다.
-  `@ddunigma/node`·`/browser` 진입점은 두 팩토리를 자동 주입하므로 기존 사용법(`obfuscate`
-  옵션 등)은 그대로 동작합니다. `@ddunigma/node/core`로 순수 인코딩/디코딩만 사용하면 어댑터·
-  난독화 코드가 트리셰이킹되어 최소 번들이 약 5KB 줄어듭니다(측정 기준).
-  - 신규 `@internal` 생성자 옵션 `adapterFactory`, `obfuscationLayerFactory` 추가.
-  - `Ddu64Core`를 직접 생성해 `obfuscate`를 쓰려면 `obfuscationLayerFactory` 주입이 필요합니다
-    (이전엔 코어가 난독화를 내장). 배터리 포함 진입점 사용자는 영향 없습니다.
-- `NativeBase64FastPath`의 base64 디코드가 Node `Buffer` 풀 백킹 버퍼를 공유하는
-  뷰 대신 독립 복사본(`new Uint8Array(buffer)`)을 반환하도록 변경. 인접 풀 메모리
-  노출 가능성을 차단합니다.
-- charset 룩업 테이블을 `[최소, 최대]` 코드 유닛 범위 + 오프셋 방식으로 축소
-  (이전엔 `maxCode+1` 크기). 클러스터된/고코드포인트 charset에서 메모리 사용이 크게
-  줄어듭니다.
-- **디코드 hot path 융합**: 2의 제곱수 charset 디코드가 (charCodeAt→인덱스 배열) +
-  `bitPackDecode` 2단계 대신 `unpackPow2FromString`로 한 패스에 바이트를 언팩합니다.
-  중간 인덱스 배열(Uint16Array/number[]) 할당을 제거해 대형 입력의 할당/GC를 줄입니다.
-  출력은 바이트 단위로 동일하며, `bench:guard`에 회귀 가드를 추가했습니다.
-- **인코드 hot path 융합 (비-2의 제곱수)**: 인덱스 쌍 charset(V1·커스텀 non-pow2) 인코드도
-  `packNonPow2ToString`로 비트팩+charset 매핑을 한 패스로 융합. 출력 바이트 동일.
-- **디코드 hot path 융합 (비-2의 제곱수)**: 인덱스 쌍 charset 디코드도
-  `unpackNonPow2FromString`로 (charCodeAt→인덱스 배열)+`bitPackDecode` 2단계를 한 패스로
-  융합(값 범위·쌍 완결성 검증 동치 유지). 코어 디코드 경로는 더 이상 인덱스 배열을 만들지
-  않습니다(pow2/non-pow2 모두). 출력 바이트 동일.
-- **네이밍 정리**: 스코프 자기기술 체크섬 식별자를 `CHECKSUM_MARKER_SCOPED`/
-  `extractScopedChecksum`/`ScopedChecksumExtractResult`로 변경(과거 'v5' 명칭 → 폐기된
-  'v5 KDF envelope'와 혼동 방지). **와이어 마커 값 `CK`는 불변**이라 출력/호환 영향 없음.
-  테스트 인프라(`gen:scoped-checksum-vectors` 스크립트, `scoped-checksum-vectors.json`
-  픽스처/테스트)도 동일 명칭으로 통일.
-- **어댑터 capability 에러 타입화**: `BrowserAdapter`/`detect`의 미지원·런타임 부재 에러를
-  평문 `Error` 대신 `Ddu64AdapterError`로 던지고, 문자열 매칭 기반 분류기를 제거했습니다.
-  메시지는 동일하며 에러 타입만 더 구체화됩니다.
-- **어댑터 게이트웨이 컨텍스트 단일화**: 구조가 동일하던 sync/async 게이트웨이 컨텍스트
-  타입을 내부 `AdapterGatewayContext` 하나로 통합. 디코드 비트 길이 계산 중복을 공용
-  헬퍼로 정리(거동/메시지 불변).
-- 공개 API 경계의 옵션 런타임 검증 및 Web Streams 버퍼 상한을 강화.
-- **Web Streams 암호화 정책 명시**: 스트림 암호화는 인코더의 키 보유 여부로만 결정되며
-  (`encryptionKey` 설정 시 항상 암호화), 스트림 옵션의 `encrypt`는 노출/적용되지 않음을
-  문서화했습니다. 평문 스트림은 키 없는 인스턴스를 사용하세요.
-
-### 지원 Node 버전
-
-- `engines.node` `>=22.0.0`. 활성 LTS/Current(Node 22·24 LTS, 26 Current)만 지원합니다.
-  Node 18·20은 EOL이므로 지원 대상에서 제외합니다.
-- CI는 Node 22/24에서 `pnpm verify` 전체 게이트를 실행하며, Node 26 Current는 러너 가용성이
-  보장되지 않아 `continue-on-error`(비차단)로 매트릭스에 추가했습니다(가용 시 자동 검증).
-- 네이티브 Base64 가속(`Uint8Array.toBase64`/`fromBase64`, TC39 Stage-4 API)은 이를
-  지원하는 런타임에서만 쓰이고 미지원 환경(현재 Node 24.13 포함 대부분)에서는 `Buffer`
-  경로로 폴백하므로 동작에 영향이 없습니다.
-
-### 빌드 / 개발 환경
-
-- Rust toolchain, `wasm:check` 스크립트, `src/wasm/` 전체, WASM 벤치마크를 제거.
-- CI에서 Rust 설치 및 WASM 검증 단계를 제거.
-- pnpm 11 호환: `pnpm-workspace.yaml`에 `verifyDepsBeforeRun: false`를 설정하여 스크립트
-  실행 전 암묵적 install이 hang하는 문제를 회피. esbuild `overrides`도 `package.json`의
-  `pnpm.overrides`에서 `pnpm-workspace.yaml`의 `overrides`로 이동(pnpm 11이 이 위치에서 읽음).
-- `pack:check`가 깨진 esbuild CLI shim 대신 esbuild Node API를 사용하도록 변경.
-- `esbuild`를 `>=0.28.1`로 올리고 `overrides`로 전이 의존성(tsx 경유 포함)까지
-  고정. GHSA-gv7w-rqvm-qjhr(high)·GHSA-g7r4-m6w7-qqqr(low) 해소(`pnpm audit` 클린).
-  esbuild는 devDependency라 published 패키지에는 포함되지 않습니다(빌드/CI 위생 차원).
-- **품질 게이트 강화**: `knip`(미사용 파일/export/의존성)과 `size-limit`(진입점별 brotli 번들
-  예산: core/node/browser/secure/secure.browser)을 `verify`에 편입하고, ESLint를 `--max-warnings=0`으로 실행합니다.
-  tsconfig에 `noUnusedLocals`/`noUnusedParameters`를 활성화했습니다. 추가 도구는 모두
-  devDependency이며 published 패키지는 무종속을 유지합니다.
-- **`verify`에 `smoke` 편입**: 빌드된 `dist` 산출물을 실제 Node 런타임에서 검증하는
-  `runtime-smoke`를 `verify` 체인 끝에 추가해, 진입점 구조(lean/secure 분리) 회귀를 CI에서
-  차단합니다. `runtime-smoke.mjs`를 6.0 진입점 구조(lean은 `dist/index.js`, 배터리·Web Streams는
-  `dist/secure.js`)에 맞게 갱신했습니다.
-- **문서 분리**: 상세 레퍼런스(전체 옵션 표·secure 사용법·URL-Safe/청크·Web Streams·통계·`/core`
-  고급)를 `docs/REFERENCE.md`로 이전하고, README는 정체성·Quick Start·난독화·진입점 + 레퍼런스
-  링크로 정리했습니다.
+- pow2/non-pow2 비트팩과 문자열 매핑을 융합해 중간 인덱스 배열을 제거했습니다.
+  표준 Base64는 지원 런타임의 네이티브 경로를 쓰고 JS/Buffer fallback을 유지합니다.
+  독립 BitPack 오라클·고정 벡터·property test·성능 가드로 5.0의 출력 동치를 확인합니다.
+- core에서 구체 adapter·난독화를 분리하고 factory를 주입합니다. `/core`에서 난독화가 필요하면
+  별도 주입하거나 기본 진입점을 사용하세요. Node decode 결과는 독립 바이트 복사본을 반환합니다.
+- charset lookup을 실제 코드 유닛 범위로 줄이고 sync/async의 공유 context를 통합했습니다.
+  scoped checksum의 CK marker는 이름 정리와 무관하게 유지합니다.
+- WASM·Rust 빌드 경로를 제거하고 pnpm 11의 overrides·명시적 설치 설정을 정리했습니다.
+- esbuild를 0.28.1 이상으로 고정해 GHSA-gv7w-rqvm-qjhr·GHSA-g7r4-m6w7-qqqr에 대응했습니다.
+  개발 의존성 변경이며 npm runtime dependency는 없습니다.
+- verify에 Knip·size-limit·Node smoke·엄격한 lint/미사용 검사를 포함하고 packed ESM/CJS·
+  NodeNext·브라우저 consumer를 검사합니다. 상세 사용법은 REFERENCE로 분리했습니다.

@@ -83,13 +83,13 @@ export function runDecodePrelude(
   // 상한도 함께 낮아집니다.
   const maxEncodedChars = normalizeLimit(
     options?.maxEncodedChars,
-    maxDecodedBytes === Number.POSITIVE_INFINITY
-      ? context.defaultMaxEncodedChars
-      : Math.min(
+    maxDecodedBytes < context.defaultMaxDecodedBytes
+      ? Math.min(
           context.defaultMaxEncodedChars,
           Number.MAX_SAFE_INTEGER,
           maxDecodedBytes * 4 + 1024,
-        ),
+        )
+      : context.defaultMaxEncodedChars,
     true,
     "maxEncodedChars",
   );
