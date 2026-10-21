@@ -134,7 +134,6 @@
   },
   "files": [
     "CHANGELOG.md",
-    "docs/DECISIONS.md",
     "docs/REFERENCE.md",
     "dist",
     "!dist/**/*.map"

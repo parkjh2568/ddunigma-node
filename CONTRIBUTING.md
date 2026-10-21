@@ -1,209 +1,162 @@
 # 개발·리뷰·릴리스 컨벤션
 
-작업에 해당하는 절을 선택해 적용하며 정확성 → wire 호환성 → 경량성 → 가독성 순으로 판단합니다.
-공개 계약은 [REFERENCE](docs/REFERENCE.md), 선택 근거는 [DECISIONS](docs/DECISIONS.md),
-현재 미완료 상태는 [TASKS](docs/TASKS.md)에서 확인합니다.
+정확성 → wire 호환성 → 경량성 → 가독성 순으로 판단합니다.
+사용법은 [REFERENCE](docs/REFERENCE.md), 선택 이유는 [DECISIONS](docs/DECISIONS.md),
+현재 작업은 [TASKS](docs/TASKS.md)에서 관리합니다.
 
 ## 작업 시작과 우선순위
 
-새 기능·구조 변경은 사용 사례, 출력·API, 대상 런타임, 입력 크기·동시 호출 수로 판단합니다.
-범위가 불명확하면 [제품 범위](docs/DECISIONS.md#제품-범위)를 먼저 확인합니다.
+새 기능은 사용 사례·공개 API·대상 런타임·입력 크기·동시 호출 수로 판단합니다.
+범위는 [제품 범위](docs/DECISIONS.md#제품-범위)를 따릅니다.
 
-1. 정상 입력의 실패, 데이터 손상, 인증·크기 제한·호환성 결함을 먼저 수정합니다.
-2. 코드와 공개 타입·예제·문서의 불일치를 바로잡습니다.
-3. 실제 경로의 할당·복사·번들·처리 시간 문제를 측정하고 개선합니다.
-4. 내부 데드코드, 단일 중계 함수, 중복 주석·문서를 정리합니다.
+1. 데이터 손상·정상 입력 실패·인증·한도·호환성 결함
+2. 코드·공개 타입·문서 불일치
+3. 측정된 처리 시간·할당·복사·번들 비용
+4. 데드코드·불필요한 중계·중복 설명
 
 ### 최초 환경 준비
 
-1. CI의 기본 Node 버전과 `package.json#packageManager`의 pnpm을 준비합니다.
-2. 새 checkout에서 의존성과 기준 상태를 확인합니다.
+CI의 기본 Node와 `package.json#packageManager`의 pnpm을 준비한 뒤 실행합니다.
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm verify
 ```
 
-설치 성공과 기준 검사 결과를 확인하고 기존 실패를 기록합니다. 기존 환경은 [변경별 검증](#변경별-검증)을 따릅니다.
-의존성 변경 시 [pnpm-workspace.yaml](pnpm-workspace.yaml)의 `allowBuilds`·`overrides`와
-lockfile을 함께 검토하고 필요한 설치만 명시적으로 실행합니다.
-
-## 핵심 원칙
-
-- 코어는 커스텀 charset codec와 가역 난독화에 집중하며 압축·암호화는 선택 adapter로 제공합니다.
-- runtime dependency 0개와 공개 진입점·타입·실행 동작의 일관성을 유지합니다.
-- 출력 형식, charset 순서, footer, KDF 기본값 변경은 와이어 호환성 변경으로 취급합니다.
+기존 환경은 [변경별 검증](#변경별-검증)을 따릅니다. 의존성 변경 시
+`pnpm-workspace.yaml`의 `allowBuilds`·`overrides`와 lockfile을 함께 검토하고 설치는 명시적으로 실행합니다.
 
 ## 디렉터리와 책임
 
-- `src/index.ts`, `browser.ts`, `core.ts`, `secure*.ts`: 공개 export·플랫폼 선택. 내부 구현을 편의상 공개하지 않습니다.
-- `src/Ddu64*.ts`: 런타임별 생성·lazy 주입·Buffer API. wire·압축·암호화 구현을 복제하지 않습니다.
-- `src/core/Ddu64Core.ts`, `types.ts`, `errors.ts`: 공개 계약·옵션·상태·오류. 구체 adapter에 의존하지 않습니다.
-- `src/core/pipeline/`: sync/async 순서. 버전별 단계·checksum·진행률 의미를 보존합니다.
-- `src/core/internal/`: 전후처리·검증·매핑·adapter 호출 경계. 공개 진입점을 역으로 import하지 않습니다.
-- `src/core/BitPack.ts`, `wireFormat.ts`, `CharsetResolver.ts`: 비트·footer·charset 불변식. 플랫폼과 분리하고 호환 벡터를 유지합니다.
-- `src/adapters/`, `src/obfuscation/`, `src/streams/`: 플랫폼·한글 매핑·DDS1. 인터페이스와 소유권 계약을 유지합니다.
-- `test/`, `test/fixtures/`, `scripts/`, `benchmarks/`: 회귀·호환 벡터·배포물 검사·성능 측정. production과 분리합니다.
+| 위치                                                       | 책임                                 |
+| ---------------------------------------------------------- | ------------------------------------ |
+| `src/index.ts`·`browser.ts`·`core.ts`·`secure*.ts`         | 공개 export·플랫폼 선택              |
+| `src/Ddu64*.ts`                                            | 런타임별 생성·lazy 주입·Buffer API   |
+| `src/core/Ddu64Core.ts`·`types.ts`·`errors.ts`             | 옵션·상태·공개 오류                  |
+| `src/core/pipeline/`                                       | sync/async 순서·checksum·진행률      |
+| `src/core/internal/`                                       | 검증·전후처리·매핑·adapter 호출 경계 |
+| `src/core/BitPack.ts`·`wireFormat.ts`·`CharsetResolver.ts` | 비트·footer·charset 불변식           |
+| `src/adapters/`·`obfuscation/`·`streams/`                  | 플랫폼·난독화·DDS1                   |
+| `test/`·`scripts/`·`benchmarks/`                           | 회귀·호환 fixture·배포물·성능 검증   |
 
-새 로직은 기존 책임을 가진 모듈에 배치합니다. 작은 동기 로직마다 파일을 만들거나,
-서로 다른 책임의 코드를 범용 `utils`로 모으지 않습니다.
+새 로직은 기존 책임 모듈에 배치합니다. wire·압축·암호화를 래퍼에 복제하거나,
+작은 동기 로직마다 파일을 만들거나, 다른 책임의 코드를 범용 utils로 모으지 않습니다.
 
 ## 진입점 역할
 
-- `@ddunigma/node`: Node 기본 API. adapter·streams는 lazy, `create()`는 eager입니다.
-  `node:crypto`·`node:zlib`·`NodeAdapter`를 정적으로 import하지 않습니다.
-- `/browser`: lazy adapter·streams. Node 내장 모듈·`BrowserAdapter` 정적 import를 금지합니다.
-- `/core`: 사용자가 구현을 주입하는 플랫폼 독립 core. 구체 adapter·난독화 구현을 import하지 않습니다.
-- `/secure`: adapter·Web Streams·동기 Node secure API의 전체 표면. 조건부 Node/browser 경계를 유지합니다.
+- root는 NodeAdapter·Node 내장 crypto/zlib·Web Streams를 정적으로 import하지 않습니다.
+- `/browser`는 Node 내장 모듈·BrowserAdapter·Web Streams를 정적으로 import하지 않습니다.
+- `/core`는 구체 adapter·난독화 구현을 import하지 않습니다.
+- `/secure`는 전체 기능을 export하며 Node/browser 조건 경계를 유지합니다.
+- core/internal은 공개 진입점을 역으로 import하지 않습니다.
 
-위 root 설명은 Node에서의 선택입니다. 실제 `exports`의 browser·worker·workerd·Bun·Deno
-선택은 [런타임별 계약](docs/REFERENCE.md#진입점)을 따릅니다.
-
-`package.json#exports`는 공개 API 계약입니다. 해당 조건 객체의 `types`를 실행 파일 조건보다
-앞에 두고, 런타임·import/require 조건을 고려해 `default`를 마지막에 둡니다. ESM `.js`/`.d.ts`와
-CJS `.cjs`/`.d.cts`는 함께 검증합니다. 소스의 `moduleResolution: bundler` 검사만으로 소비자
-호환성을 판단하지 않고, `pack:check`의 packed ESM/CJS 실행과 `NodeNext` 타입 검사를 유지합니다.
-[Node 조건부 exports](https://nodejs.org/api/packages.html#conditional-exports),
-[TypeScript 번들 라이브러리 지침](https://www.typescriptlang.org/docs/handbook/modules/guides/choosing-compiler-options#considerations-for-bundling-libraries)
+실제 조건 선택은 [진입점 표](docs/REFERENCE.md#진입점)를 따릅니다.
+`package.json#exports`의 `types`를 실행 조건보다 먼저, `default`를 마지막에 둡니다.
+ESM/CJS와 `.d.ts`/`.d.cts`를 함께 검증하며, bundler 타입 검사 외에
+`pack:check`의 packed consumer 실행·NodeNext 타입 검사를 유지합니다.
+[Node 조건부 exports](https://nodejs.org/api/packages.html#conditional-exports)
 
 ## TypeScript·모듈
 
-- strict TypeScript·ES2022 타겟을 유지하고 상대 소스 import에 `.js` 확장자를 사용합니다.
-- TypeScript 설정은 `noEmit`으로 타입만 검사하며, 배포 JS·선언 파일은 `pnpm build`의 tsup이 생성합니다.
+- strict TypeScript·ES2022와 상대 import의 `.js` 확장자를 유지합니다.
+- tsc는 `noEmit` 타입 검사, tsup은 배포 JS·선언 파일 생성을 담당합니다.
 - 타입 전용 참조는 `import type` 또는 `type` 지정자를, 공개 옵션은 해당 진입점의 type export를 사용합니다.
-- production 경계는 `unknown`으로 받아 검증하며 `any`를 사용하지 않습니다. 테스트의 `any` 허용은
-  잘못된 런타임 입력을 검증하는 경우 등에 한정합니다.
-
-서식은 [.prettierrc](.prettierrc), lint는 [flat config](eslint.config.mjs)와 `--max-warnings=0`,
-타입 검사는 [tsconfig-base.json](tsconfig-base.json)·[tsconfig.test.json](tsconfig.test.json)을 따릅니다.
-
-함수·변수는 camelCase, 클래스·타입은 PascalCase, 파일명·private 필드는 주변 관례를 따릅니다.
-컨벤션만을 위한 일괄 rename은 하지 않으며 lint 예외는 해당 위치에 이유를 남깁니다.
-예외를 위해 설정 전체를 완화하지 않습니다.
+- production 경계는 `unknown`으로 검증하고 `any`를 쓰지 않습니다. 테스트의 `any`는 잘못된 런타임 입력 검증 등에 한정합니다.
+- 서식·lint·타입은 기존 설정을 따르며 lint는 `--max-warnings=0`을 유지합니다.
+- 함수·변수는 camelCase, 클래스·타입은 PascalCase, 파일명·private 필드는 주변 관례를 따릅니다.
+- 예외는 해당 위치에 이유를 남기고 설정 전체를 완화하지 않습니다. 컨벤션만을 위한 일괄 rename은 하지 않습니다.
 
 ## 함수 분리 기준
 
-한 곳에서 쓰는 단순 조건·할당·객체 구성·변환·중계는 호출 함수 안에서 동기적으로 작성합니다.
-`PayloadCodec`의 footer 구성처럼 지역 변수와 호출 순서로 읽히는 로직을 이름만 붙이기 위해
-분리하지 않습니다. 줄 수만으로 분리·통합하지 않습니다.
+한 곳에서 쓰는 단순 조건·할당·변환·객체 구성·중계는 호출 함수 안에서 동기적으로 작성합니다.
+줄 수만으로 분리하거나 통합하지 않습니다.
 
-분리는 실제 재사용, 복잡한 불변식의 독립 검증, 플랫폼·에러 경계가 있거나 중복을 줄이면서
-제어 흐름이 단순해질 때 적용합니다. sync/async의 공유 설정·checksum 검증과 wire parser가 해당합니다.
+분리는 실제 재사용, 복잡한 불변식의 독립 검증, 플랫폼·오류 경계가 있을 때 적용합니다.
+sync/async 공유 설정·checksum 검증·wire parser가 해당합니다.
 
-미사용 내부 인자는 시그니처와 호출부에서 제거합니다. 공개 adapter의 미지원 옵션
-(예: BrowserAdapter의 `_level`)처럼 호환성에 필요한 인자는 유지합니다.
-`await`도 Promise 계약도 필요 없는 내부 callback은 동기로 작성하되, 공개 비동기 반환 타입,
-하위 클래스 override, rejection을 감싸는 `try/catch`의 `return await`는 보존합니다.
+미사용 내부 인자는 호출부와 함께 제거하되 공개 adapter의 미지원 인자는 유지합니다.
+불필요한 내부 async callback은 동기로 바꾸되 공개 Promise·하위 클래스 override·
+rejection을 감싸는 `try/catch`의 `return await`는 보존합니다.
 
 ## 옵션·상태 규칙
 
-- `undefined`와 명시된 `""`·`[]`·`0`·`false`를 구분합니다. 기본값은 `??`로 합성하고
-  boolean override를 명시적으로 처리합니다.
-- 생성자 기본값과 호출별 옵션을 합성한 후 조합 불변식을 다시 검증합니다.
-- 필터링, 중복 제거, padding 제거 등으로 데이터가 변하면 길이·bitLength·충돌을 재검증합니다.
-- `throwOnError:false`는 무효한 상태를 인코더에 남기는 옵션이 아니라 유효한 preset으로
-  fallback하는 옵션입니다.
-- 비트 패킹, 버퍼 할당, 반복문 경계에는 생성자 검증과 별개의 방어 검증을 둡니다.
+- 기본값은 `??`로 합성해 `undefined`와 `""`·`[]`·`0`·`false`를 구분합니다.
+- 생성자 기본값과 호출 옵션 합성 후 조합 불변식을 다시 검증합니다.
+- 필터링·중복/padding 제거·종성 결합 뒤 charset 길이·bitLength·충돌을 재검증합니다.
+- `throwOnError:false`는 유효한 preset으로 fallback해야 합니다.
+- 비트 패킹·버퍼 할당·반복문 경계의 방어 검증은 생성자 검증과 별도로 유지합니다.
 
 ### 입력 소유권과 비동기 경계
 
-- 생성자 charset·coda·KDF salt·난독화 alphabet의 가변 배열은 내부 보관 전에 복사합니다.
-  `create()`는 adapter를 기다리기 전에 보존합니다.
-- 비동기 codec·stream 생성의 호출 옵션은 지연 사용 전에 얕게 복사합니다.
-  가변 중첩 필드를 추가하면 해당 복사 계약도 정의합니다.
-- 압축·암호화로 await를 넘겨 쓰는 외부 `Uint8Array`·`Buffer`는 첫 await 전에 독립 복사합니다.
-- 문자열에서 생성한 UTF-8 배열은 이미 소유했으므로 같은 파이프라인에 전달하고
-  `originalSize`는 변환 직후 기록합니다.
-- 스트림의 보관 청크·잔여 바이트는 `writer.write()` 완료 후 재사용할 수 있도록 복사합니다.
-  결합 후 원래 참조를 해제하고 실패 시 축적 상태를 정리합니다.
-
-`subarray()`와 `Buffer.slice()`는 독립 복사가 아닙니다. 반대로 동기 완료하는 평문 경로와 이미
-내부에서 소유한 배열에는 무조건 복사를 추가하지 않습니다. 주입한 adapter·callback·난독화
-구현은 참조 계약을 유지하며 범용 deep clone이나 JSON 직렬화를 적용하지 않습니다.
+- 가변 charset·coda·KDF salt·난독화 alphabet은 보관 전에 복사합니다. `create()`도 adapter 대기 전에 보존합니다.
+- 비동기 codec·stream 옵션은 지연 사용 전에 얕게 복사합니다. 가변 중첩 필드는 별도 복사 계약을 정의합니다.
+- await를 넘겨 쓰는 외부 바이트는 첫 await 전에 독립 복사합니다.
+- UTF-8 변환으로 소유한 배열은 그대로 전달하고 변환 직후 `originalSize`를 기록합니다.
+- 보관할 stream 청크·잔여 바이트는 write 완료 후 재사용할 수 있도록 복사하고 결합·실패 후 참조를 해제합니다.
+- `subarray()`·`Buffer.slice()`는 독립 복사가 아닙니다. 동기 평문·내부 소유 배열에는 무조건 복사를 추가하지 않습니다.
+- 주입 adapter·callback·난독화 구현은 참조 계약을 유지하며 deep clone·JSON 직렬화를 적용하지 않습니다.
 
 ## Lazy adapter 규칙
 
-- root의 adapter는 비동기 압축·암복호화 단계에서, Web Streams는 stream 메서드 호출에서만
-  import합니다. 평문 codec·checksum·난독화 경로에 adapter를 정적으로 연결하지 않습니다.
-- 현재 core에 adapter를 주입하며 첫 동시 호출은 초기화 Promise를 공유합니다.
-- 디코딩의 알고리즘·버전은 wire metadata로 판별합니다. 호출별 처리 비활성화와 크기 제한은
-  해당 공개 옵션의 계약에 따라 별도로 적용합니다.
-- 사용자 `adapter` → `adapterFactory` → `asyncAdapterFactory` → 자동 adapter 순으로 선택합니다.
-  factory의 객체가 아닌 결과는 캐시하지 않고 오류로 거부하며 다음 호출에서 재시도합니다.
-- `Ddu64.create()`는 별도 import 없이 adapter를 먼저 준비하는 명시적 eager 경로입니다.
-  Node에서는 준비 후 동기 secure 호출을 허용하고 브라우저는 계속 비동기 호출만 지원합니다.
+- adapter는 비동기 압축·암복호화가 필요할 때, Web Streams는 stream 메서드 호출 때 import합니다.
+- 같은 core에 adapter를 주입하고 첫 동시 호출은 초기화 Promise를 공유합니다.
+- `adapter` → `adapterFactory` → `asyncAdapterFactory` → 자동 adapter 순으로 선택합니다.
+- factory의 객체가 아닌 결과는 거부하고 캐시하지 않으며 다음 호출에서 재시도합니다.
+- `Ddu64.create()`는 명시적인 eager 경로입니다. Node 동기 secure와 브라우저 비동기 capability 차이를 유지합니다.
 
 ## Wire·문자열 불변식
 
-- 인코딩 후처리의 footer → 난독화 → checksum suffix → URL-safe → 청크 분할 순서를 유지합니다.
-- 디코딩은 사용자 구분자를 CR/LF 제거보다 먼저 처리하고, 선택 footer 마커와 실제 payload·padding
-  경계를 함께 검증합니다. 숫자 패딩, 반복 패딩, 두 자리 paddingBits, 마커 충돌을 회귀 벡터에 포함합니다.
-- V2/V3/V4의 처리 순서, V4의 AAD, legacy `CHK`와 scoped `CK` 의미를 임의로 통합하지 않습니다.
-  잘못 추정한 선택 마커를 되돌릴 때 이미 확인한 암호화·버전 정보를 함께 버리지 않습니다.
-- UTF-8 BOM을 보존하고 Unicode 정규화를 자동 적용하지 않습니다. 바이트 수와 `String.length`의
-  UTF-16 코드 유닛 수를 구분하며, 통계·진행률의 기존 공개 단위는 [REFERENCE](docs/REFERENCE.md)를 따릅니다.
-- 네이티브 Base64는 정확한 표준 alphabet·패딩 조건에서만 선택합니다. 기능 존재 여부를 확인하고
-  JS fallback을 유지하며, 네이티브 decoder의 관대한 입력 허용으로 기존 검증을 우회하지 않습니다.
+- 출력 형식·charset 순서·footer·KDF 기본값 변경은 wire 호환성 변경으로 취급합니다.
+- 인코딩의 footer → 난독화 → checksum suffix → URL-safe → 청크 순서를 유지합니다.
+- 디코딩은 사용자 구분자를 CR/LF보다 먼저 제거합니다. metadata는 wire로 판별하고 호출별 비활성화·한도를 적용합니다.
+- footer 후보와 실제 payload·padding·바이트 정렬을 함께 검사합니다. 숫자/반복 padding·두 자리 paddingBits·marker 충돌을 회귀에 포함합니다.
+- V2/V3/V4·V4 AAD·CHK/CK 처리 순서를 유지하고 marker 추정 rollback 시 확인된 암호화·버전 정보를 보존합니다.
+- UTF-8 BOM을 보존하고 Unicode를 자동 정규화하지 않습니다. 바이트 수와 UTF-16 코드 유닛을 구분합니다.
+- native Base64는 정확한 표준 alphabet·padding 조건에서만 사용하며 기능 탐지·JS fallback·기존 입력 검증을 유지합니다.
 
 ## 에러 계약
 
-- `Ddu64` codec 공개 경계는 실패 시 `Ddu64Error` 하위 타입만 throw/reject합니다.
-  `CharsetBuilder` 및 저수준 adapter 직접 호출은 각 API의 기존 오류 타입을 유지합니다.
-- 내부 모듈은 가능하면 발생 지점에서 charset, encode, decode, adapter, limit 에러를 분류합니다.
-- 사용자 callback·플랫폼 API의 plain `Error`는 원인을 보존해 래핑하고, `Ddu64Error`는 중복 래핑하지 않습니다.
-- 에러 문구에는 작업과 해결 경로를 포함하고 비밀키·평문·전체 payload를 포함하지 않습니다.
-- AES-GCM 복호화 결과는 인증 검증이 끝난 후 반환합니다. `maxEncodedChars` 검사는 문자열
-  전처리 전에, decode·압축 해제·스트림 축적 한도 검사는 큰 할당이나 결합 전에 수행합니다.
+- codec 공개 경계는 `Ddu64Error` 하위 타입만 throw/reject합니다. builder·adapter 직접 호출의 기존 오류 타입은 유지합니다.
+- 발생 위치에서 오류를 분류하고 외부 오류는 cause를 보존해 래핑합니다. 기존 Ddu64Error는 중복 래핑하지 않습니다.
+- 메시지에 작업·해결 경로를 담고 비밀키·평문·전체 payload를 넣지 않습니다.
+- 인증 후 결과 반환과 전처리·큰 할당·stream 결합 전 한도 검사를 유지합니다.
+- 사용자에게 필요한 오류 대응·보안 설정은 REFERENCE에 기록합니다. 비밀과 공격자 입력을 함께 압축 후 암호화하도록 권장하지 않습니다.
 
 ## 주석·문서
 
-- 주석은 불변식·wire 호환성·보안 경계·성능 근거를 설명합니다. 코드 반복, 완료된 Task 번호,
-  리팩터링 과정 기록은 제거합니다.
-- 난독화를 암호화, 무작위화, 자연어 생성으로 표현하지 않습니다.
-- 구현 변경이 영향을 주는 JSDoc·예제·공개 계약을 같은 변경에서 갱신합니다. 내부 정리만으로
-  모든 문서를 고치거나 CHANGELOG 항목을 만들지는 않습니다.
-- 예제의 encode/decode 옵션은 서로 맞추고, 동작을 바꾼 예제는 실제 공개 진입점에서 실행합니다.
-- 사용자 관점의 변경은 CHANGELOG, 구조 선택의 이유와 재검토 조건은 DECISIONS에 기록합니다.
+- 주석은 불변식·호환성·보안·성능 근거를 설명합니다. 코드 반복·완료 Task 번호·작업 과정 기록은 제거합니다.
+- 공개 동작이 바뀌면 JSDoc·예제·계약을 함께 갱신하고 실제 공개 진입점에서 예제를 실행합니다.
+- README는 시작 가이드, REFERENCE는 사용 계약, 이 문서는 개발 규칙, DECISIONS는 선택 이유, TASKS는 미완료 작업만 다룹니다.
+- 사용자 영향은 CHANGELOG에 기록합니다. 내부 정리만으로 모든 문서나 CHANGELOG를 갱신하지 않습니다.
+- 난독화·CRC32·`/secure`의 보안 의미를 과장하지 않습니다.
 
 ## 테스트·데드코드
 
-- 테스트와 fixture는 `test/`, `test/fixtures/`에 둡니다. 결함 수정에는 기존 테스트 보완 또는
-  새 최소 회귀 테스트로 수정 전 실패를 재현합니다.
-- 반복 라운드트립보다 경계값·불변식·호환 벡터를 우선하고, 넓은 입력 공간은 property test로 검증합니다.
-  기존 wire fixture는 이유 없이 재생성하지 않습니다.
-- 비정상 종료 위험은 유효한 상태로 진입하지 못하게 테스트하고, 필요하면 자식 프로세스
-  timeout으로 검증합니다.
-- 테스트 이름·주석은 현재 용어를 사용하고 제거된 내부 구현의 부재만 검사하지 않습니다.
-- `pnpm knip`과 필요 시 `pnpm exec knip --production`으로 내부 미사용 경로를 확인합니다.
-  결과는 삭제 후보이지 공개 API 미사용의 증거가 아닙니다. `exports`, 동적 import, 스크립트·브라우저
-  진입점, 하위 클래스 override를 대조한 뒤 정리합니다. 누락된 entry는 `knip.json`에서 보완합니다.
-  [Knip 진단 해석](https://knip.dev/guides/handling-issues)
-- 구버전 decoder·공개 deprecated API·독립 BitPack 동치 오라클·방어 검증은 단순 참조 수나 낮은
-  커버리지만으로 삭제하지 않습니다. 헬퍼를 통합하면 전용 타입·인자·import·주석도 함께 정리합니다.
+- 회귀·fixture는 `test/`에 둡니다. 결함 수정에는 수정 전 실패하는 최소 회귀를 추가합니다.
+- 경계·불변식·고정 벡터·property test를 우선하며 기존 wire fixture는 이유 없이 재생성하지 않습니다.
+- 비정상 종료 위험은 유효 상태 진입을 막아 검사하고 필요하면 자식 프로세스 timeout을 사용합니다.
+- 테스트 이름·주석은 현재 용어를 쓰고 제거한 구현의 부재만 검사하지 않습니다.
+- Knip 결과는 삭제 후보입니다. 공개 export·동적 import·script·browser·override를 대조하고 누락 entry를 보완합니다.
+- legacy decoder·deprecated API·독립 BitPack 오라클·방어 검증은 참조 수·coverage만으로 삭제하지 않습니다.
+- helper 통합 시 전용 타입·인자·import·주석을 함께 정리합니다.
 
 ## 변경별 검증
 
-| 변경                                     | 작업 중 확인                                      | 마무리 검증                                                     |
-| ---------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------- |
-| 설명·링크만 수정                         | 코드·설정과 대조, 상대 링크·앵커·배포물 포함 여부 | `pnpm format:check`, `git diff --check`                         |
-| 실행 예제 수정                           | 해당 예제를 실제 공개 진입점에서 실행             | 문서 검사, dist가 오래됐으면 먼저 `pnpm build`                  |
-| codec·footer·옵션·소유권·에러            | 실패 재현, 관련 회귀·고정 벡터·property test      | `pnpm verify`                                                   |
-| export·타입·lazy import·번들 설정        | ESM/CJS·NodeNext·정적 그래프·packed consumer      | `pnpm verify`, 웹 경로에 영향이 있으면 browser smoke            |
-| BrowserAdapter·Web Streams·네이티브 경로 | 관련 테스트와 Node↔브라우저 호환                  | `pnpm verify`, `pnpm smoke:browser`                             |
-| hot path·할당·크기                       | 동일 조건 전후 비교와 출력 동치성                 | `pnpm verify`, `pnpm bench:guard`, 해당 benchmark               |
-| 의존성·런타임·배포                       | lockfile·설치 정책·exports·CI matrix 검토         | `pnpm verify`, 영향받는 런타임·브라우저 작업, 배포 전 성능 가드 |
+| 변경                                   | 검증                                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| 설명·링크                              | 코드 대조·링크/앵커·배포물 포함 여부, `pnpm format:check`, `git diff --check`     |
+| 실행 예제                              | 해당 예제 실행. dist가 오래됐으면 `pnpm build` 후 문서 검사                       |
+| codec·옵션·소유권·오류                 | 실패 재현·관련 회귀·고정 벡터·property test 후 `pnpm verify`                      |
+| export·타입·lazy import·번들           | packed ESM/CJS·NodeNext·정적 그래프와 `pnpm verify`. 웹 경로 변경은 browser smoke |
+| BrowserAdapter·Web Streams·native 경로 | 관련 회귀·Node↔브라우저 호환, `pnpm verify`·`pnpm smoke:browser`                  |
+| hot path·할당·크기                     | 동일 조건 전후 비교·출력 동치, `pnpm verify`·`pnpm bench:guard`·관련 benchmark    |
+| 의존성·런타임·배포 구성                | 설치 정책·lockfile·exports·CI 검토, `pnpm verify`와 영향받는 런타임 검사          |
 
-1. 관련 검사로 실패를 좁힙니다. footer 변경은
-   `pnpm exec vitest run test/wireFormat.test.ts test/regressions.test.ts`로 시작합니다.
-2. 마지막 수정 상태에서 표의 마무리 검증을 실행해 실패를 해결합니다. 설명·링크만 변경하면
-   전체 코드·성능·브라우저 검사나 새 테스트는 필요하지 않습니다.
-3. 새 변경·실패·미해결 우려가 없으면 재검사하지 않습니다. 실행 환경·결과·미실행 항목을 보고하고
-   CI·릴리스의 필수 검증은 유지합니다.
+마지막 수정 상태에서 해당 검증을 마칩니다. 새 변경·실패·미해결 우려가 없으면 반복하지 않습니다.
+`pnpm verify`는 format·typecheck·lint·Knip·build·coverage·size·pack·Node/web smoke를 실행합니다.
+실제 브라우저·Bun/Deno·Node 호환 matrix·성능 가드는 별도입니다.
 
-`pnpm verify`는 format → typecheck → lint → Knip → build → coverage → size → pack → Node/web
-smoke를 실행합니다. 실제 브라우저, Bun·Deno, Node 호환 matrix, 성능 가드는 별도 검사입니다.
-lazy import 변경은 초기 정적 그래프를, 브라우저 경로 변경은 실제 엔진의 네이티브 기능·강제
-fallback·Node 상호 호환을 확인합니다. 브라우저 검증은 다음 순서로 실행합니다.
+브라우저 변경은 native·강제 fallback·Node 상호 호환을 확인합니다.
 
 ```bash
 pnpm exec playwright install chromium firefox webkit
@@ -211,23 +164,19 @@ pnpm build
 pnpm smoke:browser
 ```
 
-각 엔진의 성공 결과를 확인합니다. 한 엔진은 `pnpm smoke:browser firefox`로 지정하며 Linux CI는
-설치에 `--with-deps`를 사용합니다. Playwright 갱신 후 해당 [브라우저도 재설치](https://playwright.dev/docs/browsers)합니다.
+한 엔진은 `pnpm smoke:browser firefox`로 지정합니다. Linux CI는 설치에 `--with-deps`를 사용하고
+Playwright 갱신 후 브라우저도 재설치합니다.
 
 ## 성능·크기·안전성
 
-| 명령·스크립트             | 측정·검증 대상                                         | 출력·단위                                                               |
-| ------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `pnpm bench`              | codec, 직접 Base64, 압축 입력 특성, 최초·재사용 KDF    | 3표본 중앙값; 호출 시간·원문 기준 왕복 MiB/s·UTF-8 출력 크기            |
-| `pnpm bench:latency`      | 기존 API와 간편 API, 입력 크기·동시 호출               | JSONL; 기본 20표본의 시간·p50/p95·관측 메모리·이벤트 루프 지연          |
-| `pnpm bench:micro [이름]` | 지정한 primitive 또는 codec 경로                       | 3표본 중앙값; 호출 시간과 해당 입력 기준 MiB/s                          |
-| `pnpm bench:guard`        | 융합 비트 매핑, 전체 DDU·난독화                        | 3표본 중앙값; 원문 기준 MiB/s 하한, ASCII unpack만 인코딩 문자 수 기준  |
-| `compare-obfuscation.ts`  | 구버전 배포물과 역난독화 비교                          | 호출 시간·관측 heap 비교                                                |
-| `compare-codec.ts`        | 수정 전 소스와 codec·강제 fallback·청크·첫 난독화 비교 | JSONL; 교대 시간·p50, codec/fallback의 CPU·메모리·p95, 입력·소스 식별자 |
-| `verify-compat.mjs`       | npm 6.2.0 기준 배포물과 양방향 호환                    | export·공개 메서드·위치 인자·데이터 교환 검증                           |
+| 명령                      | 측정 대상·출력                                                |
+| ------------------------- | ------------------------------------------------------------- |
+| `pnpm bench`              | codec·Base64·압축 특성·최초/재사용 KDF, 3표본 중앙값          |
+| `pnpm bench:latency`      | API·입력 크기·동시성별 p50/p95·관측 메모리·이벤트 루프, JSONL |
+| `pnpm bench:micro [이름]` | primitive/codec 지정 경로, 3표본 중앙값                       |
+| `pnpm bench:guard`        | 융합 매핑·DDU·난독화의 고정 처리량 하한                       |
 
-이전 배포물은 무결성을 확인해 추출합니다. 소스 비교는 두 디렉터리에 같은 lockfile·런타임을
-준비하고 배포물 대신 소스를 전달합니다. 다른 CPU 부하 없이 필요한 비교를 실행합니다.
+이전 배포물은 무결성을 확인해 추출하고, 소스 비교는 같은 lockfile·런타임에서 다른 CPU 부하 없이 실행합니다.
 
 ```bash
 node --expose-gc --import tsx benchmarks/compare-obfuscation.ts <이전-package-디렉터리>
@@ -235,66 +184,35 @@ node --expose-gc --import tsx benchmarks/compare-codec.ts <수정전-소스-디�
 node scripts/verify-compat.mjs <이전-package-디렉터리>
 ```
 
-출력 동치·시간·관측 메모리를 구분해 검토합니다. `verify-compat.mjs`는 공식 6.2.0만 받으며
-다른 버전은 import 전에 거부합니다. 2.x 호환성 판정기가 아니며 기준을 바꿀 때는 공개 표면·
-프리셋·압축·암호화·스트림 형식과 검사 범위도 검토합니다.
+`verify-compat.mjs`의 기준은 공식 npm 6.2.0이며 다른 버전은 import 전에 거부합니다.
+기준 변경 시 공개 표면·charset·압축·암호화·stream 검사 범위도 갱신합니다.
 
-- `DDU_BENCH_SAMPLES`는 `bench:latency` 최소 20개, `compare-codec` 최소 9개입니다.
-  p50/p95는 경험적 값이며 `compare-codec`의 p95는 개별 호출이 아닌 배치 평균의 백분위수입니다.
-- `compare-codec`은 출력 동치를 확인하고 소스·lockfile·benchmark 해시를 기록합니다. 소스 해시는
-  `ObfuscationLayer.ts`·`NativeBase64FastPath.ts`·`codecUtils.ts`의 결합값이며 전체 커밋 해시가 아닙니다.
-  청크·cold-layer는 시간만 기록하며 cold-layer는 생성자＋첫 난독화 호출입니다.
-- 기준 커밋·소스 식별자, 런타임, 입력·반복 횟수·분모를 기록합니다. 원문 바이트·UTF-8 출력·
-  UTF-16 길이·문자열 변환 포함 여부·stream byte 입력을 구분하고 suffix 연산은 호출 시간으로 비교합니다.
-  최초 KDF는 새 인스턴스, 재사용은 같은 인스턴스로 측정하며 cold import는 프로세스 시작을 제외합니다.
-- 관측 heap·external·arrayBuffers는 transient 할당이나 실제 peak RSS를 모두 포착하지 못합니다.
-  타이머의 관측 범위와 GC 시점을 명시하고 노이즈 수준의 차이나 복사 제거를 전체 속도·RSS 개선으로 주장하지 않습니다.
-- 스트림 입력 상한은 출력·작업 버퍼·동시 호출을 포함한 프로세스 메모리 상한이 아닙니다.
-- 번들 크기는 진입점별 최소 경로, adapter 활성화 경로, 전체 lazy 그래프와 초기 정적 그래프를 구분합니다.
-- 새 runtime dependency는 표준 API로 해결할 수 없고 크기·유지보수·공급망 비용을 정량화한 경우에만
-  추가합니다.
-- 난독화는 보안 경계가 아닙니다. 기밀성에는 AES-GCM과 충분한 entropy의 키를 사용하고,
-  비밀번호에는 PBKDF2·application-specific salt·명시적 iteration을 사용합니다.
-- 비밀 데이터와 공격자가 조절할 수 있는 입력을 같은 payload에서 압축 후 암호화하는 예제나
-  권장 경로를 추가하지 않습니다. 길이 기반 정보 노출 가능성을 사용자 문서와 공개 타입에
-  함께 명시합니다.
-- `/secure`는 기능 묶음의 진입점이며 인증 프로토콜이나 키 관리 체계로 표현하지 않습니다.
-- size-limit 변경 전 동일 lockfile과 지원 Node 버전에서 세 번 이상 측정합니다. 변동이 1% 이내면
-  기존 예산을 유지하고, 도구 변동으로 지속 실패할 때만 3-5% 범위의 근거 있는 여유를 둡니다.
+- 입력·반복 횟수·런타임·소스/lockfile 식별자와 분모를 기록합니다. 원문 바이트·UTF-8 출력·UTF-16 길이를 구분합니다.
+- codec 왕복 처리량은 원문 바이트, ASCII unpack은 인코딩 문자 수 기준입니다. footer suffix 연산은 호출 시간으로 비교합니다.
+- `bench:latency`는 최소 20표본, `compare-codec`은 최소 9표본입니다. 경험적 p95는 지연 보장이 아니며 `compare-codec`은 배치 평균의 백분위수입니다.
+- `compare-codec` 소스 해시는 난독화·native Base64·codecUtils의 결합값입니다. 전체 커밋 해시가 아니며 청크·cold-layer는 시간만 기록합니다.
+- 최초 KDF는 새 인스턴스, 재사용은 같은 인스턴스에서 측정합니다. cold import는 프로세스 시작 비용을 제외하고 cold-layer는 생성자와 첫 호출을 포함합니다.
+- 관측 heap·external·arrayBuffers는 실제 peak RSS를 보장하지 않습니다. GC·타이머 범위를 명시하고 작은 변동을 전체 개선율로 주장하지 않습니다.
+- 번들은 초기 정적 그래프와 전체 lazy 그래프를 구분합니다. 예산 변경 전 같은 lockfile·지원 Node에서 세 번 이상 측정합니다.
+- 크기 변동 1% 이내는 기존 예산을 유지하고 도구 변동으로 지속 실패할 때만 3–5% 여유의 근거를 기록합니다.
+- runtime dependency 0개를 유지합니다. 추가는 표준 API로 해결할 수 없고 번들·유지보수·공급망 비용을 정량화한 경우에만 검토합니다.
+- 복사·검증·KDF 강도를 줄이는 최적화는 [안전 계약](docs/REFERENCE.md#보안-경계)을 보존해야 합니다.
 
 ## 호환성·릴리스
 
-- 의도된 공개 동작·출력 형식·기본 KDF·export를 깨는 변경은 major에서 수행합니다. 계약을 복원하는
-  결함 수정도 기존 데이터·오류 동작에 미치는 영향을 확인하고 사용자에게 필요한 이행 내용을 기록합니다.
-- 미사용 공개 API는 즉시 삭제하지 않고 `@deprecated`와 대체 경로를 먼저 제공합니다.
-- npm package에는 실행 파일·타입과 사용자용 README/CHANGELOG/API reference/설계 결정만 포함합니다.
-  `AGENTS.md`, `CONTRIBUTING.md`, 테스트, benchmark, source map은 저장소에만 둡니다.
-- 최소 Node 버전, 기본 검증 LTS, 호환 matrix는 함께 검토합니다. Bun과 Deno는 root의 browser
-  조건과 `/secure`의 Node 호환 조건을 각각 검증합니다.
+- 의도된 API·wire·KDF·export 비호환 변경은 major에서 수행합니다. 계약 복원도 기존 데이터·오류 영향과 이행을 확인합니다.
+- 공개 API 제거는 먼저 deprecated와 대체 경로를 제공합니다.
+- npm에는 실행 파일·타입·README·CHANGELOG·REFERENCE·LICENCE만 포함합니다. 설계 결정·작업 목록·개발 지침·테스트·benchmark·source map은 저장소에 둡니다.
+- 최소 Node·기본 검증 LTS·호환 matrix를 함께 검토합니다. Bun/Deno의 root browser 조건과 secure Node 조건을 구분합니다.
 
-다음 순서로 출시합니다. 현재 버전의 미완료 상태는 [TASKS](docs/TASKS.md)에만 기록합니다.
+현재 미완료 상태는 [TASKS](docs/TASKS.md)에 기록하며 다음 순서로 출시합니다.
 
-1. **외부 설정 확인:** 긴 수명 write token 대신 GitHub Actions OIDC를 사용합니다. npm Trusted
-   Publisher의 owner/repository를 실제 workflow 저장소와, workflow/environment를
-   `publish.yml`/`npm`과 대조합니다. environment 권한·보호 설정도 확인합니다.
-   저장소 이전 시 Git remote·package metadata·문서 링크·외부 Publisher를 함께 확인하며
-   redirect만으로 OIDC 설정이 갱신됐다고 판단하지 않습니다. 배포 Node/npm은
-   [OIDC 요구 버전](https://docs.npmjs.com/trusted-publishers/)을 충족해야 합니다.
-2. **출시 문서 준비:** `Unreleased`에는 다음 배포 변경만 두고 출시할 항목은 실제 버전·날짜로
-   옮깁니다. README·REFERENCE의 미배포 안내와 `package.json` 버전을 맞춥니다.
-3. **출시 SHA 확정·검증:** 구현·테스트·문서·benchmark를 포함한 최종 변경을 커밋하고 해당 SHA에서
-   `pnpm verify`, `pnpm bench:guard`, `pnpm smoke:browser`를 확인합니다. 이후 수정이 생기면
-   출시 SHA와 영향받는 검증을 갱신합니다. 이전 SHA의 성공으로 대신하지 않습니다.
-4. **원격 CI 확인:** 같은 SHA의 Node 24 전체 검사, Node 22·26, Bun·Deno와 세 브라우저 job이
-   모두 성공했는지 확인합니다. 패키지 최소 Node 버전과 배포 도구 버전은 구분합니다.
-5. **태그·Release 게시:** 외부 설정과 검증 완료 후 `v${package.json.version}` 태그를 해당 SHA에
-   연결합니다. 정식 GitHub Release 게시가 [배포 workflow](.github/workflows/publish.yml)를
-   실행하므로 버전·문서·태그 대상을 게시 전에 확정합니다. workflow는 태그 불일치를 거부합니다.
-6. **배포 결과 확인:** workflow와 npm 게시 성공 후 해당 버전을 설치해 ESM/CJS·NodeNext 타입·
-   browser·공개 진입점을 확인하고 TASKS를 갱신합니다. workflow의 `npm publish --ignore-scripts`는
-   선행 검증을 마친 배포 단계이며 이 명령만 복사해 검증을 생략하지 않습니다.
-
-## 참고
-
-- 구조·최적화의 채택·보류 판단: [설계 결정](docs/DECISIONS.md#최적화-보류와-재검토-조건)
-- [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+1. **배포 설정:** npm Trusted Publisher의 실제 owner/repository·workflow/environment와 GitHub environment 권한·보호 설정을 대조합니다.
+   redirect만으로 설정 갱신을 판단하지 않으며 Node/npm의 [OIDC 요구 버전](https://docs.npmjs.com/trusted-publishers/)을 확인합니다.
+2. **출시 문서:** Unreleased를 실제 버전·날짜로 옮기고 README·REFERENCE·package version을 맞춥니다.
+3. **출시 SHA:** 최종 커밋에서 `pnpm verify`·`pnpm bench:guard`·`pnpm smoke:browser`를 확인합니다.
+4. **원격 CI:** 같은 SHA의 Node 24 전체 검사·Node 22/26·Bun/Deno·세 브라우저 성공을 확인합니다.
+5. **게시:** package version과 같은 `vX.Y.Z` 태그를 해당 SHA에 연결합니다. 정식 Release 게시가
+   [배포 workflow](.github/workflows/publish.yml)를 실행하므로 문서·검증·태그를 먼저 확정합니다.
+6. **설치 확인:** npm 게시 후 ESM/CJS·NodeNext 타입·browser·공개 진입점을 설치 검사하고 TASKS를 갱신합니다.
+   workflow의 `npm publish --ignore-scripts`는 선행 검증을 마친 배포 단계입니다.

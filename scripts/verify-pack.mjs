@@ -525,7 +525,6 @@ try {
     "README.md",
     "LICENCE",
     "CHANGELOG.md",
-    "docs/DECISIONS.md",
     "docs/REFERENCE.md",
     "package.json",
     "dist/index.js",
@@ -566,6 +565,7 @@ try {
     { label: "contributor guide", test: (file) => file === "CONTRIBUTING.md" },
     { label: "agent instructions", test: (file) => file === "AGENTS.md" },
     { label: "implementation tasks", test: (file) => file === "docs/TASKS.md" },
+    { label: "design decisions", test: (file) => file === "docs/DECISIONS.md" },
     { label: "obsolete roadmap", test: (file) => file === "ROADMAP.md" },
   ];
 
