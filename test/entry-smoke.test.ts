@@ -130,9 +130,8 @@ it.each([secureEntry.Ddu64, secureBrowserEntry.Ddu64])(
   "secure entry honors an explicit async adapter factory: %s",
   async (Codec) => {
     const adapter = new secureEntry.NodeAdapter();
-    const factory = vi
-      .fn(async () => adapter)
-      .mockRejectedValueOnce(new Error("temporary factory failure"));
+    const original = new Error("temporary factory failure");
+    const factory = vi.fn(async () => adapter).mockRejectedValueOnce(original);
     const codec = new Codec({
       compress: true,
       encryptionKey: "async-factory-key",
@@ -142,13 +141,48 @@ it.each([secureEntry.Ddu64, secureBrowserEntry.Ddu64])(
     expect(() => codec.encode("sync before initialization", { compress: false })).toThrow(
       nodeEntry.Ddu64AdapterError,
     );
-    await expect(codec.encodeAsync("first")).rejects.toBeInstanceOf(nodeEntry.Ddu64Error);
+    await expect(codec.encodeAsync("first")).rejects.toMatchObject({
+      code: nodeEntry.Ddu64ErrorCode.AdapterUnavailable,
+      operation: "adapter",
+      cause: original,
+    });
     const inputs = ["retry ".repeat(20), "concurrent ".repeat(20)];
     const encoded = await Promise.all(inputs.map((input) => codec.encodeAsync(input)));
     expect(await Promise.all(encoded.map((input) => codec.decodeAsync(input)))).toEqual(inputs);
     expect(factory).toHaveBeenCalledTimes(2);
   },
 );
+
+it("classifies failed sync factories alike during eager creation and lazy operations", async () => {
+  const original = new Error("factory failed");
+  const adapter = new secureEntry.NodeAdapter();
+  const factory = vi
+    .fn(() => adapter)
+    .mockImplementationOnce(() => {
+      throw original;
+    });
+  const codec = new nodeEntry.Ddu64({ adapterFactory: factory, compress: true });
+  expect(() => codec.encode("first")).toThrow(
+    expect.objectContaining({
+      code: nodeEntry.Ddu64ErrorCode.AdapterUnavailable,
+      operation: "adapter",
+      cause: original,
+    }),
+  );
+  expect(codec.decode(codec.encode("after retry"))).toBe("after retry");
+  await expect(
+    nodeEntry.Ddu64.create({
+      adapterFactory: () => {
+        throw original;
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: nodeEntry.Ddu64ErrorCode.AdapterUnavailable,
+    operation: "adapter",
+    cause: original,
+  });
+  expect(factory).toHaveBeenCalledTimes(2);
+});
 
 it.each([nodeEntry.Ddu64, browserEntry.Ddu64, secureEntry.Ddu64, secureBrowserEntry.Ddu64])(
   "entry keeps explicit adapter and sync factory precedence: %s",

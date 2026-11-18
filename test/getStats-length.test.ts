@@ -11,10 +11,11 @@
  * 실제로 실행하지만, 암호화와 함께 쓰는 가변 길이 변환은 실제 암호문과 통계 길이가 다를 수 있다.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fc from "fast-check";
 // 동기 암호화·압축 통계는 adapter가 포함된 secure 진입점으로 검증합니다.
 import { Ddu64Secure } from "../src/Ddu64Secure.js";
+import { NodeAdapter } from "../src/adapters/NodeAdapter.js";
 import { DduSetSymbol, type DduProgressInfo } from "../src/core/types.js";
 
 const NUM_RUNS = 60;
@@ -65,6 +66,23 @@ const optionsArb = fc.record({
 });
 
 describe("getStats encoded length accuracy (property)", () => {
+  it("estimates encrypted chunks without treating placeholder bytes as ciphertext", async () => {
+    const adapter = new NodeAdapter();
+    const encrypt = vi
+      .spyOn(adapter, "encryptSync")
+      .mockImplementation((data) => new Uint8Array(data.length + 28));
+    const encoder = new Ddu64Secure(BASE64, "=", { encryptionKey: "stats-key", adapter });
+    const options = { chunkSize: 8, chunkSeparator: "AAAA" };
+    const input = new Uint8Array(32);
+    const estimate = encoder.getStats(input, options);
+    expect(await encoder.getStatsAsync(input, options)).toEqual(estimate);
+    expect(encrypt).not.toHaveBeenCalled();
+    expect(estimate.encodedSize).toBeGreaterThan(input.length);
+    expect(() => encoder.encode(input, options)).toThrow(/Unsafe chunkSeparator/);
+    await expect(encoder.encodeAsync(input, options)).rejects.toThrow(/Unsafe chunkSeparator/);
+    const plain = new Ddu64Secure(BASE64, "=");
+    expect(() => plain.getStats(input, options)).toThrow(/Unsafe chunkSeparator/);
+  });
   it.each([false, true])(
     "reports the original UTF-8 size before compression with async=%s",
     async (asyncMode) => {

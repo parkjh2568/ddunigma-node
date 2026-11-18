@@ -284,8 +284,9 @@ console.log({ originalBytes, encodedChars: encoded.length, encodedUtf8Bytes });
 | `compressionRatio` | `compressedSize / originalSize`                  |
 
 압축 통계는 `await ddu.getStatsAsync(input, { compress:true })`를 사용합니다. 통계 계산도
-압축·출력 생성 비용이 있습니다. 암호화는 실행하지 않고 28바이트 overhead를 포함한 길이를 예상하며,
-사용자 난독화 레이어에 따라 실제 길이와 다를 수 있습니다. 정확한 전송량은 생성한 출력을
+압축·출력 생성 비용이 있습니다. 암호화는 실행하지 않고 28바이트 overhead를 포함한 길이를 예상합니다.
+암호화 통계는 실제 청크 구분자 충돌을 확인하지 않습니다. 구분자는 문자표·푸터·체크섬·URL-safe 출력에서
+생성될 수 없는 값을 사용하세요. 사용자 난독화 레이어나 문자의 UTF-16 길이에 따라 예상값과 실제 길이가 다를 수 있습니다. 정확한 전송량은 생성한 출력을
 JSON escaping·URL 변환 등 필요한 처리까지 마친 뒤 UTF-8 바이트로 측정하세요.
 
 ## 오류 처리
@@ -294,6 +295,10 @@ JSON escaping·URL 변환 등 필요한 처리까지 마친 뒤 UTF-8 바이트�
 `isDdu64Error(error)`로 확인한 뒤 `code`·`operation`으로 분기하고 원래 예외는 `cause`로 확인하세요.
 아래 코드는 `Ddu64ErrorCode`의 키입니다. builder·adapter 직접 호출은 기존 Error 계약을,
 외부 stream 취소는 호출자의 취소 이유를 유지합니다.
+
+동기·비동기 adapter factory 초기화 실패는 eager 생성과 첫 사용 모두
+`DDU64_ADAPTER_UNAVAILABLE` / `adapter`로 표시됩니다. 초기화에 성공한 adapter의 압축·암호화
+실패는 해당 연산의 코드로 보고합니다.
 
 | 코드                                        | 발생 조건                                                                    |
 | ------------------------------------------- | ---------------------------------------------------------------------------- |
