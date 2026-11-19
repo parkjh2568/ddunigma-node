@@ -99,7 +99,12 @@ export function createReadableEncodeStream(
     // 청크 스트리밍 모드에서 비트 정렬을 위한 잔여 바이트 버퍼
     let residualBytes: Uint8Array | null = null;
 
-    return new TransformStream<Uint8Array, string>({
+    const transformer: Transformer<Uint8Array, string> & { cancel: () => void } = {
+      cancel() {
+        residualBytes = null;
+        chunks = [];
+        totalLength = 0;
+      },
       async transform(chunk, controller) {
         try {
           validateEncodeInput(chunk, "stream", false);
@@ -230,7 +235,8 @@ export function createReadableEncodeStream(
           totalLength = 0;
         }
       },
-    });
+    };
+    return new TransformStream(transformer);
   } catch (error) {
     throw wrapDdu64Error(error, "stream");
   }
@@ -271,7 +277,11 @@ export function createReadableDecodeStream(
     let headerParsed = false;
     let headerMeta: StreamHeaderMeta | null = null;
 
-    return new TransformStream<string, Uint8Array>({
+    const transformer: Transformer<string, Uint8Array> & { cancel: () => void } = {
+      cancel() {
+        textBuffer = "";
+        headerMeta = null;
+      },
       transform(chunk) {
         try {
           validateDecodeInput(chunk, "stream");
@@ -335,7 +345,8 @@ export function createReadableDecodeStream(
           textBuffer = "";
         }
       },
-    });
+    };
+    return new TransformStream(transformer);
   } catch (error) {
     throw wrapDdu64Error(error, "stream");
   }

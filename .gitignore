@@ -7,3 +7,6 @@ test-decode.ts
 muyaho
 # 커밋 메시지 임시 파일 등
 *.tmp
+
+# Local build and benchmark ownership
+/.dist.lock/

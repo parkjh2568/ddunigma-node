@@ -216,3 +216,9 @@ node scripts/verify-compat.mjs <이전-package-디렉터리>
    [배포 workflow](.github/workflows/publish.yml)를 실행하므로 문서·검증·태그를 먼저 확정합니다.
 6. **설치 확인:** npm 게시 후 ESM/CJS·NodeNext 타입·browser·공개 진입점을 설치 검사하고 TASKS를 갱신합니다.
    workflow의 `npm publish --ignore-scripts`는 선행 검증을 마친 배포 단계입니다.
+
+### 로컬 빌드와 스트림 성능 확인
+
+`pnpm build`와 `pnpm bench*` 스크립트는 같은 체크아웃의 `.dist.lock`을 사용합니다. 정상 종료와 처리된 실패 뒤에는 잠금이 해제됩니다. 동시에 실행해야 하면 별도 체크아웃을 사용합니다. 강제 종료가 잠금을 남겼다면 해당 빌드·벤치마크 프로세스가 모두 끝난 뒤 비어 있는 잠금 디렉터리를 제거합니다.
+
+`pnpm bench:stream`은 합성 1 MiB 데이터를 작은 청크로 읽고, 느린 sink로 DDS1 인코더의 쓰기 대기와 출력 청크를 관측합니다. 체크섬 유무에 따른 디코딩 시점·샘플 RSS·ArrayBuffer 피크를 분리하고 원문 일치 및 소비자 취소에 따른 쓰기 중단을 확인합니다. 샘플 수치는 플랫폼·GC에 따라 달라집니다.

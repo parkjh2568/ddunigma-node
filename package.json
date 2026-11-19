@@ -12,10 +12,10 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsup",
-    "bench": "node --expose-gc --import tsx benchmarks/encoding-benchmark.ts",
-    "bench:micro": "node --expose-gc --import tsx benchmarks/micro-benchmark.ts",
-    "bench:guard": "node --expose-gc --import tsx benchmarks/perf-guard.ts",
+    "build": "node scripts/with-dist-lock.mjs build",
+    "bench": "node scripts/with-dist-lock.mjs benchmark benchmarks/encoding-benchmark.ts",
+    "bench:micro": "node scripts/with-dist-lock.mjs benchmark benchmarks/micro-benchmark.ts",
+    "bench:guard": "node scripts/with-dist-lock.mjs benchmark benchmarks/perf-guard.ts",
     "gen:scoped-checksum-vectors": "node --import tsx scripts/gen-scoped-checksum-vectors.ts",
     "pack:check": "node scripts/verify-pack.mjs",
     "smoke": "node scripts/runtime-smoke.mjs",
@@ -33,7 +33,8 @@
     "lint:fix": "eslint --max-warnings=0 src test scripts benchmarks eslint.config.mjs tsup.config.ts vitest.config.ts --fix",
     "format": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore",
     "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore",
-    "bench:latency": "node --expose-gc --import tsx benchmarks/latency-benchmark.ts"
+    "bench:latency": "node scripts/with-dist-lock.mjs benchmark benchmarks/latency-benchmark.ts",
+    "bench:stream": "node scripts/with-dist-lock.mjs benchmark benchmarks/stream-measurement.ts"
   },
   "exports": {
     ".": {
