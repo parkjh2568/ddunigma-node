@@ -1,0 +1,99 @@
+name: Benchmark Observations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DDU_BENCH_SAMPLES: "20"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare result directory
+        run: mkdir -p benchmark-results
+      - uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+          require-lockfile: true
+      - name: Record execution environment
+        run: |
+          node --input-type=module <<'NODE' > benchmark-results/environment.json
+          import { execFileSync } from "node:child_process";
+          import { cpus, platform, release } from "node:os";
+          console.log(JSON.stringify({
+            commit: process.env.GITHUB_SHA,
+            ref: process.env.GITHUB_REF,
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            job: process.env.GITHUB_JOB,
+            runner: process.env.RUNNER_NAME,
+            runnerOs: process.env.RUNNER_OS,
+            runnerArch: process.env.RUNNER_ARCH,
+            image: process.env.ImageOS,
+            imageVersion: process.env.ImageVersion,
+            node: process.version,
+            pnpm: execFileSync("pnpm", ["--version"], { encoding: "utf8" }).trim(),
+            platform: platform(),
+            os: release(),
+            cpu: cpus()[0]?.model,
+            cpuCount: cpus().length,
+            samples: Number(process.env.DDU_BENCH_SAMPLES),
+            timeoutSeconds: { build: 180, guard: 180, latency: 480, stream: 600 },
+            startedAt: new Date().toISOString(),
+            interpretation: "Shared-runner observations; no new latency threshold. Existing guard limits are unchanged.",
+          }, null, 2));
+          NODE
+      - name: Build measurement artifacts
+        id: build
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=15s 180s pnpm build > benchmark-results/build.log 2>&1
+          status=$?
+          printf '{"command":"pnpm build","exitStatus":%s}\n' "$status" > benchmark-results/build-status.json
+          cat benchmark-results/build.log
+          exit "$status"
+      - name: Observe existing performance guard
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=15s 180s pnpm --silent bench:guard > benchmark-results/guard.stdout.log 2> benchmark-results/guard.stderr.log
+          status=$?
+          printf '{"command":"pnpm bench:guard","exitStatus":%s}\n' "$status" > benchmark-results/guard-status.json
+          cat benchmark-results/guard.stdout.log benchmark-results/guard.stderr.log
+          exit "$status"
+      - name: Observe codec latency
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=15s 480s pnpm --silent bench:latency > benchmark-results/latency.jsonl 2> benchmark-results/latency.stderr.log
+          status=$?
+          printf '{"command":"pnpm bench:latency","exitStatus":%s}\n' "$status" > benchmark-results/latency-status.json
+          cat benchmark-results/latency.stderr.log
+          exit "$status"
+      - name: Observe DDS1 streams
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=15s 600s pnpm --silent bench:stream > benchmark-results/stream.jsonl 2> benchmark-results/stream.stderr.log
+          status=$?
+          printf '{"command":"pnpm bench:stream","exitStatus":%s}\n' "$status" > benchmark-results/stream-status.json
+          cat benchmark-results/stream.stderr.log
+          exit "$status"
+      - name: Preserve successful and failed observations
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarks-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-node24
+          path: benchmark-results/
+          retention-days: 14
+          if-no-files-found: warn

@@ -1,0 +1,637 @@
+{
+  "checkedAt": "2026-10-27T05:20:11.224Z",
+  "scope": "Synthetic Node source/tsx measurements; not production SLO or 100x capacity guarantees",
+  "operatorTargets": "Not supplied; Worker adoption deferred pending actual workload and SLO",
+  "rawAvailability": "Local ignored benchmark-results directory, excluded from Git/npm. Future manual CI stores raw artifacts for 14 days.",
+  "ordering": "Each CLI ran sequentially without other agent build/browser/benchmark jobs",
+  "failurePolicy": "Every dataset in this listed local implementation series is retained, including pre-fix failures; no outlier removal or automatic retry-to-green. Earlier investigation logs in /private/tmp are outside this series.",
+  "datasets": [
+    {
+      "file": "benchmark-results/local-20261027/guard-01.log",
+      "sha256": "3957acd7ad27c4681fba463cc42c4e62ed09f88f72b11d55ae6c432103852147",
+      "status": "passed",
+      "timestamp": "2026-10-27T04:58:00.853Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "eab6b5613c8312401e11482e92a3523203dab19f747920474a059b6654c2cb6f",
+      "metadataImplementationSha256": "e413afbc4b023080821613b7e4d6e885ef8cff731ab379fc3e771177497addeb",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/guard-02.log",
+      "sha256": "e34bb840906b1f271fa68a8170631a61917bf94e2cc209a1a7abec56a1c59d90",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:08:03.989Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "eab6b5613c8312401e11482e92a3523203dab19f747920474a059b6654c2cb6f",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/guard-03.log",
+      "sha256": "0b55804dbf905d605015dea354e75ab6d566ef111e460b60fd69d3f22d89e5fa",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:17:27.348Z",
+      "node": "v24.22.1",
+      "sourceSha256": "bfe5d2e3711c0bfc5ff2684041db1480b97853c823bce99d0537b0ebc7bebdc5",
+      "distSha256": "ba13d2fc329001a5fb8ee7449d4ed16e9f96afc821f3f9a185044806fc676713",
+      "benchmarkSha256": "eab6b5613c8312401e11482e92a3523203dab19f747920474a059b6654c2cb6f",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/latency-01.jsonl",
+      "sha256": "fb20db73501567d7d0e171e52e0e1933a903a9ab9601e0c720f73484caacb4da",
+      "status": "passed",
+      "timestamp": "2026-10-27T04:56:03.542Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "cc70ba2684ac8575097eade329da941d5854d35ebd8c59659803672aca648633",
+      "metadataImplementationSha256": "e413afbc4b023080821613b7e4d6e885ef8cff731ab379fc3e771177497addeb",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/latency-02.jsonl",
+      "sha256": "e219026a532513ea1e6e59532ccf2d498a376ac246be86188d0d62e387753625",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:06:10.690Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "cc70ba2684ac8575097eade329da941d5854d35ebd8c59659803672aca648633",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/latency-03.jsonl",
+      "sha256": "d1bc2bcfd59b1f02ed69a4df342352c5a37128451d22d921294bc57443fb6ea9",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:15:30.151Z",
+      "node": "v24.22.1",
+      "sourceSha256": "bfe5d2e3711c0bfc5ff2684041db1480b97853c823bce99d0537b0ebc7bebdc5",
+      "distSha256": "ba13d2fc329001a5fb8ee7449d4ed16e9f96afc821f3f9a185044806fc676713",
+      "benchmarkSha256": "cc70ba2684ac8575097eade329da941d5854d35ebd8c59659803672aca648633",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-c16-01.jsonl",
+      "sha256": "72e047cc7418132785886e6e27913530f8a449b75eafb1d085a781198534eee3",
+      "status": "passed",
+      "timestamp": "2026-10-27T04:58:50.169Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "75ee7ecc296b9edde132667abf19529c7c07d8cabfdf592956fc39cfa41827f1",
+      "metadataImplementationSha256": "e413afbc4b023080821613b7e4d6e885ef8cff731ab379fc3e771177497addeb",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-c16-02.jsonl",
+      "sha256": "d60f6a5268b793fb47dfeadb7bb9aedf21c71619802110696df7ec3c81baf542",
+      "status": "failed",
+      "timestamp": "2026-10-27T05:09:27.570Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "3f93ada92cc0ed9930c8af4671c81abc0f3c8b65d03a3c7c746a49c4f93dd344",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      },
+      "failure": {
+        "reason": "child-failed-or-missing-result",
+        "completedSamples": 20,
+        "exitCode": 0,
+        "signal": null,
+        "interpretation": "Before final IPC flush fix: 20 samples retained but final result missing. Subsequent final run passed; failed dataset retained."
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-c16-03.jsonl",
+      "sha256": "b72a1741e9fde85557967d9d93f5bc7020c02b2bf295ac2b8dfe873e75215cfc",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:16:41.794Z",
+      "node": "v24.22.1",
+      "sourceSha256": "bfe5d2e3711c0bfc5ff2684041db1480b97853c823bce99d0537b0ebc7bebdc5",
+      "distSha256": "ba13d2fc329001a5fb8ee7449d4ed16e9f96afc821f3f9a185044806fc676713",
+      "benchmarkSha256": "14836ac2126b3557c5deab94704c99fb22bdf51b3cd3200ceceab9174314a7a4",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-c4-01.jsonl",
+      "sha256": "ceb280d53b40dd1734404b110a33144f73ad4800054c50c7f903d0901994fbf7",
+      "status": "passed",
+      "timestamp": "2026-10-27T04:58:20.818Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "75ee7ecc296b9edde132667abf19529c7c07d8cabfdf592956fc39cfa41827f1",
+      "metadataImplementationSha256": "e413afbc4b023080821613b7e4d6e885ef8cff731ab379fc3e771177497addeb",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-c4-02.jsonl",
+      "sha256": "b9f878548a0c00d3b965dd3f2fea65318e035bf24b4af8427a49731b5d96eaff",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:08:20.106Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "3f93ada92cc0ed9930c8af4671c81abc0f3c8b65d03a3c7c746a49c4f93dd344",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-c4-03.jsonl",
+      "sha256": "04f585a562290f1c5f1915ddd37e8766c5be8f1de55d640cf67adc01093a1031",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:16:40.441Z",
+      "node": "v24.22.1",
+      "sourceSha256": "bfe5d2e3711c0bfc5ff2684041db1480b97853c823bce99d0537b0ebc7bebdc5",
+      "distSha256": "ba13d2fc329001a5fb8ee7449d4ed16e9f96afc821f3f9a185044806fc676713",
+      "benchmarkSha256": "14836ac2126b3557c5deab94704c99fb22bdf51b3cd3200ceceab9174314a7a4",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-default-01.jsonl",
+      "sha256": "816d5dd6ad82b573fb97b6125c333dda6d9bd3328e0ec1c7f16a21d42c056a8a",
+      "status": "passed",
+      "timestamp": "2026-10-27T04:56:32.176Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "75ee7ecc296b9edde132667abf19529c7c07d8cabfdf592956fc39cfa41827f1",
+      "metadataImplementationSha256": "e413afbc4b023080821613b7e4d6e885ef8cff731ab379fc3e771177497addeb",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-default-02.jsonl",
+      "sha256": "878da02b56037c1c4995faa228a3bb4163f4bf6271384f44d52fbbe51ab3f3d1",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:07:24.650Z",
+      "node": "v24.22.1",
+      "sourceSha256": "37f07a89e556903522645abdc0468ed1a348a12ac3e9fbe6245e02b2654420e8",
+      "distSha256": "0665f88b03c9b1aaf05600914ff736a50c20568a828c30c54b09aef7b6b86f86",
+      "benchmarkSha256": "3f93ada92cc0ed9930c8af4671c81abc0f3c8b65d03a3c7c746a49c4f93dd344",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    },
+    {
+      "file": "benchmark-results/local-20261027/stream-default-03.jsonl",
+      "sha256": "95dc70ffef8a61f1931a632329c38aded2d44b2345c0d36d08c07740eb44b9a9",
+      "status": "passed",
+      "timestamp": "2026-10-27T05:16:33.904Z",
+      "node": "v24.22.1",
+      "sourceSha256": "bfe5d2e3711c0bfc5ff2684041db1480b97853c823bce99d0537b0ebc7bebdc5",
+      "distSha256": "ba13d2fc329001a5fb8ee7449d4ed16e9f96afc821f3f9a185044806fc676713",
+      "benchmarkSha256": "14836ac2126b3557c5deab94704c99fb22bdf51b3cd3200ceceab9174314a7a4",
+      "metadataImplementationSha256": "35fd95de8c05d70588acd549d2e27ebcc389af3c88bbeaba9eff24ea480b5194",
+      "buildReceipt": {
+        "status": "recorded",
+        "matches": true
+      }
+    }
+  ],
+  "finalSummary": {
+    "samplesPerWorkload": 20,
+    "coldSamples": 5,
+    "latency": [
+      {
+        "name": "text-8388608",
+        "variant": "legacy",
+        "inputBytes": 8388608,
+        "inputSha256": "ad97f87076920684e2ca66fc44e5d322797dc9d64706b174e51b5d0828937043",
+        "p50BatchMs": 86.53841599999987,
+        "p95BatchMs": 95.96512499999972,
+        "wire": {
+          "compress": false,
+          "encodedCodeUnits": 11184812,
+          "encodedUtf8Bytes": 33554436
+        },
+        "pairedEventLoop": {
+          "p95Ms": 95.223807,
+          "maxMs": 104.726527,
+          "utilization": 0.9942298056188283
+        }
+      },
+      {
+        "name": "text-8388608",
+        "variant": "factory",
+        "inputBytes": 8388608,
+        "inputSha256": "ad97f87076920684e2ca66fc44e5d322797dc9d64706b174e51b5d0828937043",
+        "p50BatchMs": 85.90820799999983,
+        "p95BatchMs": 91.52450000000044,
+        "wire": {
+          "compress": false,
+          "encodedCodeUnits": 11184812,
+          "encodedUtf8Bytes": 33554436
+        },
+        "pairedEventLoop": {
+          "p95Ms": 95.223807,
+          "maxMs": 104.726527,
+          "utilization": 0.9942298056188283
+        }
+      },
+      {
+        "name": "random-deflate-1048576",
+        "variant": "legacy-off",
+        "inputBytes": 1048576,
+        "inputSha256": "5b64b12ad6e657f403f9e3e57e4ad6fbd1d8fb14c53a0c7e1dc5dbd2257166b1",
+        "p50BatchMs": 10.766292000000249,
+        "p95BatchMs": 17.43958399999974,
+        "wire": {
+          "compress": false,
+          "encodedCodeUnits": 1398104,
+          "encodedUtf8Bytes": 4194312,
+          "compressionApplied": false
+        },
+        "rawCompressedBytes": 1048901,
+        "pairedEventLoop": {
+          "p95Ms": 32.620543,
+          "maxMs": 159.121407,
+          "utilization": 0.6351433518519942
+        }
+      },
+      {
+        "name": "random-deflate-1048576",
+        "variant": "factory-off",
+        "inputBytes": 1048576,
+        "inputSha256": "5b64b12ad6e657f403f9e3e57e4ad6fbd1d8fb14c53a0c7e1dc5dbd2257166b1",
+        "p50BatchMs": 10.62237500000083,
+        "p95BatchMs": 12.72887499999888,
+        "wire": {
+          "compress": false,
+          "encodedCodeUnits": 1398104,
+          "encodedUtf8Bytes": 4194312,
+          "compressionApplied": false
+        },
+        "rawCompressedBytes": 1048901,
+        "pairedEventLoop": {
+          "p95Ms": 32.620543,
+          "maxMs": 159.121407,
+          "utilization": 0.6351433518519942
+        }
+      },
+      {
+        "name": "random-deflate-1048576",
+        "variant": "legacy-on",
+        "inputBytes": 1048576,
+        "inputSha256": "5b64b12ad6e657f403f9e3e57e4ad6fbd1d8fb14c53a0c7e1dc5dbd2257166b1",
+        "p50BatchMs": 29.592125000001033,
+        "p95BatchMs": 42.465416999999434,
+        "wire": {
+          "compress": true,
+          "encodedCodeUnits": 1398104,
+          "encodedUtf8Bytes": 4194312,
+          "compressionApplied": false
+        },
+        "rawCompressedBytes": 1048901,
+        "pairedEventLoop": {
+          "p95Ms": 32.620543,
+          "maxMs": 159.121407,
+          "utilization": 0.6351433518519942
+        }
+      },
+      {
+        "name": "random-deflate-1048576",
+        "variant": "factory-on",
+        "inputBytes": 1048576,
+        "inputSha256": "5b64b12ad6e657f403f9e3e57e4ad6fbd1d8fb14c53a0c7e1dc5dbd2257166b1",
+        "p50BatchMs": 30.6512500000008,
+        "p95BatchMs": 43.81062500000007,
+        "wire": {
+          "compress": true,
+          "encodedCodeUnits": 1398104,
+          "encodedUtf8Bytes": 4194312,
+          "compressionApplied": false
+        },
+        "rawCompressedBytes": 1048901,
+        "pairedEventLoop": {
+          "p95Ms": 32.620543,
+          "maxMs": 159.121407,
+          "utilization": 0.6351433518519942
+        }
+      }
+    ],
+    "stream": [
+      {
+        "name": "plain-encode-16k",
+        "status": "ok",
+        "p95BatchMs": 0.4734160000000003,
+        "lifecycleMaxRssKiB": 76720,
+        "firstPayload": {
+          "p50": 0.05287500000000023,
+          "p95": 0.10437499999999034
+        }
+      },
+      {
+        "name": "plain-slow-encode-16k",
+        "status": "ok",
+        "p95BatchMs": 31.09612500000003,
+        "lifecycleMaxRssKiB": 76416,
+        "firstPayload": {
+          "p50": 1.3790410000000293,
+          "p95": 1.9952500000000555
+        }
+      },
+      {
+        "name": "plain-encode-1m",
+        "status": "ok",
+        "p95BatchMs": 7.444790999999952,
+        "lifecycleMaxRssKiB": 116032,
+        "firstPayload": {
+          "p50": 0.44837499999999864,
+          "p95": 0.5838749999999777
+        }
+      },
+      {
+        "name": "plain-decode-1m",
+        "status": "ok",
+        "p95BatchMs": 7.445165999999972,
+        "lifecycleMaxRssKiB": 113168,
+        "firstPayload": {
+          "p50": 6.322375000000022,
+          "p95": 7.402207999999973
+        }
+      },
+      {
+        "name": "checksum-encode-1m",
+        "status": "ok",
+        "p95BatchMs": 12.353124999999977,
+        "lifecycleMaxRssKiB": 161024,
+        "firstPayload": {
+          "p50": 9.716750000000047,
+          "p95": 11.348332999999968
+        }
+      },
+      {
+        "name": "checksum-decode-16k",
+        "status": "ok",
+        "p95BatchMs": 0.42841700000001026,
+        "lifecycleMaxRssKiB": 74624,
+        "firstPayload": {
+          "p50": 0.19329199999999958,
+          "p95": 0.39424999999999955
+        }
+      },
+      {
+        "name": "encryption-encode-16k",
+        "status": "ok",
+        "p95BatchMs": 0.36379200000000367,
+        "lifecycleMaxRssKiB": 78464,
+        "firstPayload": {
+          "p50": 0.2201249999999959,
+          "p95": 0.3409579999999863
+        }
+      },
+      {
+        "name": "encryption-decode-16k",
+        "status": "ok",
+        "p95BatchMs": 0.3813339999999954,
+        "lifecycleMaxRssKiB": 78576,
+        "firstPayload": {
+          "p50": 0.16929200000001288,
+          "p95": 0.34208300000000236
+        }
+      },
+      {
+        "name": "nonpow2-encode-16k",
+        "status": "ok",
+        "p95BatchMs": 1.3712910000000136,
+        "lifecycleMaxRssKiB": 76576,
+        "firstPayload": {
+          "p50": 0.6976669999999956,
+          "p95": 1.3364589999999907
+        }
+      },
+      {
+        "name": "deflate-encode-1m",
+        "status": "ok",
+        "p95BatchMs": 3.016750000000002,
+        "lifecycleMaxRssKiB": 110560,
+        "firstPayload": {
+          "p50": 2.680583999999982,
+          "p95": 2.997458000000023
+        }
+      },
+      {
+        "name": "plain-encode-edge-0",
+        "status": "ok",
+        "p95BatchMs": 0.12591699999998696,
+        "lifecycleMaxRssKiB": 72912,
+        "firstPayload": null
+      },
+      {
+        "name": "plain-encode-edge-1",
+        "status": "ok",
+        "p95BatchMs": 0.29316700000001106,
+        "lifecycleMaxRssKiB": 73312,
+        "firstPayload": {
+          "p50": 0.05420899999998596,
+          "p95": 0.2666250000000048
+        }
+      },
+      {
+        "name": "plain-encode-edge-2",
+        "status": "ok",
+        "p95BatchMs": 0.3029579999999896,
+        "lifecycleMaxRssKiB": 72624,
+        "firstPayload": {
+          "p50": 0.053207999999997924,
+          "p95": 0.28616700000000606
+        }
+      },
+      {
+        "name": "plain-encode-edge-3",
+        "status": "ok",
+        "p95BatchMs": 0.15091700000000685,
+        "lifecycleMaxRssKiB": 72448,
+        "firstPayload": {
+          "p50": 0.0539579999999944,
+          "p95": 0.13412499999999739
+        }
+      },
+      {
+        "name": "plain-encode-8m",
+        "status": "ok",
+        "p95BatchMs": 68.52729099999988,
+        "lifecycleMaxRssKiB": 312992,
+        "firstPayload": {
+          "p50": 0.5395419999999831,
+          "p95": 1.4305839999999534
+        }
+      },
+      {
+        "name": "plain-single-encode-1m",
+        "status": "ok",
+        "p95BatchMs": 10.08883400000002,
+        "lifecycleMaxRssKiB": 146512,
+        "firstPayload": {
+          "p50": 6.705624999999998,
+          "p95": 10.005957999999964
+        }
+      },
+      {
+        "name": "deflate-decode-1m",
+        "status": "ok",
+        "p95BatchMs": 2.9484580000000165,
+        "lifecycleMaxRssKiB": 94688,
+        "firstPayload": {
+          "p50": 1.1157090000000096,
+          "p95": 2.931459000000018
+        }
+      },
+      {
+        "name": "plain-decode-edge-3",
+        "status": "ok",
+        "p95BatchMs": 0.537791999999996,
+        "lifecycleMaxRssKiB": 73088,
+        "firstPayload": {
+          "p50": 0.08916699999998912,
+          "p95": 0.4427909999999997
+        }
+      }
+    ],
+    "concurrent": [
+      {
+        "name": "plain-encode-1m",
+        "status": "ok",
+        "concurrency": 4,
+        "p95BatchMs": 46.87300000000005,
+        "lifecycleMaxRssKiB": 177952
+      },
+      {
+        "name": "plain-encode-1m",
+        "status": "ok",
+        "concurrency": 16,
+        "p95BatchMs": 105.90895900000004,
+        "lifecycleMaxRssKiB": 332688
+      }
+    ],
+    "guard": [
+      {
+        "name": "packPow2ToString 16KiB",
+        "passed": true,
+        "medianMiBps": 191.88338441739776,
+        "minMiBps": 110,
+        "rawMiBps": [191.88338441739776, 192.07459294568844, 190.7918749304984]
+      },
+      {
+        "name": "unpackPow2FromString 16KiB",
+        "passed": true,
+        "medianMiBps": 417.7133984249476,
+        "minMiBps": 220,
+        "rawMiBps": [403.0700603164831, 417.7133984249476, 430.0372332669351]
+      },
+      {
+        "name": "DDU encode",
+        "passed": true,
+        "medianMiBps": 183.37228904021563,
+        "minMiBps": 100,
+        "rawMiBps": [173.51463504608495, 183.37228904021563, 187.55973702600363]
+      },
+      {
+        "name": "DDU decode",
+        "passed": true,
+        "medianMiBps": 235.59138896812263,
+        "minMiBps": 120,
+        "rawMiBps": [231.7255073220294, 235.59138896812263, 237.37903164547313]
+      },
+      {
+        "name": "DDU encode obfuscated",
+        "passed": true,
+        "medianMiBps": 47.6115813975748,
+        "minMiBps": 8,
+        "rawMiBps": [46.167654061055316, 48.87728867904234, 47.6115813975748]
+      },
+      {
+        "name": "DDU decode obfuscated",
+        "passed": true,
+        "medianMiBps": 40.38902710911503,
+        "minMiBps": 16,
+        "rawMiBps": [39.34783327221301, 40.38902710911503, 41.77656242070812]
+      }
+    ],
+    "sourceFiles": {
+      "latency": "benchmark-results/local-20261027/latency-03.jsonl",
+      "guard": "benchmark-results/local-20261027/guard-03.log",
+      "streamDefault": "benchmark-results/local-20261027/stream-default-03.jsonl",
+      "streamConcurrency4": "benchmark-results/local-20261027/stream-c4-03.jsonl",
+      "streamConcurrency16": "benchmark-results/local-20261027/stream-c16-03.jsonl"
+    },
+    "streamDefaultConcurrency": 1,
+    "guardSamples": 3,
+    "sharedSourceSha256": "bfe5d2e3711c0bfc5ff2684041db1480b97853c823bce99d0537b0ebc7bebdc5",
+    "sharedDistSha256": "ba13d2fc329001a5fb8ee7449d4ed16e9f96afc821f3f9a185044806fc676713"
+  },
+  "limitations": [
+    "Calls within concurrent batches are correlated; percentiles are empirical.",
+    "pairedEventLoop includes all variants, instrumentation, logging and waits.",
+    "process.cpuUsage covers the process, not isolated queue wait.",
+    "maxRSS includes child startup, fixtures, correctness collection and warmup.",
+    "RSS cutoff is sampled; not an OS hard allocation cap.",
+    "Build receipts are local content consistency checks, not signed attestations."
+  ],
+  "verification": {
+    "full": {
+      "file": "benchmark-results/local-20261027/verify-final-02.log",
+      "sha256": "63f285205f695b4b4bcf61bc1ef64115e21a1418313a0595b2878258758f0d64",
+      "status": "passed",
+      "testFiles": 33,
+      "tests": 1276
+    },
+    "browser": {
+      "file": "benchmark-results/local-20261027/browser-final.log",
+      "status": "passed",
+      "engines": ["Chromium 153.0.8010.12", "Firefox 155.0", "WebKit 26.6"]
+    },
+    "independentReview": "Architect, Reviewer and SRE/Optimizer reported no remaining Blocker/Major."
+  }
+}

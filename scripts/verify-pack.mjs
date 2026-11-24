@@ -1,6 +1,17 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
-import { isAbsolute, join } from "path";
+import { isAbsolute, join, relative, resolve } from "path";
 import { spawnSync } from "child_process";
 
 const cwd = process.cwd();
@@ -10,6 +21,7 @@ const tscBin = join(cwd, "node_modules", ".bin", process.platform === "win32" ? 
 const MAX_PACK_ENTRIES = 70;
 const MAX_PACKED_SIZE = 110_000;
 const MAX_UNPACKED_SIZE = 390_000;
+const installedMode = process.argv[2] === "--installed";
 
 function fail(message) {
   throw new Error(`[pack:check] ${message}`);
@@ -20,11 +32,14 @@ function run(command, args, options, label) {
     cwd,
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
+    ...(installedMode ? { timeout: 60_000 } : {}),
     ...options,
   });
 
   if (result.status !== 0) {
-    fail(`${label} failed.\n${result.stderr || result.stdout}`);
+    fail(
+      `${label} failed.\n${result.error ? result.error.message + "\n" : ""}${result.stderr || result.stdout}`,
+    );
   }
 
   return result;
@@ -507,129 +522,207 @@ function runTypeSmoke(packageDir) {
 }
 
 try {
-  const distDir = join(cwd, "dist");
-  if (!existsSync(distDir)) {
-    fail("dist/ does not exist. Run `pnpm build` before `pnpm pack:check`.");
-  }
-
-  const dryRun = run(
-    "npm",
-    ["pack", "--dry-run", "--json", "--cache", cacheDir],
-    undefined,
-    "npm pack dry-run",
-  );
-  const manifest = parsePackJson(dryRun.stdout, "npm pack dry-run");
-  const filePaths = manifest.files.map((file) => file.path);
-
-  const requiredFiles = [
-    "README.md",
-    "LICENCE",
-    "CHANGELOG.md",
-    "docs/REFERENCE.md",
-    "package.json",
-    "dist/index.js",
-    "dist/index.cjs",
-    "dist/index.d.ts",
-    "dist/index.d.cts",
-    "dist/browser.js",
-    "dist/browser.cjs",
-    "dist/browser.d.ts",
-    "dist/browser.d.cts",
-    "dist/core.js",
-    "dist/core.cjs",
-    "dist/core.d.ts",
-    "dist/core.d.cts",
-    "dist/secure.js",
-    "dist/secure.cjs",
-    "dist/secure.d.ts",
-    "dist/secure.d.cts",
-    "dist/secure.browser.js",
-    "dist/secure.browser.cjs",
-    "dist/secure.browser.d.ts",
-    "dist/secure.browser.d.cts",
-  ];
-
-  for (const file of requiredFiles) {
-    if (!filePaths.includes(file)) {
-      fail(`Missing required published file: ${file}`);
+  if (process.argv.length > 2) {
+    if (!installedMode || process.argv.length !== 4 || !isAbsolute(process.argv[3])) {
+      fail("Usage: node scripts/verify-pack.mjs [--installed <absolute extracted package path>]");
     }
-  }
-
-  const forbiddenPatterns = [
-    { label: "source map", test: (file) => file.endsWith(".map") },
-    { label: "source TypeScript", test: (file) => file.startsWith("src/") },
-    { label: "test source", test: (file) => file.startsWith("test/") },
-    { label: "benchmark source", test: (file) => file.startsWith("benchmarks/") },
-    { label: "coverage output", test: (file) => file.startsWith("coverage/") },
-    { label: "node_modules content", test: (file) => file.startsWith("node_modules/") },
-    { label: "contributor guide", test: (file) => file === "CONTRIBUTING.md" },
-    { label: "agent instructions", test: (file) => file === "AGENTS.md" },
-    { label: "implementation tasks", test: (file) => file === "docs/TASKS.md" },
-    { label: "design decisions", test: (file) => file === "docs/DECISIONS.md" },
-    { label: "obsolete roadmap", test: (file) => file === "ROADMAP.md" },
-  ];
-
-  for (const { label, test } of forbiddenPatterns) {
-    const match = filePaths.find(test);
-    if (match) {
-      fail(`Unexpected published ${label}: ${match}`);
+    const installedDir = realpathSync(process.argv[3]);
+    if (!statSync(installedDir).isDirectory()) fail("Installed package path must be a directory.");
+    const installedPackage = JSON.parse(readFileSync(join(installedDir, "package.json"), "utf8"));
+    if (installedPackage.name !== "@ddunigma/node") {
+      fail("Installed package name must be @ddunigma/node.");
     }
-  }
+    if (
+      typeof installedPackage.version !== "string" ||
+      !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(
+        installedPackage.version,
+      )
+    ) {
+      fail("Installed package must declare a valid version.");
+    }
+    if (!installedPackage.exports || typeof installedPackage.exports !== "object") {
+      fail("Installed package must declare entrypoint exports.");
+    }
+    const declaredPaths = [
+      installedPackage.main,
+      installedPackage.module,
+      installedPackage.types,
+      installedPackage.browser,
+    ];
+    const pendingExports = [installedPackage.exports];
+    while (pendingExports.length > 0) {
+      const value = pendingExports.pop();
+      if (typeof value === "string") declaredPaths.push(value);
+      else if (value && typeof value === "object" && !Array.isArray(value)) {
+        pendingExports.push(...Object.values(value));
+      } else fail("Installed package exports must contain file paths and condition objects.");
+    }
+    for (const target of declaredPaths) {
+      if (typeof target !== "string" || target.length === 0 || isAbsolute(target)) {
+        fail("Installed package entrypoints must name relative files.");
+      }
+      const targetPath = realpathSync(resolve(installedDir, target));
+      const targetRelative = relative(installedDir, targetPath);
+      if (
+        targetRelative === "" ||
+        targetRelative.startsWith("..") ||
+        isAbsolute(targetRelative) ||
+        !statSync(targetPath).isFile()
+      ) {
+        fail(`Installed package entrypoint must be a file inside the package: ${target}`);
+      }
+    }
+    if (!existsSync(tscBin))
+      fail("Repository TypeScript is required. Install devDependencies first.");
+    const packageDir = join(cacheDir, "installed-package");
+    cpSync(installedDir, packageDir, {
+      recursive: true,
+      filter(source) {
+        const entry = lstatSync(source);
+        if (!entry.isFile() && !entry.isDirectory()) {
+          fail(
+            "Installed package must contain only regular files and directories, without symlinks.",
+          );
+        }
+        return true;
+      },
+    });
+    console.log(
+      `[pack:check] installed consumer target=${installedPackage.name}@${installedPackage.version}`,
+    );
+    runNodeSmoke(packageDir);
+    runTypeSmoke(packageDir);
+    await runBrowserBundleSmoke(packageDir);
+    console.log(
+      "[pack:check] installed ESM/CJS, NodeNext types, and browser bundle consumers passed",
+    );
+  } else {
+    const distDir = join(cwd, "dist");
+    if (!existsSync(distDir)) {
+      fail("dist/ does not exist. Run `pnpm build` before `pnpm pack:check`.");
+    }
 
-  if (manifest.entryCount > MAX_PACK_ENTRIES) {
-    fail(`Published file count ${manifest.entryCount} exceeds ${MAX_PACK_ENTRIES}`);
-  }
-  if (manifest.size > MAX_PACKED_SIZE) {
-    fail(`Packed size ${manifest.size} exceeds ${MAX_PACKED_SIZE} bytes`);
-  }
-  if (manifest.unpackedSize > MAX_UNPACKED_SIZE) {
-    fail(`Unpacked size ${manifest.unpackedSize} exceeds ${MAX_UNPACKED_SIZE} bytes`);
-  }
+    const dryRun = run(
+      "npm",
+      ["pack", "--dry-run", "--json", "--cache", cacheDir],
+      undefined,
+      "npm pack dry-run",
+    );
+    const manifest = parsePackJson(dryRun.stdout, "npm pack dry-run");
+    const filePaths = manifest.files.map((file) => file.path);
 
-  const expectedMain = packageJson.main;
-  const expectedModule = packageJson.module;
-  const expectedTypes = packageJson.types;
-  const expectedBrowser = packageJson.browser;
-  if (!filePaths.includes(expectedMain)) {
-    fail(`package.json main is not published: ${expectedMain}`);
-  }
-  if (!filePaths.includes(expectedModule)) {
-    fail(`package.json module is not published: ${expectedModule}`);
-  }
-  if (!filePaths.includes(expectedTypes)) {
-    fail(`package.json types is not published: ${expectedTypes}`);
-  }
-  if (!filePaths.includes(expectedBrowser.replace(/^\.\//, ""))) {
-    fail(`package.json browser is not published: ${expectedBrowser}`);
-  }
+    const requiredFiles = [
+      "README.md",
+      "LICENCE",
+      "CHANGELOG.md",
+      "docs/REFERENCE.md",
+      "package.json",
+      "dist/index.js",
+      "dist/index.cjs",
+      "dist/index.d.ts",
+      "dist/index.d.cts",
+      "dist/browser.js",
+      "dist/browser.cjs",
+      "dist/browser.d.ts",
+      "dist/browser.d.cts",
+      "dist/core.js",
+      "dist/core.cjs",
+      "dist/core.d.ts",
+      "dist/core.d.cts",
+      "dist/secure.js",
+      "dist/secure.cjs",
+      "dist/secure.d.ts",
+      "dist/secure.d.cts",
+      "dist/secure.browser.js",
+      "dist/secure.browser.cjs",
+      "dist/secure.browser.d.ts",
+      "dist/secure.browser.d.cts",
+    ];
 
-  const actualPack = run(
-    "npm",
-    ["pack", "--json", "--cache", cacheDir, "--pack-destination", cacheDir],
-    undefined,
-    "npm pack",
-  );
-  const actualManifest = parsePackJson(actualPack.stdout, "npm pack");
-  const tarballPath = isAbsolute(actualManifest.filename)
-    ? actualManifest.filename
-    : join(cacheDir, actualManifest.filename);
+    for (const file of requiredFiles) {
+      if (!filePaths.includes(file)) {
+        fail(`Missing required published file: ${file}`);
+      }
+    }
 
-  const extractDir = join(cacheDir, "extract");
-  mkdirSync(extractDir, { recursive: true });
-  run("tar", ["-xzf", tarballPath, "-C", extractDir], undefined, "tar extract");
+    const forbiddenPatterns = [
+      { label: "source map", test: (file) => file.endsWith(".map") },
+      { label: "source TypeScript", test: (file) => file.startsWith("src/") },
+      { label: "test source", test: (file) => file.startsWith("test/") },
+      { label: "benchmark source", test: (file) => file.startsWith("benchmarks/") },
+      { label: "coverage output", test: (file) => file.startsWith("coverage/") },
+      { label: "node_modules content", test: (file) => file.startsWith("node_modules/") },
+      { label: "contributor guide", test: (file) => file === "CONTRIBUTING.md" },
+      { label: "agent instructions", test: (file) => file === "AGENTS.md" },
+      { label: "implementation tasks", test: (file) => file === "docs/TASKS.md" },
+      { label: "design decisions", test: (file) => file === "docs/DECISIONS.md" },
+      { label: "obsolete roadmap", test: (file) => file === "ROADMAP.md" },
+    ];
 
-  const packageDir = join(extractDir, "package");
-  runNodeSmoke(packageDir);
-  runTypeSmoke(packageDir);
-  await runBrowserBundleSmoke(packageDir);
+    for (const { label, test } of forbiddenPatterns) {
+      const match = filePaths.find(test);
+      if (match) {
+        fail(`Unexpected published ${label}: ${match}`);
+      }
+    }
 
-  console.log("[pack:check] npm pack dry-run passed");
-  console.log("[pack:check] extracted package smoke tests passed");
-  console.log("[pack:check] TypeScript package smoke test passed");
-  console.log("[pack:check] browser bundle smoke tests passed");
-  console.log(`[pack:check] entryCount=${manifest.entryCount}`);
-  console.log(`[pack:check] unpackedSize=${manifest.unpackedSize}`);
-  console.log(`[pack:check] published files:\n${filePaths.map((file) => ` - ${file}`).join("\n")}`);
+    if (manifest.entryCount > MAX_PACK_ENTRIES) {
+      fail(`Published file count ${manifest.entryCount} exceeds ${MAX_PACK_ENTRIES}`);
+    }
+    if (manifest.size > MAX_PACKED_SIZE) {
+      fail(`Packed size ${manifest.size} exceeds ${MAX_PACKED_SIZE} bytes`);
+    }
+    if (manifest.unpackedSize > MAX_UNPACKED_SIZE) {
+      fail(`Unpacked size ${manifest.unpackedSize} exceeds ${MAX_UNPACKED_SIZE} bytes`);
+    }
+
+    const expectedMain = packageJson.main;
+    const expectedModule = packageJson.module;
+    const expectedTypes = packageJson.types;
+    const expectedBrowser = packageJson.browser;
+    if (!filePaths.includes(expectedMain)) {
+      fail(`package.json main is not published: ${expectedMain}`);
+    }
+    if (!filePaths.includes(expectedModule)) {
+      fail(`package.json module is not published: ${expectedModule}`);
+    }
+    if (!filePaths.includes(expectedTypes)) {
+      fail(`package.json types is not published: ${expectedTypes}`);
+    }
+    if (!filePaths.includes(expectedBrowser.replace(/^\.\//, ""))) {
+      fail(`package.json browser is not published: ${expectedBrowser}`);
+    }
+
+    const actualPack = run(
+      "npm",
+      ["pack", "--json", "--cache", cacheDir, "--pack-destination", cacheDir],
+      undefined,
+      "npm pack",
+    );
+    const actualManifest = parsePackJson(actualPack.stdout, "npm pack");
+    const tarballPath = isAbsolute(actualManifest.filename)
+      ? actualManifest.filename
+      : join(cacheDir, actualManifest.filename);
+
+    const extractDir = join(cacheDir, "extract");
+    mkdirSync(extractDir, { recursive: true });
+    run("tar", ["-xzf", tarballPath, "-C", extractDir], undefined, "tar extract");
+
+    const packageDir = join(extractDir, "package");
+    runNodeSmoke(packageDir);
+    runTypeSmoke(packageDir);
+    await runBrowserBundleSmoke(packageDir);
+
+    console.log("[pack:check] npm pack dry-run passed");
+    console.log("[pack:check] extracted package smoke tests passed");
+    console.log("[pack:check] TypeScript package smoke test passed");
+    console.log("[pack:check] browser bundle smoke tests passed");
+    console.log(`[pack:check] entryCount=${manifest.entryCount}`);
+    console.log(`[pack:check] unpackedSize=${manifest.unpackedSize}`);
+    console.log(
+      `[pack:check] published files:\n${filePaths.map((file) => ` - ${file}`).join("\n")}`,
+    );
+  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;

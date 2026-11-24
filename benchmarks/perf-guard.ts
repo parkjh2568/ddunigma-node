@@ -1,6 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { packPow2ToString, unpackPow2FromString } from "../src/core/internal/IndexStringMapper.js";
 import { Ddu64Node } from "../src/Ddu64Node.js";
+import { getBenchmarkMetadata } from "./benchmarkMetadata.js";
 
 type GuardCase = {
   name: string;
@@ -51,7 +52,12 @@ function consume(value: unknown): void {
   }
 }
 
-function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boolean } {
+function runCase(testCase: GuardCase): {
+  name: string;
+  mbps: number;
+  passed: boolean;
+  rawMiBps: number[];
+} {
   const gc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
   consume(testCase.fn());
 
@@ -65,14 +71,33 @@ function runCase(testCase: GuardCase): { name: string; mbps: number; passed: boo
     const elapsedMs = performance.now() - started;
     const totalMb = (testCase.bytes * testCase.iterations) / (1024 * 1024);
     samples.push(totalMb / (elapsedMs / 1000));
+    console.log(
+      JSON.stringify({
+        type: "sample",
+        name: testCase.name,
+        sample,
+        MiBps: samples.at(-1),
+        iterations: testCase.iterations,
+        bytesPerIteration: testCase.bytes,
+      }),
+    );
   }
 
-  samples.sort((a, b) => a - b);
-  const mbps = samples[1];
-  return { name: testCase.name, mbps, passed: mbps >= testCase.minMbps };
+  const mbps = [...samples].sort((a, b) => a - b)[1];
+  return { name: testCase.name, mbps, passed: mbps >= testCase.minMbps, rawMiBps: samples };
 }
 
 function main(): void {
+  console.log(
+    JSON.stringify({
+      type: "metadata",
+      ...getBenchmarkMetadata(import.meta.url),
+      samples: 3,
+      metric: "median batch throughput, not per-call latency",
+      gc: "explicit GC before each sample when --expose-gc",
+      failurePolicy: "retain failed runs; no retries or outlier removal",
+    }),
+  );
   const bytes16k = new Uint8Array(16 * 1024);
   for (let i = 0; i < bytes16k.length; i++) bytes16k[i] = (i * 31 + 17) & 0xff;
   const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -145,6 +170,15 @@ function main(): void {
         `${testCase.minMbps.toFixed(1).padStart(6)} ` +
         `${result.passed ? "ok" : "fail"}`,
     );
+    console.log(
+      JSON.stringify({
+        type: "result",
+        ...result,
+        minMiBps: testCase.minMbps,
+        iterations: testCase.iterations,
+        bytesPerIteration: testCase.bytes,
+      }),
+    );
   }
   console.log(`sink=${sink}`);
 
@@ -154,4 +188,14 @@ function main(): void {
   }
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  console.log(
+    JSON.stringify({
+      type: "failure",
+      error: error instanceof Error ? error.message : String(error),
+    }),
+  );
+  process.exitCode = 1;
+}

@@ -1,0 +1,123 @@
+{
+  "checkedAt": "2026-10-27T05:01:39.848Z",
+  "package": {
+    "name": "@ddunigma/node",
+    "version": "6.3.0",
+    "publishedAt": "2026-10-19T07:01:26.731Z",
+    "gitHead": "c7beb2b1cdfc9ff1d30cd89db115a4931d92f0ef",
+    "tarball": "https://registry.npmjs.org/@ddunigma/node/-/node-6.3.0.tgz",
+    "integrity": "sha512-uxldNXGfUFQ5BEQWN7dnFs4U33RGN/TEbTPfnwzZMwxIGi4mj6hPaeDCuEv+lcyyz/fWbhGbCkm72Y13L5U8Hw==",
+    "shasum": "4195a43bddcc156b5e284e9ae953819e5c41f70c",
+    "integrityCheck": "SHA-512 and SHA-1 match registry metadata; signatures and publisher identity are not attested by this check",
+    "consumerCheck": {
+      "status": "passed",
+      "command": "node scripts/verify-pack.mjs --installed <integrity-verified extracted package>",
+      "scope": [
+        "ESM/CJS public entrypoints",
+        "NodeNext import/require types",
+        "browser bundle consumer"
+      ],
+      "actualBrowserEngines": false,
+      "sourcePackageUnmodified": true
+    }
+  },
+  "historicalEvidence": {
+    "commitUrl": "https://github.com/parkjh2568/ddunigma-node/commit/c7beb2b1cdfc9ff1d30cd89db115a4931d92f0ef",
+    "workflowRunsUrl": "https://api.github.com/repos/parkjh2568/ddunigma-node/actions/runs?head_sha=c7beb2b1cdfc9ff1d30cd89db115a4931d92f0ef&per_page=100",
+    "visibleRunsForPackageSha": 0,
+    "releaseUrl": "https://api.github.com/repos/parkjh2568/ddunigma-node/releases?per_page=100",
+    "visibleReleases": 0,
+    "tagsUrl": "https://api.github.com/repos/parkjh2568/ddunigma-node/git/matching-refs/tags/",
+    "visibleTags": 0,
+    "interpretation": "Current visible records do not establish a release tag or same-SHA CI run. Their absence does not establish that publishing failed or never ran."
+  },
+  "observedCi": {
+    "sha": "636aed71fd13312b0b7e7a1ae4fe74591812f534",
+    "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843",
+    "attempt": 1,
+    "conclusion": "success",
+    "date": "2026-10-21",
+    "jobs": [
+      {
+        "name": "verify",
+        "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843/job/119101328794",
+        "runtime": "Node 24.22.0",
+        "conclusion": "success"
+      },
+      {
+        "name": "node-runtimes (22)",
+        "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843/job/119101329251",
+        "runtime": "Node 22.23.3",
+        "conclusion": "success"
+      },
+      {
+        "name": "node-runtimes (26)",
+        "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843/job/119101329300",
+        "runtime": "Node 26.12.0",
+        "conclusion": "success"
+      },
+      {
+        "name": "web-runtimes (bun)",
+        "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843/job/119101329287",
+        "runtime": "Bun 1.4.3",
+        "conclusion": "success"
+      },
+      {
+        "name": "web-runtimes (deno)",
+        "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843/job/119101329270",
+        "runtime": "Deno 2.9.3",
+        "conclusion": "success"
+      },
+      {
+        "name": "browser-engines (chromium)",
+        "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843/job/119101329156",
+        "runtime": "Chromium 153.0.8010.12",
+        "conclusion": "success"
+      },
+      {
+        "name": "browser-engines (firefox)",
+        "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843/job/119101329303",
+        "runtime": "Firefox 155.0",
+        "conclusion": "success"
+      },
+      {
+        "name": "browser-engines (webkit)",
+        "url": "https://github.com/parkjh2568/ddunigma-node/actions/runs/39563865843/job/119101329078",
+        "runtime": "WebKit 26.6",
+        "conclusion": "success"
+      }
+    ],
+    "pnpm": "11.5.3",
+    "limitation": "Different SHA from public 6.3.0 and current dirty working tree; does not approve the pending changes."
+  },
+  "publisherConfiguration": {
+    "status": "unverified",
+    "npm": {
+      "command": "npm trust list @ddunigma/node --json",
+      "result": "E401 Unauthorized; installed npm 11.19.1, no authenticated package-setting read available"
+    },
+    "github": {
+      "environment": "npm",
+      "result": "Environment endpoint outside connector allowlist; branch protection requires unavailable integration administration permission"
+    },
+    "fieldsToConfirm": [
+      "owner/repository: parkjh2568/ddunigma-node",
+      "workflow: publish.yml",
+      "environment: npm",
+      "allowed action: direct npm publish",
+      "GitHub environment reviewers, branch/tag restrictions and bypass policy"
+    ],
+    "officialRequirements": {
+      "source": "https://docs.npmjs.com/trusted-publishers/",
+      "nodeMinimum": "22.14.0",
+      "npmMinimum": "11.5.1",
+      "note": "Check actual publish runner Node/npm versions and current requirements at release time."
+    },
+    "browser": {
+      "npm": "Signed-out package page; no authenticated administrator session",
+      "github": "Signed-out repository page; no authenticated administrator session",
+      "availableSurfaces": "Only in-app browser and MCP Apps; no connected authenticated desktop browser"
+    }
+  },
+  "externalMutations": []
+}

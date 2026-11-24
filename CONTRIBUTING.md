@@ -173,8 +173,43 @@ Playwright 갱신 후 브라우저도 재설치합니다.
 | ------------------------- | ------------------------------------------------------------- |
 | `pnpm bench`              | codec·Base64·압축 특성·최초/재사용 KDF, 3표본 중앙값          |
 | `pnpm bench:latency`      | API·입력 크기·동시성별 p50/p95·관측 메모리·이벤트 루프, JSONL |
+| `pnpm bench:stream`       | 격리 프로세스의 DDS1 첫 출력·write 대기·전체 지연·RSS, JSONL  |
 | `pnpm bench:micro [이름]` | primitive/codec 지정 경로, 3표본 중앙값                       |
 | `pnpm bench:guard`        | 융합 매핑·DDU·난독화의 고정 처리량 하한                       |
+
+`pnpm build`는 소스·설정·lockfile과 dist의 내용 해시를 `.benchmark-build.json`에 기록합니다.
+이 로컬 기록은 Git 없는 소스에서도 생성되며 서명된 빌드 증명이 아닙니다.
+빌드 전후 입력 해시가 다르면 기록을 생성하지 않아 빌드 중 편집으로 인한 잘못된 연결을 막습니다.
+latency의 cold import는 dist를 사용하므로 기록과 현재 내용이 일치하지 않으면 측정을 거부합니다. source 본체와 dist
+fingerprint는 별도이며 untracked 소스도 포함합니다. Git 상태를 읽을 수 없으면 명시적으로 표시합니다.
+
+측정은 다른 build·브라우저·benchmark와 겹치지 않게 실행하고 stdout/stderr·종료 상태를 보존합니다.
+
+```bash
+pnpm build
+mkdir -p benchmark-results
+pnpm --silent bench:latency > benchmark-results/latency.jsonl
+DDU_BENCH_FILTER=plain-encode-1m DDU_BENCH_CONCURRENCY=4 pnpm --silent bench:stream
+```
+
+`DDU_BENCH_FILTER`는 정규식이 아닌
+이름의 부분 문자열이며 생략하면 기본 matrix를 실행합니다. stream의 빈 filter·일치 없음은 오류입니다.
+latency는 random/precompressed의 deflate/Brotli off/on을 같은 입력에서 비교하고 footer의
+실제 압축 채택 여부·출력 코드 유닛/UTF-8 바이트·원시 표본을 기록합니다.
+
+stream은 기본 18개 대표 시나리오·동시성 1, 최소 20표본을 실행합니다.
+큰 동시성은 위 예제처럼 대표 filter를 지정하세요. filter를 생략하면 8MiB 시나리오도 포함되어
+correctness 검증의 출력 수집부터 관측 RSS 상한을 넘을 수 있습니다.
+`DDU_BENCH_CONCURRENCY`는 1/4/16, `DDU_BENCH_TIMEOUT_MS`는 100–300000(기본 30000),
+`DDU_BENCH_MAX_RSS_MIB`는 64–8192(기본 512)입니다. deadline은 parent가 child를 종료하고,
+RSS 중단은 child의 20ms/표본 완료 관측 기반으로 동기 작업 중 엄격한 할당 상한을 보장하지 않습니다.
+timeout·RSS·child 실패는 부분 표본과 실패 JSONL을 남기고 비정상 종료합니다. maxRSS는 준비·
+correctness·warmup을 포함한 child lifecycle high-water이며 요청당 peak나 측정 구간만의 메모리가 아닙니다.
+
+수동 [측정 workflow](.github/workflows/benchmarks.yml)는 guard·latency·stream을 순차 실행하고
+실패 로그·종료 상태·원시 결과를 14일 보존합니다. [공식 artifact action](https://github.com/actions/upload-artifact)을
+사용하며 기존 guard 기준은 유지합니다. 새 latency gate는 runner 변동을 관측한 뒤 결정합니다.
+job 취소·runner 중단에서는 artifact 업로드가 보장되지 않습니다.
 
 이전 배포물은 무결성을 확인해 추출하고, 소스 비교는 같은 lockfile·런타임에서 다른 CPU 부하 없이 실행합니다.
 
@@ -186,6 +221,14 @@ node scripts/verify-compat.mjs <이전-package-디렉터리>
 
 `verify-compat.mjs`의 기준은 공식 npm 6.2.0이며 다른 버전은 import 전에 거부합니다.
 기준 변경 시 공개 표면·charset·압축·암호화·stream 검사 범위도 갱신합니다.
+
+무결성을 별도 확인한 공개 패키지의 추출 디렉터리는 다음 명령으로 검사합니다.
+원본을 임시 복사하여 ESM/CJS·NodeNext·browser bundle 소비자를 실행하고 symlink·비정규
+파일·외부 entrypoint는 거부합니다. 이 검사는 현재 소스의 pack allowlist를 과거 배포물에 적용하지 않습니다.
+
+```bash
+node scripts/verify-pack.mjs --installed /absolute/path/to/extracted/package
+```
 
 - 입력·반복 횟수·런타임·소스/lockfile 식별자와 분모를 기록합니다. 원문 바이트·UTF-8 출력·UTF-16 길이를 구분합니다.
 - codec 왕복 처리량은 원문 바이트, ASCII unpack은 인코딩 문자 수 기준입니다. footer suffix 연산은 호출 시간으로 비교합니다.

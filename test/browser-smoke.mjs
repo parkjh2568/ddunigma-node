@@ -408,6 +408,44 @@ export async function runBrowserSmoke({
     if (decoded !== input) throw new Error("Web Streams round-trip failed");
   }
 
+  const streamed = new Ddu64();
+  const streamBytes = new Uint8Array(16);
+  const body = streamed.encode(streamBytes);
+  const { paddingChar } = streamed.getCharSetInfo();
+  const header = `${paddingChar}DDS1N0${paddingChar}`;
+  const streamEncoded = header + body;
+  for (const chunks of [[streamEncoded], [header, body], Array.from(streamEncoded)]) {
+    for (const maxBufferedChars of [body.length, body.length - 1]) {
+      let limited = false;
+      try {
+        // Response의 body 소비 오류 변환을 거치지 않고 원래 stream 오류를 검사합니다.
+        const reader = new ReadableStream({
+          start(controller) {
+            for (const chunk of chunks) controller.enqueue(chunk);
+            controller.close();
+          },
+        })
+          .pipeThrough(await streamed.createDecodeStream({ maxBufferedChars }))
+          .getReader();
+        const { value: decoded } = await reader.read();
+        if (
+          !decoded ||
+          decoded.length !== streamBytes.length ||
+          decoded.some((byte, i) => byte !== streamBytes[i])
+        ) {
+          throw new Error("Stream body limit changed the decoded bytes");
+        }
+        if (!(await reader.read()).done) throw new Error("Unexpected extra stream output");
+      } catch (error) {
+        if (error.code !== Ddu64ErrorCode.LimitExceeded) throw error;
+        limited = true;
+      }
+      if (limited !== body.length > maxBufferedChars) {
+        throw new Error("Stream body limit depends on input chunk boundaries");
+      }
+    }
+  }
+
   return {
     encoded,
     simpleEncoded,
