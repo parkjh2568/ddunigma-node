@@ -117,6 +117,38 @@ describe.each([
     }
   });
 
+  it.each([0, 16])(
+    "applies the decode body limit independently of every header/body split, bytes=%s",
+    async (length) => {
+      const encoder = new Codec();
+      const input = new Uint8Array(length);
+      const encoded = await encodeViaStream(encoder, input);
+      const headerLength = getStreamHeaderLength(encoder.getCharSetInfo().paddingChar);
+      const bodyLength = encoded.length - headerLength;
+      const partitions = Array.from({ length: encoded.length + 1 }, (_, split) => [
+        encoded.slice(0, split),
+        encoded.slice(split),
+      ]);
+      partitions.push(Array.from(encoded));
+      for (const maxBufferedChars of [Math.max(1, bodyLength), Math.max(1, bodyLength - 1)]) {
+        for (const chunks of partitions) {
+          const decoded = new ReadableStream<string>({
+            start(controller) {
+              for (const chunk of chunks) controller.enqueue(chunk);
+              controller.close();
+            },
+          }).pipeThrough(await encoder.createDecodeStream({ maxBufferedChars }));
+          const result = new Response(decoded).arrayBuffer();
+          if (bodyLength > maxBufferedChars) {
+            await expect(result).rejects.toBeInstanceOf(Ddu64LimitError);
+          } else {
+            expect(new Uint8Array(await result)).toEqual(input);
+          }
+        }
+      }
+    },
+  );
+
   it.each([false, true])(
     "propagates subclass failures through both stream sides, buffered=%s",
     async (checksum) => {

@@ -268,28 +268,21 @@ export function createReadableDecodeStream(
     );
 
     let textBuffer = "";
-    let headerParsed = false;
     let headerMeta: StreamHeaderMeta | null = null;
 
     return new TransformStream<string, Uint8Array>({
       transform(chunk) {
         try {
           validateDecodeInput(chunk, "stream");
-          if (textBuffer.length + chunk.length > maxBufferedChars) {
-            throw new Ddu64LimitError(
-              `[WebStreams decode] Buffered encoded input exceeds limit. Limit: ${maxBufferedChars} characters`,
-              "stream",
-            );
-          }
-          textBuffer += chunk;
-
-          if (!headerParsed && textBuffer.length >= headerLength) {
-            if (!textBuffer.startsWith(paddingChar)) {
-              throw new Error("[WebStreams decode] Invalid or missing stream header");
-            }
+          let payloadOffset = 0;
+          if (!headerMeta) {
+            // 고정 길이 헤더만 먼저 보관해 본문 한도가 청크 분할에 의존하지 않게 합니다.
+            payloadOffset = headerLength - textBuffer.length;
+            textBuffer += chunk.slice(0, payloadOffset);
+            if (textBuffer.length < headerLength) return;
 
             headerMeta = parseStreamHeader(textBuffer, paddingChar);
-            if (headerMeta === null) {
+            if (!headerMeta) {
               throw new Error("[WebStreams decode] Invalid or missing stream header");
             }
 
@@ -297,10 +290,17 @@ export function createReadableDecodeStream(
               throw new Error("[WebStreams decode] Encrypted stream requires an encryptionKey");
             }
 
-            headerParsed = true;
-
-            textBuffer = textBuffer.slice(headerLength);
+            textBuffer = "";
           }
+
+          // 큰 본문의 slice/결합 전에 한도를 검사합니다. 헤더는 별도로 고정 길이만 허용합니다.
+          if (textBuffer.length + chunk.length - payloadOffset > maxBufferedChars) {
+            throw new Ddu64LimitError(
+              `[WebStreams decode] Buffered encoded input exceeds limit. Limit: ${maxBufferedChars} characters`,
+              "stream",
+            );
+          }
+          textBuffer += chunk.slice(payloadOffset);
         } catch (err) {
           textBuffer = "";
           throw wrapDdu64Error(err, "stream");
@@ -309,15 +309,14 @@ export function createReadableDecodeStream(
 
       async flush(controller) {
         try {
-          if (!headerParsed) {
+          if (!headerMeta) {
             if (textBuffer.length === 0) return;
             throw new Error("[WebStreams decode] Incomplete stream header");
           }
 
           const pendingDecode = encoder.decodeToUint8ArrayAsync(textBuffer, {
             ...options,
-            compress: options?.compress,
-            compressionAlgorithm: headerMeta!.compressionAlgorithm,
+            compressionAlgorithm: headerMeta.compressionAlgorithm,
             checksum: shouldChecksum,
             // DDS1 본문에는 구분자를 넣지 않으므로 생성자 기본값으로도 제거하지 않습니다.
             chunkSize: 0,

@@ -546,7 +546,7 @@ export class Ddu64Core {
       // AES-GCM의 고정 overhead만 반영하고 실제 암호화는 생략합니다. 압축은 결과 크기와
       // 적용 여부에 영향을 주므로 실제 adapter 경로를 사용합니다.
       const { originalSize, encoded, compressedSize } = runSyncEncodePipeline(input, options, {
-        ...this.buildEncodeBaseContext(options),
+        ...this.buildEncodeBaseContext(options, true),
         compress: (data, algorithm, level) =>
           runCompressSync(this.getAdapter(), data, algorithm, level),
         encrypt: (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
@@ -575,7 +575,7 @@ export class Ddu64Core {
         input,
         options,
         {
-          ...this.buildEncodeBaseContext(options),
+          ...this.buildEncodeBaseContext(options, true),
           compress: async (data, algorithm, level) =>
             compressAsyncWithAdapter(await this.getAsyncAdapter(), data, algorithm, level),
           encrypt: async (data) => new Uint8Array(data.length + AEAD_OVERHEAD_BYTES),
@@ -617,7 +617,10 @@ export class Ddu64Core {
    * 동기/비동기 인코딩 파이프라인이 공유하는 기본 컨텍스트를 구성합니다.
    * compress/encrypt만 동기/비동기 구현에서 각각 덧붙입니다.
    */
-  private buildEncodeBaseContext(options?: DduOptions): EncodePipelineBaseContext {
+  private buildEncodeBaseContext(
+    options?: DduOptions,
+    estimateEncryption = false,
+  ): EncodePipelineBaseContext {
     return {
       defaultCompress: this.defaultCompress,
       defaultChecksum: this.defaultChecksum,
@@ -650,6 +653,7 @@ export class Ddu64Core {
           chunkSize,
           chunkSeparator,
           options,
+          estimateEncryption,
         ),
     };
   }
@@ -668,6 +672,7 @@ export class Ddu64Core {
     chunkSize: number | undefined,
     chunkSeparator: string,
     options: DduOptions | undefined,
+    estimateEncryption: boolean,
   ): string {
     // 인코딩 (비트 패킹 단계)
     this.reportProgress(
@@ -704,7 +709,9 @@ export class Ddu64Core {
     }
 
     if (chunkSize && chunkSize > 0) {
+      const hasActualOutput = !estimateEncryption || !isEncrypted;
       if (
+        hasActualOutput &&
         chunkSeparator !== "" &&
         chunkSeparator !== "\n" &&
         chunkSeparator !== "\r\n" &&
@@ -718,7 +725,11 @@ export class Ddu64Core {
       }
       const chunked = splitIntoChunks(result, chunkSize, chunkSeparator);
       // 본문에 없는 구분자도 청크 경계와 중첩되면 replaceAll이 원문을 손상시킵니다.
-      if (chunkSeparator.length > 1 && removeChunks(chunked, chunkSeparator) !== result) {
+      if (
+        hasActualOutput &&
+        chunkSeparator.length > 1 &&
+        removeChunks(chunked, chunkSeparator) !== result
+      ) {
         throw new Ddu64EncodeError(
           "[Ddu64 chunking] chunkSeparator overlaps a boundary. Use a separator outside the alphabet.",
         );
@@ -819,24 +830,35 @@ export class Ddu64Core {
    */
   private getAdapter(): PlatformAdapter | undefined {
     if (this.adapter === undefined && this.adapterFactory !== undefined) {
-      const adapter = this.adapterFactory();
-      if (!adapter || typeof adapter !== "object") {
+      try {
+        const adapter = this.adapterFactory();
+        if (!adapter || typeof adapter !== "object") {
+          throw new Ddu64AdapterError(
+            "[Ddu64 adapter] Factory must return a PlatformAdapter object.",
+            "adapter",
+          );
+        }
+        this.adapter = adapter;
+      } catch (error) {
+        if (isDdu64Error(error)) throw error;
         throw new Ddu64AdapterError(
-          "[Ddu64 adapter] Factory must return a PlatformAdapter object.",
+          "[Ddu64 adapter] Initialization failed. Check the adapter factory.",
           "adapter",
+          error,
         );
       }
-      this.adapter = adapter;
     }
     return this.adapter;
   }
 
   private async getAsyncAdapter(): Promise<PlatformAdapter | undefined> {
     const adapter = this.getAdapter();
-    if (adapter !== undefined || this.asyncAdapterFactory === undefined) return adapter;
+    const factory = this.asyncAdapterFactory;
+    if (adapter !== undefined || factory === undefined) return adapter;
 
     if (!this.asyncAdapterPromise) {
-      this.asyncAdapterPromise = this.asyncAdapterFactory()
+      this.asyncAdapterPromise = Promise.resolve()
+        .then(() => factory.call(this))
         .then((loadedAdapter) => {
           if (!loadedAdapter || typeof loadedAdapter !== "object") {
             throw new Ddu64AdapterError(
@@ -850,7 +872,12 @@ export class Ddu64Core {
         })
         .catch((error: unknown) => {
           this.asyncAdapterPromise = undefined;
-          throw error;
+          if (isDdu64Error(error)) throw error;
+          throw new Ddu64AdapterError(
+            "[Ddu64 adapter] Initialization failed. Check the adapter factory.",
+            "adapter",
+            error,
+          );
         });
     }
     return this.asyncAdapterPromise;

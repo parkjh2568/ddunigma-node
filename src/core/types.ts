@@ -254,7 +254,7 @@ export interface DduInternalOptions extends DduSecureOptions {
 export interface DduStreamOptions extends DduSecureOptions {
   /** 압축/암호화/체크섬 인코딩 시 메모리에 축적할 최대 입력 바이트 수 */
   maxBufferedBytes?: number;
-  /** 디코딩 시 메모리에 축적할 최대 입력 문자 수 */
+  /** DDS1 헤더를 제외하고 디코딩 시 축적할 최대 본문 UTF-16 코드 유닛 수 */
   maxBufferedChars?: number;
 }
 
